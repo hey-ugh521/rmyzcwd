@@ -63,7 +63,12 @@ WORKFLOW_MAP = {
     "panel": "comic-panel-faceid.json",
     "upscale": "comic-upscale.json",
     "removebg": "comic-remove-bg.json",
+    "qwen": "comic-qwen.json",
 }
+# 千问 Image 是新架构（UNETLoader + CLIPLoader type=qwen_image + 专用 VAE +
+# SamplerCustomAdvanced/ManualSigmas），没有 CheckpointLoaderSimple，
+# 因此不能叠加 SDXL 的角色 LoRA，也不接受 character 档案。
+QWEN_WORKFLOWS = {"qwen"}
 # 需要输入参考图 / 额外模型的工作流：MVP 只支持单张参考图注入
 IMAGE_INPUT_WORKFLOWS = {"upscale", "removebg"}
 # MVP 明确不做（§10）：多参考图 FaceID + ControlNet
@@ -367,6 +372,15 @@ def apply_overrides(
             inputs["text"] = negative
         elif cls == "KSampler":
             inputs["seed"] = seed if seed is not None else random.randint(0, 2**31 - 1)
+        elif cls == "RandomNoise":
+            # 千问走 SamplerCustomAdvanced，种子在 RandomNoise 上而不是 KSampler
+            if seed is not None:
+                inputs["noise_seed"] = seed
+        elif cls == "TextEncodeQwenImage21":
+            # 千问把正向/负向放在同一个节点里
+            inputs["prompt"] = prompt
+            if negative:
+                inputs["negative_prompt"] = negative
         elif cls == "EmptyLatentImage":
             if width is not None:
                 inputs["width"] = int(width)
@@ -639,6 +653,29 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
             "workflow_unsupported",
             f"工作流 {workflow} 需要多张参考图 + FaceID/ControlNet，MVP 范围外（契约 §10）",
         )
+    if workflow in QWEN_WORKFLOWS:
+        # 千问没有 CheckpointLoaderSimple，角色档案的 checkpoint/LoRA 都注入不了，
+        # 与其静默丢弃，不如直接说清楚。
+        if character:
+            raise ApiError(
+                "workflow_no_character",
+                f"工作流 {workflow}（千问 Image）不支持角色档案：{character.get('name') or character.get('id')} 的 "
+                "LoRA 与 checkpoint 是 SDXL 专用的。请去掉 character，直接用 prompt 描述角色；"
+                "要角色一致性请用 workflow=portrait",
+                400,
+            )
+        if body.get("loras"):
+            raise ApiError(
+                "workflow_no_lora",
+                f"工作流 {workflow}（千问 Image）不支持 LoRA 注入（现有 LoRA 均为 SDXL 训练）",
+                400,
+            )
+        if body.get("checkpoint"):
+            raise ApiError(
+                "workflow_no_checkpoint_param",
+                f"工作流 {workflow}（千问 Image）用 UNETLoader 加载模型，不接受 checkpoint 参数",
+                400,
+            )
 
     # checkpoint
     checkpoint = str(body.get("checkpoint") or "").strip() or None
@@ -684,6 +721,10 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
         width = char_w
     if height is None:
         height = char_h
+    if workflow in QWEN_WORKFLOWS:
+        # 千问模板默认 1024x1024；显式写进 spec，结果里能回报真实尺寸，也便于复刻
+        width = width or 1024
+        height = height or 1024
     for key, value in (("width", width), ("height", height)):
         if value is not None and (value < 64 or value > 4096):
             raise ApiError("invalid_size", f"{key}={value} 超出 64–4096 范围")
@@ -2192,6 +2233,8 @@ def _tool_body(
         "调用本机 ComfyUI 生成漫画/二次元图片，等待完成并返回图片 URL。"
         "可传 character（bronya/kiana/elysia）自动补齐 checkpoint、LoRA、尺寸与画风提示词；"
         "也可用 loras 显式指定 LoRA 链。"
+        "workflow=qwen 时改用千问 Image 2.1 Turbo 通用出图：此时不能传 character、loras、checkpoint，"
+        "只用 prompt 描述画面（适合写实/通用题材，不支持角色 LoRA）。"
     ),
 )
 async def comfyui_generate(
@@ -2211,6 +2254,7 @@ async def comfyui_generate(
         prompt: 正向提示词（中文或英文均可，描述画面内容）
         negative: 负向提示词，留空使用角色档案/工作流默认
         workflow: 工作流模板，portrait=竖版漫画 / landscape=横版漫画 /
+                  qwen=千问 Image 2.1 Turbo 通用出图（不能用 character，不能加 LoRA）/
                   upscale=放大（需 reference_image_url）/ removebg=去背景（需 reference_image_url）
         width: 覆盖画布宽度（可选）
         height: 覆盖画布高度（可选）
@@ -2510,6 +2554,10 @@ _mcp_app = server.streamable_http_app(
     host="0.0.0.0",
     json_response=False,
     stateless_http=False,
+    # 默认 30 分钟回收空闲会话。QQ 机器人经常一停就是半小时以上，
+    # 会话被回收后 LangBot 侧重连又可能撞上线程池满 → 调用挂死到 180s 超时
+    # （2026-10-29 23:57 实测发生过）。这里直接不回收。
+    session_idle_timeout=None,
 )
 app = _AppWithWorker(_mcp_app)
 

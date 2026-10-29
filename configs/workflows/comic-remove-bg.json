@@ -1,0 +1,25 @@
+{
+  "last_node_id": 4,
+  "nodes": {
+    "1": {
+      "inputs": { "image": "charref_00001.png" },
+      "class_type": "LoadImage",
+      "_meta": { "title": "输入图片" }
+    },
+    "2": {
+      "inputs": { "bg_removal_name": "isnet-general-use.onnx" },
+      "class_type": "LoadBackgroundRemovalModel",
+      "_meta": { "title": "抠图模型 (isnet)" }
+    },
+    "3": {
+      "inputs": { "bg_removal_model": ["2", 0], "image": ["1", 0] },
+      "class_type": "RemoveBackground",
+      "_meta": { "title": "背景移除" }
+    },
+    "4": {
+      "inputs": { "filename_prefix": "comic_cutout", "images": ["3", 0] },
+      "class_type": "SaveImage",
+      "_meta": { "title": "保存 (透明PNG)" }
+    }
+  }
+}

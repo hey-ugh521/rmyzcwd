@@ -1,0 +1,114 @@
+{
+  "last_node_id": 13,
+  "nodes": {
+    "1": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "qwen_image_2.1_turbo_int8_convrot.safetensors",
+        "weight_dtype": "default"
+      },
+      "_meta": { "title": "千问主模型 (Qwen-Image 2.1 Turbo)" }
+    },
+    "2": {
+      "class_type": "QwenImage21Cache",
+      "inputs": {
+        "model": ["1", 0],
+        "device": "auto",
+        "dtype": "default"
+      },
+      "_meta": { "title": "千问前缀缓存" }
+    },
+    "3": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "qwen3vl_8b_w4a8.safetensors",
+        "type": "qwen_image"
+      },
+      "_meta": { "title": "文本编码器 (qwen3vl 8b)" }
+    },
+    "4": {
+      "class_type": "TextEncodeQwenImage21",
+      "inputs": {
+        "clip": ["3", 0],
+        "prompt": "A red apple on a wooden table, soft window light",
+        "negative_prompt": "",
+        "resolution": 1024
+      },
+      "_meta": { "title": "正向提示词" }
+    },
+    "5": {
+      "class_type": "EmptyLatentImage",
+      "inputs": {
+        "width": 1024,
+        "height": 1024,
+        "batch_size": 1
+      },
+      "_meta": { "title": "画布 (1024x1024)" }
+    },
+    "6": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+      },
+      "_meta": { "title": "VAE (千问)" }
+    },
+    "7": {
+      "class_type": "CFGGuider",
+      "inputs": {
+        "model": ["2", 0],
+        "positive": ["4", 0],
+        "negative": ["4", 1],
+        "cfg": 1.0
+      },
+      "_meta": { "title": "引导 (Turbo cfg=1.0)" }
+    },
+    "8": {
+      "class_type": "RandomNoise",
+      "inputs": {
+        "noise_seed": 0
+      },
+      "_meta": { "title": "种子" }
+    },
+    "9": {
+      "class_type": "KSamplerSelect",
+      "inputs": {
+        "sampler_name": "euler"
+      },
+      "_meta": { "title": "采样器 (euler)" }
+    },
+    "10": {
+      "class_type": "ManualSigmas",
+      "inputs": {
+        "sigmas": "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0"
+      },
+      "_meta": { "title": "Turbo 步进表" }
+    },
+    "11": {
+      "class_type": "SamplerCustomAdvanced",
+      "inputs": {
+        "noise": ["8", 0],
+        "guider": ["7", 0],
+        "sampler": ["9", 0],
+        "sigmas": ["10", 0],
+        "latent_image": ["5", 0]
+      },
+      "_meta": { "title": "自定义采样" }
+    },
+    "12": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["11", 0],
+        "vae": ["6", 0]
+      },
+      "_meta": { "title": "VAE 解码" }
+    },
+    "13": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": ["12", 0],
+        "filename_prefix": "mobius_qwen"
+      },
+      "_meta": { "title": "保存图片" }
+    }
+  }
+}

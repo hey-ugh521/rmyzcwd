@@ -1,0 +1,176 @@
+{
+  "last_node_id": 19,
+  "nodes": {
+    "1": {
+      "inputs": { "ckpt_name": "animagine-xl-3.1.safetensors" },
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": { "title": "主模型 (Animagine XL 3.1)" }
+    },
+    "2": {
+      "inputs": {
+        "text": "masterpiece, best quality, newest, 1girl, short black hair, red eyes, school uniform, standing, city street, sunset, comic style, detailed, solo",
+        "clip": ["1", 1]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": { "title": "正向提示词" }
+    },
+    "3": {
+      "inputs": {
+        "text": "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
+        "clip": ["1", 1]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": { "title": "负向提示词" }
+    },
+    "4": {
+      "inputs": { "image": "charref_00001.png" },
+      "class_type": "LoadImage",
+      "_meta": { "title": "角色参考图 (FaceID 输入)" }
+    },
+    "5": {
+      "inputs": { "ipadapter_file": "ip-adapter-faceid-plusv2_sdxl.bin" },
+      "class_type": "IPAdapterModelLoader",
+      "_meta": { "title": "FaceID 模型" }
+    },
+    "6": {
+      "inputs": { "provider": "CPU", "model_name": "buffalo_l" },
+      "class_type": "IPAdapterInsightFaceLoader",
+      "_meta": { "title": "人脸检测 (insightface)" }
+    },
+    "7": {
+      "inputs": {
+        "model": ["1", 0],
+        "clip": ["1", 1],
+        "lora_name": "ip-adapter-faceid-plusv2_sdxl_lora.safetensors",
+        "strength_model": 0.6,
+        "strength_clip": 0.6
+      },
+      "class_type": "LoraLoader",
+      "_meta": { "title": "FaceID LoRA" }
+    },
+    "8": {
+      "inputs": {
+        "model": ["7", 0],
+        "ipadapter": ["5", 0],
+        "image": ["4", 0],
+        "insightface": ["6", 0],
+        "clip_vision": ["19", 0],
+        "weight": 0.85,
+        "weight_faceidv2": 1.0,
+        "weight_type": "linear",
+        "combine_embeds": "concat",
+        "start_at": 0.0,
+        "end_at": 1.0,
+        "embeds_scaling": "V only"
+      },
+      "class_type": "IPAdapterFaceID",
+      "_meta": { "title": "FaceID 角色一致性" }
+    },
+    "9": {
+      "inputs": { "image": "style_ref_skel16.png" },
+      "class_type": "LoadImage",
+      "_meta": { "title": "姿势参考图 (上传 pose_ref.png)" }
+    },
+    "10": {
+      "inputs": { "image": ["9", 0] },
+      "class_type": "DWPreprocessor",
+      "_meta": { "title": "DWPose 姿态提取" }
+    },
+    "11": {
+      "inputs": { "control_net_name": "OpenPoseXL2.safetensors" },
+      "class_type": "ControlNetLoader",
+      "_meta": { "title": "OpenPose ControlNet" }
+    },
+    "12": {
+      "inputs": {
+        "positive": ["2", 0],
+        "negative": ["3", 0],
+        "control_net": ["11", 0],
+        "image": ["10", 0],
+        "strength": 0.8,
+        "start_percent": 0.0,
+        "end_percent": 1.0
+      },
+      "class_type": "ControlNetApplyAdvanced",
+      "_meta": { "title": "姿势控制" }
+    },
+    "13": {
+      "inputs": { "width": 832, "height": 1216, "batch_size": 1 },
+      "class_type": "EmptyLatentImage",
+      "_meta": { "title": "画布 (竖版)" }
+    },
+    "14": {
+      "inputs": {
+        "seed": 0,
+        "steps": 28,
+        "cfg": 7.0,
+        "sampler_name": "euler_ancestral",
+        "scheduler": "normal",
+        "denoise": 1.0,
+        "model": ["8", 0],
+        "positive": ["12", 0],
+        "negative": ["12", 1],
+        "latent_image": ["13", 0]
+      },
+      "class_type": "KSampler",
+      "_meta": { "title": "采样" }
+    },
+    "15": {
+      "inputs": { "samples": ["14", 0], "vae": ["1", 2] },
+      "class_type": "VAEDecode",
+      "_meta": { "title": "VAE 解码" }
+    },
+    "16": {
+      "inputs": { "model_name": "bbox/face_yolov8m.pt" },
+      "class_type": "UltralyticsDetectorProvider",
+      "_meta": { "title": "人脸检测器" }
+    },
+    "17": {
+      "inputs": {
+        "image": ["15", 0],
+        "model": ["8", 0],
+        "clip": ["1", 1],
+        "vae": ["1", 2],
+        "guide_size": 512,
+        "guide_size_for": true,
+        "max_size": 1024,
+        "seed": 0,
+        "steps": 20,
+        "cfg": 8.0,
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "positive": ["2", 0],
+        "negative": ["3", 0],
+        "denoise": 0.5,
+        "feather": 5,
+        "noise_mask": true,
+        "force_inpaint": true,
+        "bbox_threshold": 0.5,
+        "bbox_dilation": 10,
+        "bbox_crop_factor": 3.0,
+        "sam_detection_hint": "center-1",
+        "sam_dilation": 0,
+        "sam_threshold": 0.93,
+        "sam_bbox_expansion": 0,
+        "sam_mask_hint_threshold": 0.7,
+        "sam_mask_hint_use_negative": "False",
+        "drop_size": 10,
+        "bbox_detector": ["16", 0],
+        "wildcard": "",
+        "cycle": 1
+      },
+      "class_type": "FaceDetailer",
+      "_meta": { "title": "面部细节修复" }
+    },
+    "18": {
+      "inputs": { "filename_prefix": "comic_panel", "images": ["17", 0] },
+      "class_type": "SaveImage",
+      "_meta": { "title": "保存" }
+    },
+    "19": {
+      "inputs": { "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors" },
+      "class_type": "CLIPVisionLoader",
+      "_meta": { "title": "CLIP Vision" }
+    }
+  }
+}
