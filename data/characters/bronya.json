@@ -1,0 +1,16 @@
+{
+  "id": "bronya",
+  "name": "布洛妮娅",
+  "aliases": ["板鸭", "布洛妮亚", "布狼牙", "Bronya"],
+  "checkpoint": "Illustrious-XL-v1.0.safetensors",
+  "loras": [
+    {"name": "Bronya_Zaychik24in1_Hi3_IL-03.safetensors", "weight": 0.75}
+  ],
+  "workflow": "portrait",
+  "size": [832, 1216],
+  "style_prompt": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest, 1girl, solo, bronya zaychik (honkai impact 3rd), silver hair, drill hair, grey eyes",
+  "negative_prompt": "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, jpeg artifacts, signature, watermark, username, blurry, nsfw",
+  "voice": {"engine": "kokoro", "voice": "zf_xiaobei", "speed": 1.0},
+  "media_policy": {"allow_image": true, "allow_voice": true, "allow_clone": false},
+  "constitution_id": "bronya"
+}

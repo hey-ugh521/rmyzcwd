@@ -1,0 +1,30 @@
+# ---- 本地运行时产物，绝不入库 ----
+# 注意：.gitignore 不支持行内注释，注释必须单独成行
+config.json
+data/*.db
+data/*.db-*
+logs/
+media_gateway/logs/
+media_gateway/tts_output/
+media_gateway/uploads/
+core/console/_mock/screenshots/
+core/console/_mock/*.json
+core/console/_mock/evidence-http.txt
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- 临时 ----
+*.tmp
+*.log

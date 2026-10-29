@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Möbius Console</title>
+<link rel="stylesheet" id="mobius-css" href="/console/style.css">
+<script>
+/* 无构建步骤 / 无 CDN：静态资源优先从 /console/ 加载（Core 挂载点），
+   若以根路径托管则回退到相对路径，避免整页空白。 */
+(function () {
+  var css = document.getElementById('mobius-css');
+  if (css) {
+    css.addEventListener('error', function () {
+      var l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = 'style.css';
+      document.head.appendChild(l);
+    });
+  }
+  function loadApp() {
+    var s = document.createElement('script');
+    s.src = '/console/app.js';
+    s.onerror = function () {
+      var t = document.createElement('script');
+      t.src = 'app.js';
+      document.body.appendChild(t);
+    };
+    document.body.appendChild(s);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadApp);
+  } else {
+    loadApp();
+  }
+})();
+</script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div class="brand-text">
+        <strong>Möbius</strong>
+        <span>Console · 运营台</span>
+      </div>
+    </div>
+
+    <nav class="nav" id="nav" aria-label="主导航">
+      <a class="nav-item" href="#/overview" data-view="overview">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h5v5H2zM9 2h5v3H9zM9 7h5v7H9zM2 9h5v5H2z"/></svg>
+        <span>概览</span>
+      </a>
+      <a class="nav-item" href="#/tasks" data-view="tasks">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h2M6 4h8M2 8h2M6 8h8M2 12h2M6 12h8"/></svg>
+        <span>任务</span>
+      </a>
+      <a class="nav-item" href="#/characters" data-view="characters">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="3"/><path d="M2.5 14c.6-3 2.9-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/></svg>
+        <span>角色</span>
+      </a>
+      <a class="nav-item" href="#/memory" data-view="memory">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10v8H7l-4 3z"/><path d="M6 6h4M6 8.5h3"/></svg>
+        <span>记忆</span>
+        <em class="nav-badge" id="nav-badge-memory" hidden>0</em>
+      </a>
+      <a class="nav-item" href="#/audit" data-view="audit">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h6l4 4v8H3z"/><path d="M9 2v4h4"/><path d="M5.5 9h5M5.5 11.5h5"/></svg>
+        <span>审计</span>
+      </a>
+      <a class="nav-item" href="#/settings" data-view="settings">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.7M8 12.8v1.7M1.5 8h1.7M12.8 8h1.7M3.4 3.4l1.2 1.2M11.4 11.4l1.2 1.2M12.6 3.4l-1.2 1.2M4.6 11.4l-1.2 1.2"/></svg>
+        <span>设置</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="foot-row">
+        <span class="led led-unknown" id="foot-core-led"></span>
+        <span class="foot-key">Core</span>
+        <span class="foot-val" id="foot-core">检测中…</span>
+      </div>
+      <div class="foot-row">
+        <span class="led led-unknown" id="foot-media-led"></span>
+        <span class="foot-key">媒体</span>
+        <span class="foot-val" id="foot-mode">–</span>
+      </div>
+      <div class="foot-row">
+        <span class="led led-unknown" id="foot-gw-led"></span>
+        <span class="foot-key">Gateway</span>
+        <span class="foot-val" id="foot-gateway">–</span>
+      </div>
+      <div class="build">v1 · API /api/* · 127.0.0.1:8900</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="page-head">
+        <div class="crumbs">Möbius <span class="crumb-sep">/</span> <span id="crumb">概览</span></div>
+        <h1 id="page-title">概览</h1>
+      </div>
+      <div class="topbar-right">
+        <div class="chips" id="chips">
+          <span class="chip chip-muted"><span class="led led-unknown"></span>连接中…</span>
+        </div>
+        <span class="clock" id="clock">--:--:--</span>
+        <button class="btn ghost sm" id="global-refresh" type="button" title="刷新当前视图">
+          <span class="refresh-glyph">↻</span> 刷新
+        </button>
+      </div>
+    </header>
+
+    <main id="view-root" class="view-root">
+      <div class="boot">
+        <div class="spinner"></div>
+        <div>正在连接 Möbius Core…</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="toast-root" class="toast-root" aria-live="polite"></div>
+<div id="modal-root"></div>
+<div id="drawer-root"></div>
+</body>
+</html>

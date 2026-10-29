@@ -1,0 +1,87 @@
+{
+  "core": {
+    "host": "0.0.0.0",
+    "port": 8900,
+    "api_key": "CHANGE_ME_LOCAL_TOKEN",
+    "idle_sleep_sec": 600,
+    "prewarm_on_start": false
+  },
+  "llm": {
+    "base_url": "https://api.deepseek.com/v1",
+    "api_key": "sk-REPLACE_WITH_YOUR_DEEPSEEK_KEY",
+    "model": "deepseek-flash",
+    "timeout_sec": 120,
+    "max_tool_rounds": 4
+  },
+  "gateway": {
+    "url": "http://127.0.0.1:8899",
+    "timeout_sec": 30
+  },
+  "services": {
+    "comfyui": {
+      "enabled": true,
+      "python": "D:\\AI\\comic\\ComfyUI_windows_portable\\python_embeded\\python.exe",
+      "cwd": "D:\\AI\\comic\\ComfyUI_windows_portable",
+      "args": [
+        "-s",
+        "ComfyUI\\main.py",
+        "--windows-standalone-build",
+        "--fp16-vae",
+        "--preview-method",
+        "taesd",
+        "--port",
+        "8188"
+      ],
+      "health_url": "http://127.0.0.1:8188/system_stats",
+      "port": 8188,
+      "start_timeout_sec": 420,
+      "env": {
+        "SSL_CERT_FILE": "D:\\AI\\comic\\ComfyUI_windows_portable\\python_embeded\\Lib\\site-packages\\certifi\\cacert.pem",
+        "REQUESTS_CA_BUNDLE": "D:\\AI\\comic\\ComfyUI_windows_portable\\python_embeded\\Lib\\site-packages\\certifi\\cacert.pem",
+        "HF_ENDPOINT": "https://hf-mirror.com",
+        "PYTHONUTF8": "1"
+      }
+    },
+    "kokoro": {
+      "enabled": true,
+      "python": "D:\\Anaconda3\\envs\\open-webui\\python.exe",
+      "cwd": "D:\\TTS_Workspace",
+      "args": [
+        "kokoro_openai_api.py",
+        "--port",
+        "7870"
+      ],
+      "port": 7870,
+      "start_timeout_sec": 180
+    },
+    "gateway": {
+      "enabled": true,
+      "python": "D:\\AI\\qqbot-mcp\\Scripts\\python.exe",
+      "cwd": ".",
+      "args": [
+        "media_gateway\\server.py",
+        "--port",
+        "8899"
+      ],
+      "port": 8899,
+      "start_timeout_sec": 60,
+      "env": {
+        "MOBIUS_COMFY_START_TIMEOUT": "420"
+      }
+    },
+    "f5": {
+      "enabled": false,
+      "port": 7871,
+      "python": "D:\\Anaconda3\\envs\\open-webui\\python.exe",
+      "cwd": "D:\\TTS_Workspace",
+      "args": [
+        "mobius_tts_api.py",
+        "--port",
+        "7871"
+      ]
+    }
+  },
+  "characters_dir": "data/characters",
+  "db": "data/mobius.db",
+  "default_character": "bronya"
+}

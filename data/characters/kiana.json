@@ -1,0 +1,16 @@
+{
+  "id": "kiana",
+  "name": "琪亚娜",
+  "aliases": ["草履虫", "Kiana", "琪亚娜·卡斯兰娜"],
+  "checkpoint": "Illustrious-XL-v1.0.safetensors",
+  "loras": [
+    {"name": "Kiana_Kaslana24in1_Hi3_IL-03.safetensors", "weight": 0.8}
+  ],
+  "workflow": "portrait",
+  "size": [832, 1216],
+  "style_prompt": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest, 1girl, solo, kiana kaslana (honkai impact 3rd), white hair, twin braids, blue eyes",
+  "negative_prompt": "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, jpeg artifacts, signature, watermark, username, blurry, nsfw",
+  "voice": {"engine": "kokoro", "voice": "zf_xiaoxiao", "speed": 1.0},
+  "media_policy": {"allow_image": true, "allow_voice": true, "allow_clone": false},
+  "constitution_id": "kiana"
+}
