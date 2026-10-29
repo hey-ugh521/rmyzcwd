@@ -19,6 +19,7 @@
     tasks: { title: '任务', crumb: '任务' },
     characters: { title: '角色', crumb: '角色' },
     memory: { title: '记忆', crumb: '记忆' },
+    context: { title: '对话', crumb: '对话' },
     audit: { title: '审计', crumb: '审计' },
     settings: { title: '设置', crumb: '设置' }
   };
@@ -75,6 +76,7 @@
     memory: { users: [], selected: null, usersFromApi: true, candidates: [] },
     audit: { kind: '', limit: 100, items: [] },
     overview: { sigRecent: null, sigFailed: null, lastUpdated: 0 },
+    context: { sessions: [], loading: false },
     drawerTaskId: null
   };
 
@@ -2333,6 +2335,125 @@
   }
 
   /* ============================================================
+   * 对话上下文（LangBot）
+   * ============================================================ */
+
+  function renderContext(root) {
+    root.innerHTML = contextShell();
+    var btn = $('#ctx-refresh');
+    if (btn) btn.addEventListener('click', function () { loadContext(); });
+    return loadContext();
+  }
+
+  function contextShell() {
+    return '' +
+      '<div class="view">' +
+      '<div class="view-head"><div class="vh-main">' +
+      '<h2>对话上下文 <span class="hint">LangBot transcript</span></h2>' +
+      '<p class="view-sub">QQ 会话的上下文条数与重置。重置后模型不再看到之前的内容，历史记录仍保留可追溯。</p></div>' +
+      '<div class="view-actions"><button type="button" class="btn sm" id="ctx-refresh"><span class="refresh-glyph">↻</span> 刷新</button></div>' +
+      '</div>' +
+      '<div class="card" id="ctx-table">' + tableSkeleton(6) + '</div>' +
+      '</div>';
+  }
+
+  function loadContext() {
+    var box = $('#ctx-table');
+    if (!box) return Promise.resolve();
+    return api('/api/context/sessions').then(function (data) {
+      var sessions = (data && data.sessions) || [];
+      state.context.sessions = sessions;
+      if (!sessions.length) {
+        box.innerHTML = '<div class="empty">还没有 QQ 会话记录</div>';
+        return;
+      }
+      var rows = sessions.map(function (s) {
+        var isGroup = s.platform === 'group';
+        var active = Number(s.active_messages || 0);
+        var total = Number(s.total_messages || 0);
+        var ctxCell = '<strong>' + active + '</strong> <span class="hint">/ ' + total + ' 条历史</span>';
+        return '<tr>' +
+          '<td><code>' + esc(s.session_id) + '</code></td>' +
+          '<td>' + (isGroup ? '群聊' : '私聊') + '</td>' +
+          '<td>' + ctxCell + '</td>' +
+          '<td>' + esc(fmtTimeShort(s.last_at)) + '</td>' +
+          '<td>' + (s.last_reset_at ? esc(fmtTimeShort(s.last_reset_at)) : '<span class="hint">从未</span>') + '</td>' +
+          '<td class="row-actions">' +
+          '<button type="button" class="btn sm" data-ctx-preview="' + esc(s.session_id) + '">预览</button> ' +
+          '<button type="button" class="btn sm danger" data-ctx-reset="' + esc(s.session_id) + '">重置</button>' +
+          '</td>' +
+          '</tr>';
+      }).join('');
+      box.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr>' +
+        '<th>会话</th><th>类型</th><th>上下文</th><th>最后消息</th><th>最后重置</th><th>操作</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+      $$('[data-ctx-preview]', box).forEach(function (b) {
+        b.addEventListener('click', function () { previewContext(b.getAttribute('data-ctx-preview')); });
+      });
+      $$('[data-ctx-reset]', box).forEach(function (b) {
+        b.addEventListener('click', function () { resetContext(b.getAttribute('data-ctx-reset')); });
+      });
+    }).catch(function (err) {
+      box.innerHTML = pageErrorHTML(err);
+      bindRetry(box, loadContext);
+    });
+  }
+
+  function previewContext(sid) {
+    var root = $('#modal-root');
+    root.innerHTML = '<div class="modal-overlay" id="ctx-overlay">' +
+      '<div class="modal" role="dialog" aria-modal="true" style="max-width:780px;width:92vw">' +
+      '<div class="modal-head"><h3>最近消息 · ' + esc(sid) + '</h3></div>' +
+      '<div class="modal-body" id="ctx-preview-body" style="max-height:62vh;overflow:auto">正在加载…</div>' +
+      '<div class="modal-foot"><button type="button" class="btn" data-modal="close">关闭</button></div>' +
+      '</div></div>';
+    var overlay = $('#ctx-overlay');
+    function close() { root.innerHTML = ''; document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', onKey);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay || (e.target.closest && e.target.closest('[data-modal="close"]'))) close();
+    });
+    api('/api/context/sessions/' + encodeURIComponent(sid) + '/messages?limit=60').then(function (data) {
+      var body = $('#ctx-preview-body');
+      if (!body) return;
+      var msgs = (data && data.messages) || [];
+      if (!msgs.length) { body.innerHTML = '<div class="empty">没有消息</div>'; return; }
+      body.innerHTML = msgs.map(function (m) {
+        var isBot = m.role === 'assistant';
+        return '<div style="margin:0 0 12px;padding:10px 12px;border-radius:8px;background:' +
+          (isBot ? 'rgba(90,140,255,.10)' : 'rgba(255,255,255,.04)') + '">' +
+          '<div class="hint" style="margin-bottom:6px">' + (isBot ? '角色' : '用户') + ' · ' + esc(fmtTimeShort(m.at)) + '</div>' +
+          '<div style="white-space:pre-wrap;word-break:break-word">' + esc(m.content) + '</div></div>';
+      }).join('');
+    }).catch(function (err) {
+      var body = $('#ctx-preview-body');
+      if (body) body.innerHTML = pageErrorHTML(err);
+    });
+  }
+
+  function resetContext(sid) {
+    confirmDialog({
+      title: '重置上下文',
+      html: '确定要重置 <code>' + esc(sid) + '</code> 的对话上下文吗？<br><br>' +
+        '<span class="hint">重置后模型不再看到此前的聊天内容；<b>历史记录仍会保留</b>，可事后追溯。此操作不可撤销。</span>',
+      okText: '重置',
+      cancelText: '取消',
+      danger: true
+    }).then(function (ok) {
+      if (!ok) return;
+      return api('/api/context/sessions/' + encodeURIComponent(sid) + '/reset', { method: 'POST' })
+        .then(function () {
+          toast('已重置：' + sid, 'success');
+          return loadContext();
+        })
+        .catch(function (err) {
+          toast('重置失败：' + errorText(err), 'error');
+        });
+    });
+  }
+
+  /* ============================================================
    * 路由
    * ============================================================ */
 
@@ -2341,6 +2462,7 @@
     tasks: renderTasks,
     characters: renderCharacters,
     memory: renderMemory,
+    context: renderContext,
     audit: renderAudit,
     settings: renderSettings
   };

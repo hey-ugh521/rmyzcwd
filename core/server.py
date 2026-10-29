@@ -10,11 +10,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
+import sqlite3
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import httpx
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
@@ -466,6 +470,168 @@ async def api_timeline_add(body: dict = Body(...)):
                              kind=str(body.get("kind") or "event"),
                              character=body.get("character"))
     return {"ok": True, "id": tid}
+
+
+# ---------------------------------------------------------------- 对话上下文（LangBot）
+# QQ 走的是 LangBot 自己的 transcript / runner_state，跟 Core 的 memory 是两套。
+# 这里只做「看」和「重置」：读取 LangBot 的 SQLite（只读），重置走它官方 HTTP 接口。
+# 重置语义（源自 LangBot context_reset.py）：插入一条 generation 标记，
+# 之后 transcript 里 created_at 早于该标记的消息不再进入模型上下文（历史仍保留）。
+
+LB = (CFG.get("integrations") or {}).get("langbot") or {}
+LB_BASE = str(LB.get("base_url") or "http://127.0.0.1:5300").rstrip("/")
+LB_KEY = str(LB.get("api_key") or "")
+LB_BOT = str(LB.get("bot_id") or "")
+LB_DB = str(LB.get("db_path") or "")
+_SID_RE = re.compile(r"^[A-Za-z0-9_:.\-]{1,160}$")
+
+
+def _ts_ms(value: Any) -> int | None:
+    """LangBot 存的是 UTC 的 'YYYY-MM-DD HH:MM:SS.ffffff' 字符串。"""
+    if not value:
+        return None
+    text = str(value)
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return int(datetime.strptime(text, fmt).replace(tzinfo=timezone.utc).timestamp() * 1000)
+        except ValueError:
+            continue
+    return None
+
+
+def _lb_query(sql: str, args: tuple = ()) -> list[dict]:
+    if not LB_DB or not Path(LB_DB).exists():
+        raise HTTPException(503, f"LangBot 数据库不可用: {LB_DB or '(未配置)'}")
+    con = sqlite3.connect(f"file:{LB_DB}?mode=ro", uri=True, timeout=5)
+    con.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in con.execute(sql, args).fetchall()]
+    finally:
+        con.close()
+
+
+def _lb_bot_map() -> dict[str, str]:
+    """会话 → bot_id。同一个 LangBot 里可能挂着多个 bot：
+    QQ 机器人是 UUID，Open WebUI / WebChat 的 websocket 会话属于 'websocket-proxy-bot'。
+    重置时必须用它自己的 bot_id，否则 LangBot 会按 bot 过滤后报「资源不存在」。
+    """
+    try:
+        rows = _lb_query(
+            "SELECT session_id, bot_id FROM monitoring_sessions WHERE bot_id IS NOT NULL"
+        )
+    except Exception:
+        return {}
+    return {r["session_id"]: r["bot_id"] for r in rows}
+
+
+def _lb_bot_for(session_id: str) -> str:
+    return _lb_bot_map().get(session_id) or LB_BOT
+
+
+def _lb_sessions() -> list[dict]:
+    rows = _lb_query(
+        "SELECT conversation_id AS session_id, COUNT(*) AS total,"
+        " MIN(created_at) AS first_at, MAX(created_at) AS last_at"
+        " FROM transcript GROUP BY conversation_id"
+    )
+    resets = {
+        r["conversation_id"]: r["at"]
+        for r in _lb_query(
+            "SELECT conversation_id, MAX(created_at) AS at FROM runner_state"
+            " WHERE runner_id='__langbot_context_reset__' GROUP BY conversation_id"
+        )
+    }
+    out: list[dict] = []
+    bots = _lb_bot_map()
+    for r in rows:
+        sid = r["session_id"]
+        reset_at = resets.get(sid)
+        active = r["total"]
+        if reset_at:
+            active = _lb_query(
+                "SELECT COUNT(*) AS n FROM transcript WHERE conversation_id=? AND created_at > ?",
+                (sid, reset_at),
+            )[0]["n"]
+        out.append({
+            "session_id": sid,
+            "bot_id": bots.get(sid) or LB_BOT,
+            "platform": "group" if sid.startswith("group_") else "person",
+            "total_messages": int(r["total"]),
+            "active_messages": int(active),
+            "first_at": _ts_ms(r["first_at"]),
+            "last_at": _ts_ms(r["last_at"]),
+            "last_reset_at": _ts_ms(reset_at),
+        })
+    out.sort(key=lambda x: x["last_at"] or 0, reverse=True)
+    return out
+
+
+@app.get("/api/context/sessions")
+async def api_context_sessions():
+    try:
+        sessions = _lb_sessions()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, f"读取 LangBot 会话失败: {exc}")
+    return {"ok": True, "bot_id": LB_BOT, "sessions": sessions}
+
+
+@app.get("/api/context/sessions/{session_id}/messages")
+async def api_context_messages(session_id: str, limit: int = 60):
+    if not _SID_RE.match(session_id):
+        raise HTTPException(400, "session_id 非法")
+    limit = max(1, min(int(limit), 200))
+    rows = _lb_query(
+        "SELECT role, item_type, content, created_at FROM transcript"
+        " WHERE conversation_id=? ORDER BY id DESC LIMIT ?",
+        (session_id, limit),
+    )
+    msgs = [
+        {
+            "role": r["role"],
+            "type": r["item_type"],
+            "content": (r["content"] or "")[:4000],
+            "at": _ts_ms(r["created_at"]),
+        }
+        for r in reversed(rows)
+    ]
+    return {"ok": True, "session_id": session_id, "messages": msgs}
+
+
+@app.post("/api/context/sessions/{session_id}/reset")
+async def api_context_reset(session_id: str):
+    if not _SID_RE.match(session_id):
+        raise HTTPException(400, "session_id 非法")
+    if not LB_KEY:
+        raise HTTPException(503, "未配置 LangBot api_key")
+    try:
+        bot_id = _lb_bot_for(session_id)
+    except Exception:
+        bot_id = LB_BOT
+    if not bot_id:
+        raise HTTPException(503, "无法确定该会话的 bot_id")
+    url = f"{LB_BASE}/api/v1/monitoring/sessions/reset-context"
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.post(url, json={"bot_id": bot_id, "session_id": session_id},
+                             headers={"Authorization": f"Bearer {LB_KEY}"})
+    except Exception as exc:
+        store.audit("console", "context.reset", {"session_id": session_id, "bot_id": bot_id},
+                    result="error", error=str(exc), source="console")
+        raise HTTPException(502, f"LangBot 不可达: {exc}")
+    try:
+        data = r.json()
+    except Exception:
+        data = {}
+    ok = r.status_code == 200 and data.get("code") == 0
+    store.audit("console", "context.reset",
+                {"session_id": session_id, "bot_id": bot_id, "status": r.status_code},
+                result="ok" if ok else "error",
+                error=None if ok else str(data)[:300], source="console")
+    if not ok:
+        raise HTTPException(502 if r.status_code < 400 else r.status_code, f"重置失败: {data}")
+    return {"ok": True, "session_id": session_id, "bot_id": bot_id}
 
 
 # ---------------------------------------------------------------- 审计

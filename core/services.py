@@ -102,6 +102,7 @@ class Supervisor:
         self._fail: dict[str, tuple[int, float]] = {}
         self._last_activity = now()   # 以进程启动时间为基线，否则会被算成「闲置 10 亿秒」
         self._mode_cache: str | None = None
+        self._comfy_freed = False     # 闲置后是否已卸载过 ComfyUI 模型
 
     # -------------------------------------------------- 模式
 
@@ -344,8 +345,10 @@ class Supervisor:
             return st
         st = await self.probe("comfyui")
         if st["state"] in ("ready", "busy"):
+            self._comfy_freed = False      # 有新的媒体请求，模型会被重新加载
             return st
         st = await self.start("comfyui")
+        self._comfy_freed = False
         if st["state"] not in ("ready", "busy"):
             raise ServiceError(f"ComfyUI 未就绪: {st.get('error') or st['state']}")
         return st
@@ -361,16 +364,57 @@ class Supervisor:
     async def gateway_activity(self) -> tuple[int, float]:
         """网关侧的活动：QQ 走 LangBot→网关 生图时，Core 自己收不到任何信号，
         必须从这里读，否则会在刚出完图后把 ComfyUI 睡掉（实测发生过）。
-        用 /api/pulse（纯内存），不能用会探测后端的 /api/status（最坏 9s）。"""
+        用 /api/pulse（纯内存），不能用会探测后端的 /api/status（最坏 9s）。
+
+        注意：active_tasks 在 /api/pulse 里是 **嵌套在 activity 下**的，
+        早先直接取顶层字段恒为 0，等于这条守卫从未生效——曾导致生成过程中
+        被 /free，模型反复卸载重载，步进从 1.3s/it 劣化到 40s/it。
+        """
         gw = self.services.get("gateway")
         port = gw.port if gw else 8899
         try:
             async with httpx.AsyncClient(timeout=2.5) as c:
                 r = await c.get(f"http://127.0.0.1:{port}/api/pulse")
             d = r.json() or {}
-            return int(d.get("active_tasks") or 0), float(d.get("last_activity_at") or 0.0)
+            act = d.get("activity") or {}
+            active = int(act.get("active_tasks") or d.get("active_tasks") or 0)
+            last = float(act.get("last_activity_at") or d.get("last_activity_at") or 0.0)
+            return active, last
         except Exception:
             return 0, 0.0
+
+    async def comfy_busy(self) -> bool:
+        """ComfyUI 自己的队列是否还有任务——最可靠的「正在生成」信号。"""
+        s = self.services.get("comfyui")
+        base = "http://127.0.0.1:8188"
+        if s and s.cfg.get("health_url"):
+            base = str(s.cfg["health_url"]).split("/system_stats")[0].rstrip("/")
+        try:
+            async with httpx.AsyncClient(timeout=3) as c:
+                r = await c.get(f"{base}/queue")
+            q = r.json() or {}
+            return bool(q.get("queue_running") or q.get("queue_pending"))
+        except Exception:
+            return True   # 查不到就当忙，宁可不卸
+
+    async def free_comfy_models(self) -> dict:
+        """让 ComfyUI 卸载模型、释放显存与常驻内存，但**保留进程**。
+
+        为什么不用 kill：冷启动要加载几十个 custom node + 模型，正常 70~110 秒，
+        内存紧张时实测飙到 532 秒，直接超过 MCP 工具超时 → 用户看到"崩了"。
+        /free 只卸载模型，进程与 CUDA 上下文留着，下次生成 30~40 秒即可。
+        """
+        s = self.services.get("comfyui")
+        base = "http://127.0.0.1:8188"
+        if s and s.cfg.get("health_url"):
+            base = str(s.cfg["health_url"]).split("/system_stats")[0].rstrip("/")
+        try:
+            async with httpx.AsyncClient(timeout=20) as c:
+                r = await c.post(f"{base}/free",
+                                 json={"unload_models": True, "free_memory": True})
+            return {"ok": r.status_code < 400, "status": r.status_code}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     async def idle_loop(self) -> None:
         while True:
@@ -388,15 +432,39 @@ class Supervisor:
                     continue
                 gw_active, gw_last = await self.gateway_activity()
                 if gw_active > 0:
+                    self._comfy_freed = False
+                    continue
+                if await self.comfy_busy():
+                    # ComfyUI 自己还有任务在跑，绝不能卸载模型
+                    self._comfy_freed = False
                     continue
                 idle = self.seconds_since_activity()
                 if gw_last:
                     idle = min(idle, now() - gw_last)
                 limit = int(CFG["core"].get("idle_sleep_sec", 600))
-                if idle >= limit:
-                    await self.stop("comfyui")
-                    store.audit("supervisor", "service.sleep.comfyui",
+                if idle < limit:
+                    # 有新活动 → 模型会被重新加载，解除「已卸载」标记。
+                    # 注意：不能只依赖 ensure() 重置——网关的 ensure_comfy()
+                    # 会先探活，ComfyUI 活着就直接返回、根本不调 Core。
+                    self._comfy_freed = False
+                    continue
+                if self._comfy_freed:
+                    continue
+                # 优先「卸载模型」而不是「杀进程」：省下的是显存和大头内存，
+                # 但下一次生成不用再付冷启动成本。
+                res = await self.free_comfy_models()
+                if res.get("ok"):
+                    self._comfy_freed = True
+                    store.audit("supervisor", "service.free.comfyui",
                                 {"idle_sec": round(idle, 1)}, source="supervisor")
+                else:
+                    # /free 不可用才退回杀进程
+                    await self.stop("comfyui")
+                    self._comfy_freed = True
+                    store.audit("supervisor", "service.sleep.comfyui",
+                                {"idle_sec": round(idle, 1),
+                                 "reason": res.get("error") or res.get("status")},
+                                source="supervisor")
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -410,6 +478,7 @@ class Supervisor:
             "prewarm_on_start": bool(CFG["core"].get("prewarm_on_start", False)),
             "active_tasks": len(store.tasks_active()),
             "seconds_since_activity": round(self.seconds_since_activity(), 1),
+            "comfy_models_unloaded": bool(self._comfy_freed),
             "services": svc,
         }
 

@@ -83,5 +83,14 @@
   },
   "characters_dir": "data/characters",
   "db": "data/mobius.db",
-  "default_character": "bronya"
+  "default_character": "bronya",
+  "integrations": {
+    "langbot": {
+      "base_url": "http://127.0.0.1:5300",
+      "api_key": "REPLACE_WITH_LANGBOT_API_KEY",
+      "bot_id": "f128506b-a8aa-417c-9b55-39bc2fc99894",
+      "db_path": "C:\\Users\\lenovo\\Desktop\\_说明文档\\qqbot\\langbot\\data\\langbot.db",
+      "timeout_sec": 20
+    }
+  }
 }
