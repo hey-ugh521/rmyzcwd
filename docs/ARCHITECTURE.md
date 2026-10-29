@@ -242,10 +242,20 @@ Task 对象（统一 ID，所有界面共享）：
  "width":832,"height":1216,"seed":null,"reference_image":"upload_xxx.png",
  "async":true}
 ```
-返回 `{"ok":true,"task_id":"g_xxx","status":"queued"}`；`async=false` 时直接等到结果返回 `{ok,filename,url,seconds}`。
+返回 `{"ok":true,"task_id":"g_xxx","status":"queued"}`；`async=false` 时直接等到结果返回
+`{ok,filename,url,seconds,seed,checkpoint,workflow,loras,prompt,negative,width,height,character}`。
+
+> **可复现约定（2026-10-29 起）**：`seed` 未传时由网关在**提交前**生成并落库，
+> 结果与任务的 `params`/`result` 都会带上实际使用的 seed 和完整参数。
+> 用同样的 seed + 同样的参数重发，ComfyUI 会命中计算图缓存直接返回同一张图（1 秒级），
+> 清缓存后重算也是像素级相同。
 
 规则：
 - 显式 `character` 时，checkpoint / loras / workflow / size 从角色档案补齐，显式参数覆盖档案。
+- `character` 接受 **id / 中文名 / 别名**（如 `bronya`、`布洛妮娅`、`板鸭`、`幽兰黛尔`），
+  匹配逻辑见 `find_character()`；完整列表用 `GET /api/characters`。
+- 角色档案可以在 `data/characters/*.json` 里追加 `constitution` / `speech_style` /
+  `relation_stance` / `taboo` / `visual_anchor` 字段，Core 会用人格宪法优先读它。
 - 无 LoRA、无角色时，行为和旧版完全一致（向后兼容）。
 - ComfyUI 不可达时：若 `wake` 成功则重试一次；否则返回 `{"ok":false,"error":"comfyui_unavailable","hint":"..."}`。
 

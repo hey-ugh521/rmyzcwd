@@ -689,6 +689,10 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
             raise ApiError("invalid_size", f"{key}={value} 超出 64–4096 范围")
 
     seed = _as_int(body.get("seed"))
+    if seed is None:
+        # 实际使用的种子必须在提交前就确定并落库，否则这张图永远复刻不出来
+        # （之前是在 apply_overrides 里现随机、然后丢掉）。
+        seed = random.randint(0, 2**31 - 1)
 
     # 参考图
     reference_image = str(
@@ -1339,6 +1343,16 @@ class TaskStore:
             "type": image_type,
             "prompt_id": prompt_id,
             "seconds": seconds,
+            # 复现所需的最小参数集：同 seed + 同参数应能出一模一样的图
+            "seed": spec.get("seed"),
+            "checkpoint": spec.get("checkpoint"),
+            "workflow": spec.get("workflow"),
+            "loras": spec.get("loras"),
+            "prompt": spec.get("prompt"),
+            "negative": spec.get("negative"),
+            "width": spec.get("width"),
+            "height": spec.get("height"),
+            "character": spec.get("character"),
         }
         local_path = os.path.join(
             self.cfg.comfy_output_dir, subfolder, filename
@@ -1816,7 +1830,13 @@ server = MCPServer(
         "生图工具返回图片 URL，agent 应在回复中用 markdown 图片引用该 URL；"
         "tts_speak 返回 audio_url，必须把该 URL 以纯文本原样放在回复最后一行，LangBot 会自动转成语音消息。"
         "异步任务请用 comfyui_task_submit 提交后用 comfyui_task_status 查询。"
-        "角色参数 character 传 bronya / kiana / elysia 可自动补齐 checkpoint、LoRA、尺寸与画风提示词。"
+        "【生图优先用角色档案】character 参数可传角色 id、中文名或别名"
+        "（如 幽兰黛尔 / 布洛妮娅 / 符华 / 琪亚娜 / 爱莉希雅 / 德丽莎 …），"
+        "系统会自动补齐 checkpoint、LoRA、权重、尺寸与画风提示词——比手工拼 LoRA 更稳。"
+        "完整角色列表见 comfyui_list_characters；LoRA 见 comfyui_list_loras。"
+        "注意：character 为空时才需要自己传 loras 数组。"
+        "【可复现】generate 的返回里带 seed / checkpoint / loras / prompt，"
+        "想复刻同一张图就带上同样的 seed 重发。"
     ),
 )
 
@@ -2194,10 +2214,10 @@ async def comfyui_generate(
                   upscale=放大（需 reference_image_url）/ removebg=去背景（需 reference_image_url）
         width: 覆盖画布宽度（可选）
         height: 覆盖画布高度（可选）
-        seed: 随机种子（可选，默认随机）
-        character: 角色 id，如 bronya / kiana / elysia（可选）
+        seed: 随机种子（可选，默认随机）。**返回里会带实际使用的 seed**，带上它重发可复刻同一张图
+        character: 角色 id / 中文名 / 别名，如 幽兰黛尔、布洛妮娅、bronya、durandal（可选但强烈建议）
         loras: LoRA 数组，如 [{"name":"xxx.safetensors","weight":0.75}]；
-               也接受 JSON 字符串或 "name:0.75,name2:0.6"
+               也接受 JSON 字符串或 "name:0.75,name2:0.6"（character 留空时才需要自己传）
         reference_image_url: 上传后的 upload_id 或 URL（upscale/removebg 用）
     """
     try:
@@ -2223,6 +2243,9 @@ async def comfyui_generate(
                 "checkpoint": result.get("checkpoint"),
                 "character": result.get("character"),
                 "loras": result.get("loras"),
+                "seed": result.get("seed"),
+                "prompt": result.get("prompt"),
+                "negative": result.get("negative"),
                 "seconds": result.get("seconds"),
                 "warnings": result.get("warnings") or [],
             }

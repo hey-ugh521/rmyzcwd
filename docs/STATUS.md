@@ -110,7 +110,9 @@ QQ 与 Web 就变成同一套大脑。**没执行**，是可逆的一步。
 | MCP over HTTP 接入 | ✅ | 15 个工具，官方 SDK 探针真实握手 |
 | 列 checkpoint | ✅ | 6 个 |
 | 列 LoRA（含搜索） | ✅ | 31 个，`q=bronya` 命中 |
-| 角色档案驱动（自动补 ckpt/LoRA/尺寸/画风） | ✅ | 显式参数 > 档案 > 工作流默认 |
+| 角色档案驱动（自动补 ckpt/LoRA/尺寸/画风） | ✅ | **12 个角色**，支持中文名/别名命中（`幽兰黛尔`→durandal） |
+| 角色人格卡（speech_style / constitution / taboo） | ✅ | 12 个角色各有独立宪法与说话习惯，Core 优先读它 |
+| 生成可复现 | ✅ | seed 提交前生成并落库；同 seed 字节级一致，换 seed 图必不同 |
 | LoRA 链式注入（多 LoRA、去重、权重截断） | ✅ | ComfyUI payload 里 `lora_1..N` 节点可查 |
 | 文生图（竖/横版） | ✅ | 多次真实出图，单张 47–95s |
 | 异步任务 + 取消 | ✅ | 队列删除 / ComfyUI interrupt 都验过 |
