@@ -47,3 +47,35 @@ vae:           qwen_image_2.1_vae_bf16.safetensors
 
 注意：`unet` / `text_encoders` 目录当前是指向 U 盘 `E:\comfy-models` 的目录联接，
 拔掉 U 盘后千问工作流会失败（SDXL 的 portrait/landscape 不受影响）。
+
+## 通用模型注册表（models.json）
+
+`models.json` 是**模型档案**清单，网关按 id/别名解析，不再按工作流名硬编码。
+
+```json
+{
+  "id": "qwen_image_2_1",
+  "name": "千问 Image 2.1 Turbo",
+  "aliases": ["qwen", "千问"],
+  "workflow": "qwen",
+  "supports_character": false,
+  "supports_lora": false,
+  "size": [1024, 1024],
+  "params": { "cfg": 1.0 },
+  "style": "写实 / 通用题材"
+}
+```
+
+新增一个模型只要两步（**不需要改代码**）：
+
+1. 模型文件就位（`models/` 下，或 `extra_model_paths.yaml` 里另挂一个目录）
+2. `workflows/` 加一个 **API 格式**工作流模板 + `models.json` 加一条档案
+
+调用方式：
+
+- MCP：`comfyui_list_models()` 拿列表 → `comfyui_generate(model="qwen_image_2_1", prompt=...)`
+- REST：`POST /api/generate {"model": "qwen", "prompt": "..."}`
+- `workflow=` 参数仍保留，不传 model 时向后兼容
+
+`params` 目前支持覆盖：`steps / cfg / sampler_name / scheduler / denoise / sigmas`
+（SDXL 走 KSampler，千问走 CFGGuider + ManualSigmas）。

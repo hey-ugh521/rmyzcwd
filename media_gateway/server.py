@@ -33,7 +33,9 @@ import urllib.parse
 import wave
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field
 
 import httpx
 import uvicorn
@@ -64,6 +66,7 @@ WORKFLOW_MAP = {
     "upscale": "comic-upscale.json",
     "removebg": "comic-remove-bg.json",
     "qwen": "comic-qwen.json",
+    "flux3": "comic-flux3.json",
 }
 # 千问 Image 是新架构（UNETLoader + CLIPLoader type=qwen_image + 专用 VAE +
 # SamplerCustomAdvanced/ManualSigmas），没有 CheckpointLoaderSimple，
@@ -342,6 +345,86 @@ def _node_title(node: dict) -> str:
     return str((node.get("_meta") or {}).get("title") or "")
 
 
+# ---------------------------------------------------------------------------
+# 通用模型注册表（§ 新增）
+# 目的：新增模型只加一条 JSON + 一个工作流模板，不动代码。
+# 模型 = 「生成档案(profile)」：决定用哪个工作流模板、默认尺寸、采样参数、
+# 是否支持角色/LoRA。查询与调用都走 id / 别名。
+# ---------------------------------------------------------------------------
+
+
+def models_file(cfg: Settings) -> str:
+    return str(_env("MOBIUS_MODELS_FILE", os.path.join(cfg.workflows_dir, "models.json")))
+
+
+def load_model_registry(cfg: Settings) -> list[dict[str, Any]]:
+    path = models_file(cfg)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        log.warning("模型注册表不存在: %s（只有内置工作流可用）", path)
+        return []
+    except Exception as exc:  # noqa: BLE001
+        log.warning("模型注册表读取失败 %s: %s", path, exc)
+        return []
+    entries = data.get("models") if isinstance(data, dict) else data
+    out: list[dict[str, Any]] = []
+    for entry in entries or []:
+        if isinstance(entry, dict) and entry.get("id"):
+            out.append(entry)
+    return out
+
+
+def find_model(cfg: Settings, key: str) -> dict[str, Any] | None:
+    needle = str(key or "").strip().lower()
+    if not needle:
+        return None
+    for entry in load_model_registry(cfg):
+        names = [entry.get("id"), entry.get("name")] + list(entry.get("aliases") or [])
+        if any(str(n).strip().lower() == needle for n in names if n):
+            return entry
+    return None
+
+
+def public_models(cfg: Settings) -> list[dict[str, Any]]:
+    """给模型看的精简视图（不含内部路径）。"""
+    out = []
+    for e in load_model_registry(cfg):
+        out.append({
+            "id": e.get("id"),
+            "name": e.get("name"),
+            "aliases": e.get("aliases") or [],
+            "workflow": e.get("workflow"),
+            "style": e.get("style", ""),
+            "size": e.get("size"),
+            "supports_character": bool(e.get("supports_character")),
+            "supports_lora": bool(e.get("supports_lora")),
+            "notes": e.get("notes", ""),
+        })
+    return out
+
+
+def apply_model_params(nodes: dict[str, dict], params: dict[str, Any]) -> dict[str, dict]:
+    """把档案里的采样参数写进图。只覆盖档案显式给出的键。"""
+    if not params:
+        return nodes
+    for node in nodes.values():
+        cls = node.get("class_type", "")
+        inputs = node.setdefault("inputs", {})
+        if cls == "KSampler":
+            for key in ("steps", "cfg", "sampler_name", "scheduler", "denoise"):
+                if key in params:
+                    inputs[key] = params[key]
+        elif cls == "CFGGuider":
+            if "cfg" in params:
+                inputs["cfg"] = params["cfg"]
+        elif cls == "ManualSigmas":
+            if params.get("sigmas"):
+                inputs["sigmas"] = params["sigmas"]
+    return nodes
+
+
 def apply_overrides(
     nodes: dict[str, dict],
     prompt: str,
@@ -381,7 +464,13 @@ def apply_overrides(
             inputs["prompt"] = prompt
             if negative:
                 inputs["negative_prompt"] = negative
-        elif cls == "EmptyLatentImage":
+        elif cls in ("EmptyLatentImage", "EmptyFlux2LatentImage", "EmptySD3LatentImage"):
+            if width is not None:
+                inputs["width"] = int(width)
+            if height is not None:
+                inputs["height"] = int(height)
+        elif cls == "ModelSamplingFlux":
+            # FLUX 系的 shift 计算依赖画布尺寸，尺寸变了这里也要跟着变
             if width is not None:
                 inputs["width"] = int(width)
             if height is not None:
@@ -552,6 +641,7 @@ def build_nodes(cfg: Settings, spec: dict[str, Any]) -> dict[str, dict]:
         filename_prefix=f"mobius_{spec['workflow']}",
         checkpoint=spec["checkpoint"],
     )
+    nodes = apply_model_params(nodes, spec.get("params") or {})
     nodes, applied, warnings = inject_loras(nodes, spec["loras"])
     spec["loras_applied"] = applied
     spec["warnings"].extend(warnings)
@@ -618,8 +708,18 @@ def _as_float(value: Any) -> float | None:
 
 
 def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> dict[str, Any]:
-    """解析请求：显式参数 > 角色档案 > 工作流默认。"""
+    """解析请求：model 档案 > 显式参数 > 角色档案 > 工作流默认。"""
     warnings: list[str] = []
+    profile: dict[str, Any] | None = None
+    model_key = str(body.get("model") or "").strip()
+    if model_key:
+        profile = find_model(cfg, model_key)
+        if profile is None:
+            available = ", ".join(str(m.get("id")) for m in load_model_registry(cfg))
+            raise ApiError(
+                "unknown_model",
+                f"未找到模型 {model_key!r}；可用: {available or '(注册表为空)'}",
+            )
     character_key = str(body.get("character") or "").strip()
     character: dict[str, Any] | None = None
     if character_key:
@@ -640,8 +740,10 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
             403,
         )
 
-    # workflow
-    if body.get("workflow"):
+    # workflow：model 档案 > 显式 workflow > 角色档案 > 默认
+    if profile and profile.get("workflow"):
+        workflow = str(profile["workflow"])
+    elif body.get("workflow"):
         workflow = str(body["workflow"]).strip()
     elif character and character.get("workflow"):
         workflow = str(character["workflow"])
@@ -679,6 +781,8 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
 
     # checkpoint
     checkpoint = str(body.get("checkpoint") or "").strip() or None
+    if not checkpoint and profile and profile.get("checkpoint"):
+        checkpoint = str(profile["checkpoint"])
     if not checkpoint and character and character.get("checkpoint"):
         checkpoint = str(character["checkpoint"])
 
@@ -721,6 +825,10 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
         width = char_w
     if height is None:
         height = char_h
+    prof_size = (profile or {}).get("size")
+    if width is None and height is None and isinstance(prof_size, (list, tuple)) and len(prof_size) >= 2:
+        width = _as_int(prof_size[0])
+        height = _as_int(prof_size[1])
     if workflow in QWEN_WORKFLOWS:
         # 千问模板默认 1024x1024；显式写进 spec，结果里能回报真实尺寸，也便于复刻
         width = width or 1024
@@ -747,6 +855,8 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
 
     spec: dict[str, Any] = {
         "kind": kind,
+        "model": (profile or {}).get("id"),
+        "params": dict((profile or {}).get("params") or {}),
         "character": (character or {}).get("id") if character else None,
         "character_name": (character or {}).get("name") if character else None,
         "workflow": workflow,
@@ -1385,6 +1495,7 @@ class TaskStore:
             "prompt_id": prompt_id,
             "seconds": seconds,
             # 复现所需的最小参数集：同 seed + 同参数应能出一模一样的图
+            "model": spec.get("model"),
             "seed": spec.get("seed"),
             "checkpoint": spec.get("checkpoint"),
             "workflow": spec.get("workflow"),
@@ -1878,6 +1989,15 @@ server = MCPServer(
         "注意：character 为空时才需要自己传 loras 数组。"
         "【可复现】generate 的返回里带 seed / checkpoint / loras / prompt，"
         "想复刻同一张图就带上同样的 seed 重发。"
+        "【按画风选模型】生图统一入口是 comfyui_generate(model=...)，不要自己猜参数。"
+        "路由规则：二次元/动漫人物/需要角色一致性或 LoRA → model=anime_illustrious；"
+        "写实、摄影感、电影感、强构图 → model=flux3_klein；"
+        "写实但要求更强的中文语义理解、或想更快更省 → model=qwen_image_2_1。"
+        "拿不准或用户描述含糊时，先调 comfyui_list_models（返回每个模型的 style/尺寸/是否支持角色），"
+        "选好再生成；不要默认就用动漫模型。"
+        "限制：只有 anime_illustrious 支持 character 与 LoRA；qwen_image_2_1 与 flux3_klein 都不支持，"
+        "对它们传 character/loras 会直接报错。"
+        "不传 model 时才会退回旧参数 workflow（portrait/landscape/upscale/removebg）。"
     ),
 )
 
@@ -1962,8 +2082,15 @@ async def route_pulse(request: Request) -> Response:
 
 @api_route("/api/models", ["GET"])
 async def route_models(request: Request) -> Response:
-    models, source = await comfy_list_models(settings)
-    return JSONResponse({"ok": True, "models": models, "count": len(models), "source": source})
+    checkpoints, source = await comfy_list_models(settings)
+    profiles = public_models(settings)
+    return JSONResponse({
+        "ok": True,
+        "models": profiles,          # 通用入口：模型档案
+        "count": len(profiles),
+        "checkpoints": checkpoints,  # 底层 SDXL checkpoint
+        "source": source,
+    })
 
 
 @api_route("/api/loras", ["GET"])
@@ -2230,21 +2357,25 @@ def _tool_body(
 @server.tool(
     name="comfyui_generate",
     description=(
-        "调用本机 ComfyUI 生成漫画/二次元图片，等待完成并返回图片 URL。"
-        "可传 character（bronya/kiana/elysia）自动补齐 checkpoint、LoRA、尺寸与画风提示词；"
-        "也可用 loras 显式指定 LoRA 链。"
-        "workflow=qwen 时改用千问 Image 2.1 Turbo 通用出图：此时不能传 character、loras、checkpoint，"
-        "只用 prompt 描述画面（适合写实/通用题材，不支持角色 LoRA）。"
+        "调用本机 ComfyUI 生成图片，等待完成并返回图片 URL。"
+        "【必须按画风选模型】用 model 指定模型档案："
+        "anime_illustrious=二次元/动漫角色（唯一支持 character 与 LoRA）；"
+        "flux3_klein=写实摄影/电影感（16 步，质量最高）；"
+        "qwen_image_2_1=写实通用（中文语义强、速度较快）。"
+        "不确定时先调用 comfyui_list_models 查看每个模型的 style，再决定；不要默认用动漫模型。"
+        "model 会自动带出工作流、尺寸与采样参数，比手写 workflow 更稳。"
+        "qwen_image_2_1 / flux3_klein 不支持 character、loras、checkpoint，传了会报错。"
     ),
 )
 async def comfyui_generate(
-    prompt: str,
+    prompt: Annotated[str, Field(description="画面描述。写实类模型请写完整场景（主体+姿态+环境+光线+镜头+质感），不要只写关键词")],
     negative: str = "",
-    workflow: str = "portrait",
+    workflow: str = "",
+    model: Annotated[str, Field(description="模型档案，按画风选：anime_illustrious=二次元/动漫角色（唯一支持 character 与 LoRA）｜flux3_klein=写实摄影/电影感｜qwen_image_2_1=写实通用")] = "",
     width: int | None = None,
     height: int | None = None,
     seed: int | None = None,
-    character: str = "",
+    character: Annotated[str, Field(description="角色 id/中文名/别名，仅 anime_illustrious 支持；qwen/flux3 传了会报错")] = "",
     loras: Any = None,
     reference_image_url: str = "",
 ) -> str:
@@ -2253,13 +2384,15 @@ async def comfyui_generate(
     Args:
         prompt: 正向提示词（中文或英文均可，描述画面内容）
         negative: 负向提示词，留空使用角色档案/工作流默认
-        workflow: 工作流模板，portrait=竖版漫画 / landscape=横版漫画 /
-                  qwen=千问 Image 2.1 Turbo 通用出图（不能用 character，不能加 LoRA）/
-                  upscale=放大（需 reference_image_url）/ removebg=去背景（需 reference_image_url）
+        workflow: 工作流模板（不传 model 时才需要），portrait=竖版漫画 /
+                  landscape=横版漫画 / upscale=放大 / removebg=去背景
+        model: **推荐的通用入口**。模型档案 id 或别名，如 anime_illustrious、
+               qwen_image_2_1。会自动决定工作流、尺寸、采样参数；未知 id 会返回可用列表
         width: 覆盖画布宽度（可选）
         height: 覆盖画布高度（可选）
         seed: 随机种子（可选，默认随机）。**返回里会带实际使用的 seed**，带上它重发可复刻同一张图
-        character: 角色 id / 中文名 / 别名，如 幽兰黛尔、布洛妮娅、bronya、durandal（可选但强烈建议）
+        character: 角色 id / 中文名 / 别名，如 幽兰黛尔、布洛妮娅、bronya、durandal
+                   （仅 anime_illustrious 这类支持角色的模型有效）
         loras: LoRA 数组，如 [{"name":"xxx.safetensors","weight":0.75}]；
                也接受 JSON 字符串或 "name:0.75,name2:0.6"（character 留空时才需要自己传）
         reference_image_url: 上传后的 upload_id 或 URL（upscale/removebg 用）
@@ -2270,6 +2403,7 @@ async def comfyui_generate(
             _tool_body(
                 prompt, negative, workflow, width, height, seed,
                 character, loras, reference_image_url,
+                model=model,
             ),
             async_mode=False,
         )
@@ -2284,6 +2418,7 @@ async def comfyui_generate(
                 "local_path": result.get("local_path"),
                 "bytes": result.get("bytes"),
                 "workflow": result.get("workflow"),
+                "model": result.get("model"),
                 "checkpoint": result.get("checkpoint"),
                 "character": result.get("character"),
                 "loras": result.get("loras"),
@@ -2374,11 +2509,26 @@ async def comfyui_status(prompt_id: str) -> str:
         return _tool_error(exc)
 
 
-@server.tool(name="comfyui_list_models", description="列出 ComfyUI 可用的主模型（checkpoint）。")
+@server.tool(
+    name="comfyui_list_models",
+    description=(
+        "列出可用的【模型档案】（profile）与底层 checkpoint。生成图片前先调这个，"
+        "然后把返回的 models[].id 传给 comfyui_generate 的 model 参数即可。"
+        "每个档案带 style/尺寸/是否支持角色与 LoRA，选择成本低。"
+    ),
+)
 async def comfyui_list_models() -> str:
     try:
-        models, source = await comfy_list_models(settings)
-        return _json({"ok": True, "models": models, "count": len(models), "source": source})
+        checkpoints, source = await comfy_list_models(settings)
+        profiles = public_models(settings)
+        return _json({
+            "ok": True,
+            "models": profiles,
+            "count": len(profiles),
+            "checkpoints": checkpoints,
+            "checkpoint_source": source,
+            "registry": models_file(settings),
+        })
     except Exception as exc:  # noqa: BLE001
         return _tool_error(exc)
 

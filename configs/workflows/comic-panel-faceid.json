@@ -2,7 +2,7 @@
   "last_node_id": 19,
   "nodes": {
     "1": {
-      "inputs": { "ckpt_name": "animagine-xl-3.1.safetensors" },
+      "inputs": { "ckpt_name": "Illustrious-XL-v1.0.safetensors" },
       "class_type": "CheckpointLoaderSimple",
       "_meta": { "title": "主模型 (Animagine XL 3.1)" }
     },

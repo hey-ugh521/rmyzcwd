@@ -13,7 +13,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -26,6 +28,8 @@ from .store import CFG, BASE, LOG_DIR, now
 
 MEDIA_MODES = ("off", "on_demand", "prewarm")
 START_COOLDOWN = 30.0        # 同一服务两次启动最小间隔
+MODEL_PATH_WAIT_SEC = 120    # 启动 ComfyUI 前等待额外模型目录（U 盘）就绪的最长时间
+log = logging.getLogger("mobius.services")
 FAIL_BACKOFF = 300.0         # 连续失败后进入退避
 ACTIVITY_TOUCH = 5.0         # 同一请求内的活跃标记合并窗口
 
@@ -179,6 +183,67 @@ class Supervisor:
 
     # -------------------------------------------------- 启停
 
+    async def _wait_model_paths(self, s: _Service) -> None:
+        """启动 ComfyUI 前先等 extra_model_paths 里的目录就绪。
+
+        背景：额外模型目录在 U 盘上（E:\\ai-models\\Qwen-Image-2.1 等）。开机后
+        U 盘枚举可能比 ComfyUI 启动更晚，ComfyUI 会把目录扫成空，导致提交任务时
+        报 `value_not_in_list`（2026-10-30 11:57 实测：千问三个模型全部 not in []）。
+        这里等到目录存在且非空，最多等 MODEL_PATH_WAIT_SEC 秒；超时也照常启动，
+        只是把等待结果写进日志。
+        """
+        cfg = s.cfg or {}
+        cwd = cfg.get("cwd") or "."
+        if cwd == ".":
+            cwd = str(BASE)
+        yaml_path = Path(str(Path(cwd).resolve())) / "ComfyUI" / "extra_model_paths.yaml"
+        if not yaml_path.is_file():
+            return
+        try:
+            text = yaml_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return
+        bases: list[str] = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = re.match(r"base_path\s*:\s*(.+)$", line)
+            if m:
+                p = m.group(1).strip().strip('"').strip("'")
+                if p:
+                    bases.append(os.path.normpath(p))
+        if not bases:
+            return
+
+        def ready(path: str) -> bool:
+            try:
+                if not os.path.isdir(path):
+                    return False
+                with os.scandir(path) as it:
+                    return next(it, None) is not None
+            except Exception:
+                return False
+
+        deadline = now() + MODEL_PATH_WAIT_SEC
+        waited = False
+        while now() < deadline:
+            pending = [p for p in bases if not ready(p)]
+            if not pending:
+                if waited:
+                    store.audit("supervisor", "service.model_paths.ready",
+                                {"paths": bases, "waited_sec": round(MODEL_PATH_WAIT_SEC - (deadline - now()), 1)},
+                                source="supervisor")
+                return
+            if not waited:
+                waited = True
+                log.info("[supervisor] 等待额外模型目录就绪（可能在 U 盘上）：%s", pending)
+            await asyncio.sleep(2)
+        store.audit("supervisor", "service.model_paths.timeout",
+                    {"pending": [p for p in bases if not ready(p)]},
+                    result="error", source="supervisor")
+        log.warning("[supervisor] 额外模型目录等待超时，仍继续启动 ComfyUI（可能扫不到对应模型）")
+
     def _popen(self, s: _Service) -> subprocess.Popen:
         cfg = s.cfg
         python = cfg.get("python")
@@ -235,6 +300,9 @@ class Supervisor:
                 s.state = "starting"
                 s.last_error = None
                 self._last_start[name] = now()
+                if name == "comfyui":
+                    # U 盘上的 extra_model_paths 可能比 ComfyUI 晚就绪，先等一等
+                    await self._wait_model_paths(s)
                 try:
                     self._popen(s)
                 except Exception as e:

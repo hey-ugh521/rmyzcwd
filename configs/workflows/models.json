@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "note": "Möbius 通用模型注册表。新增模型只需在这里加一条 + 一个工作流模板，无需改代码。字段说明见 README。",
+  "models": [
+    {
+      "id": "anime_illustrious",
+      "name": "动漫 · Illustrious XL",
+      "aliases": [
+        "illustrious",
+        "动漫",
+        "二次元"
+      ],
+      "workflow": "portrait",
+      "checkpoint": "Illustrious-XL-v1.0.safetensors",
+      "supports_character": true,
+      "supports_lora": true,
+      "size": [
+        832,
+        1216
+      ],
+      "style": "二次元 / 角色一致性（12 张角色卡的底模）",
+      "vram_gb": 6,
+      "notes": "Illustrious 系社区实践：clip skip 2（CLIPSetLastLayer -2）+ cfg 5.5 + karras；角色 LoRA 只在此底座有效",
+      "params": {
+        "steps": 28,
+        "cfg": 5.5,
+        "sampler_name": "euler_ancestral",
+        "scheduler": "karras"
+      }
+    },
+    {
+      "id": "qwen_image_2_1",
+      "name": "千问 Image 2.1 Turbo",
+      "aliases": [
+        "qwen",
+        "千问",
+        "qwen_image_2_1"
+      ],
+      "workflow": "qwen",
+      "supports_character": false,
+      "supports_lora": false,
+      "size": [
+        1024,
+        1024
+      ],
+      "params": {
+        "cfg": 1.0
+      },
+      "style": "写实 / 通用题材（摄影感、自然光）",
+      "vram_gb": 7,
+      "models_needed": {
+        "unet": "qwen_image_2.1_turbo_int8_convrot.safetensors",
+        "clip": "qwen3vl_8b_w4a8.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      },
+      "notes": "Qwen-Image 2.1 Turbo 蒸馏版：CFGGuider cfg=1.0 + ManualSigmas 9 步表；prompt 用自然语言写清楚"
+    },
+    {
+      "id": "flux3_klein",
+      "name": "FLUX 3 Image Klein",
+      "aliases": [
+        "flux3",
+        "flux",
+        "klein",
+        "FLUX3"
+      ],
+      "workflow": "flux3",
+      "supports_character": false,
+      "supports_lora": false,
+      "size": [
+        1024,
+        1024
+      ],
+      "params": {
+        "steps": 16,
+        "cfg": 1.0,
+        "sampler_name": "euler",
+        "scheduler": "simple"
+      },
+      "style": "写实 / 摄影感 / 构图与文字渲染",
+      "vram_gb": 7,
+      "models_needed": {
+        "unet": "flux3-image-klein-int8-convrot.safetensors",
+        "clip": "qwen3vl_4b_int8_convrot.safetensors",
+        "vae": "flux2-vae.safetensors"
+      },
+      "notes": "FLUX3 蒸馏版：16 步 / KSampler cfg 1.0 / ModelSamplingFlux shift=log(16)；官方建议配提示词增强器，本机由 agent 直接写完整 caption 替代"
+    }
+  ]
+}

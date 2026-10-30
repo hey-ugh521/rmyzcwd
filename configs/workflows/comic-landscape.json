@@ -1,57 +1,123 @@
 {
-  "last_node_id": 7,
+  "last_node_id": 8,
   "nodes": {
     "1": {
-      "inputs": { "ckpt_name": "animagine-xl-3.1.safetensors" },
+      "inputs": {
+        "ckpt_name": "Illustrious-XL-v1.0.safetensors"
+      },
       "class_type": "CheckpointLoaderSimple",
-      "_meta": { "title": "加载模型 (Animagine XL 3.1)" }
+      "_meta": {
+        "title": "加载模型 (Animagine XL 3.1)"
+      }
     },
     "2": {
       "inputs": {
         "text": "masterpiece, best quality, newest, 1girl, 1boy, short black hair, red eyes, school uniform, standing, city street, sunset, comic style, detailed",
-        "clip": ["1", 1]
+        "clip": [
+          "8",
+          0
+        ]
       },
       "class_type": "CLIPTextEncode",
-      "_meta": { "title": "正向提示词" }
+      "_meta": {
+        "title": "正向提示词"
+      }
     },
     "3": {
       "inputs": {
         "text": "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
-        "clip": ["1", 1]
+        "clip": [
+          "8",
+          0
+        ]
       },
       "class_type": "CLIPTextEncode",
-      "_meta": { "title": "负向提示词" }
+      "_meta": {
+        "title": "负向提示词"
+      }
     },
     "4": {
-      "inputs": { "width": 1216, "height": 832, "batch_size": 1 },
+      "inputs": {
+        "width": 1216,
+        "height": 832,
+        "batch_size": 1
+      },
       "class_type": "EmptyLatentImage",
-      "_meta": { "title": "画布 (横版 1216x832)" }
+      "_meta": {
+        "title": "画布 (横版 1216x832)"
+      }
     },
     "5": {
       "inputs": {
         "seed": 0,
         "steps": 28,
-        "cfg": 7.0,
+        "cfg": 5.5,
         "sampler_name": "euler_ancestral",
-        "scheduler": "normal",
+        "scheduler": "karras",
         "denoise": 1.0,
-        "model": ["1", 0],
-        "positive": ["2", 0],
-        "negative": ["3", 0],
-        "latent_image": ["4", 0]
+        "model": [
+          "1",
+          0
+        ],
+        "positive": [
+          "2",
+          0
+        ],
+        "negative": [
+          "3",
+          0
+        ],
+        "latent_image": [
+          "4",
+          0
+        ]
       },
       "class_type": "KSampler",
-      "_meta": { "title": "采样 (Euler a, 28步, CFG 7)" }
+      "_meta": {
+        "title": "采样 (Euler a, 28步, CFG 7)"
+      }
     },
     "6": {
-      "inputs": { "samples": ["5", 0], "vae": ["1", 2] },
+      "inputs": {
+        "samples": [
+          "5",
+          0
+        ],
+        "vae": [
+          "1",
+          2
+        ]
+      },
       "class_type": "VAEDecode",
-      "_meta": { "title": "VAE 解码" }
+      "_meta": {
+        "title": "VAE 解码"
+      }
     },
     "7": {
-      "inputs": { "filename_prefix": "comic_landscape", "images": ["6", 0] },
+      "inputs": {
+        "filename_prefix": "comic_landscape",
+        "images": [
+          "6",
+          0
+        ]
+      },
       "class_type": "SaveImage",
-      "_meta": { "title": "保存图片" }
+      "_meta": {
+        "title": "保存图片"
+      }
+    },
+    "8": {
+      "class_type": "CLIPSetLastLayer",
+      "inputs": {
+        "clip": [
+          "1",
+          1
+        ],
+        "stop_at_clip_layer": -2
+      },
+      "_meta": {
+        "title": "CLIP skip 2"
+      }
     }
   }
 }
