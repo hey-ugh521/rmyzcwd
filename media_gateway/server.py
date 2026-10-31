@@ -2751,7 +2751,9 @@ async def comfyui_list_characters() -> str:
         return _tool_error(exc)
 
 
-@server.tool(name="comfyui_queue_status", description="查询 ComfyUI 队列与 GPU 设备状态。")
+# MOBIUS 2026-11-01：comfyui_queue_status 已下架（单次调用 5~10s，会占满 LangBot 阻塞线程）。
+# 函数体保留，便于回滚；需要队列信息请用 comfyui_task_status / comfyui_status。
+# @server.tool(name="comfyui_queue_status", description="查询 ComfyUI 队列与 GPU 设备状态。")
 async def comfyui_queue_status() -> str:
     try:
         status = await collect_status(settings)
