@@ -2324,7 +2324,7 @@ def _tool_body(
     height: int | None,
     seed: int | None,
     character: str,
-    loras: Any,
+    loras: list[dict[str, Any]] | None,
     reference_image_url: str,
     checkpoint: str = "",
     source: str = "mcp",
@@ -2376,7 +2376,7 @@ async def comfyui_generate(
     height: int | None = None,
     seed: int | None = None,
     character: Annotated[str, Field(description="角色 id/中文名/别名，仅 anime_illustrious 支持；qwen/flux3 传了会报错")] = "",
-    loras: Any = None,
+    loras: Annotated[list[dict[str, Any]] | None, Field(description="LoRA 数组：[{\"name\":\"xxx.safetensors\",\"weight\":0.75}]；仅 anime_illustrious 支持")] = None,
     reference_image_url: str = "",
 ) -> str:
     """生成图片（同步等待结果）。
@@ -2445,7 +2445,7 @@ async def comfyui_task_submit(
     height: int | None = None,
     seed: int | None = None,
     character: str = "",
-    loras: Any = None,
+    loras: Annotated[list[dict[str, Any]] | None, Field(description="LoRA 数组：[{\"name\":\"xxx.safetensors\",\"weight\":0.75}]；仅 anime_illustrious 支持")] = None,
     reference_image_url: str = "",
 ) -> str:
     """异步提交生图任务。参数同 comfyui_generate。"""

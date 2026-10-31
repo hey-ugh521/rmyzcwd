@@ -28,3 +28,9 @@ desktop.ini
 # ---- 临时 ----
 *.tmp
 *.log
+
+# ---- 工具运行产物 ----
+data/sqlite_backup_state.json
+.promptfoo/
+tests/promptfoo/.promptfoo/
+phoenix_data/

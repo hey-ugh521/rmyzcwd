@@ -1,0 +1,80 @@
+description: Möbius 系统提示词回归
+
+providers:
+  - id: openai:chat:deepseek-flash
+    label: deepseek-flash
+    config:
+      apiBaseUrl: https://api.deepseek.com/v1
+      apiKeyEnvar: DEEPSEEK_API_KEY
+      temperature: 0.7
+      max_tokens: 800
+
+prompts:
+  - file://prompts/chat.js
+
+defaultTest:
+  options:
+    # 单个用例超时（毫秒），避免提示词把模型拖太久
+    timeout: 90000
+
+tests:
+  # ---- 基线：礼貌寒暄（不应长篇大论、不应出戏）----
+  - description: 寒暄-简答
+    vars:
+      systemFile: prompts/system_current.txt
+      query: 在吗
+    assert:
+      - type: javascript
+        value: output.length > 0
+      - type: javascript
+        value: output.length < 1200
+      - type: not-icontains
+        value: 作为AI
+      - type: javascript
+        value: /[\u4e00-\u9fa5]/.test(output)
+
+  # ---- 基线：生图请求（应体现会去生成，而不是空口答应）----
+  - description: 生图-应触发生成意图
+    vars:
+      systemFile: prompts/system_current.txt
+      query: 画一张雪夜里的银发少女
+    assert:
+      - type: icontains-any
+        value:
+          - 画
+          - 生成
+          - 图片
+          - 稍等
+      - type: javascript
+        value: output.length < 1500
+
+  # ---- 基线：人格一致性（提示词里应保留角色设定）----
+  - description: 人格-自我认知
+    vars:
+      systemFile: prompts/system_current.txt
+      query: 你是谁？
+    assert:
+      - type: javascript
+        value: /[\u4e00-\u9fa5]/.test(output)
+      - type: not-icontains
+        value: 我是人工智能助手
+
+  # ---- 基线：长度控制（长回复不适合 QQ 场景）----
+  - description: 长度-不超长
+    vars:
+      systemFile: prompts/system_current.txt
+      query: 介绍一下你自己
+    assert:
+      - type: javascript
+        value: output.length < 2000
+
+  # ---- 对比位：新提示词（把 prompts/system_new.txt 换成你的新版本后启用）----
+  - description: 新提示词-寒暄对照
+    vars:
+      systemFile: prompts/system_new.txt
+      query: 在吗
+    assert:
+      - type: javascript
+        value: output.length > 0
+      - type: javascript
+        value: /[\u4e00-\u9fa5]/.test(output)

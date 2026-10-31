@@ -1,0 +1,24 @@
+version: "3.9"
+
+# Möbius 本地追踪服务（仅本机）
+#   启动：docker compose -f ops/tracing/docker-compose.yml up -d
+#   UI  ：http://127.0.0.1:6006
+#   注意：OTLP HTTP 端点在 6006 的 /v1/traces（不是 4318）
+#        容器首次启动需要 20-30 秒初始化
+
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: phoenix
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6006:6006"
+    environment:
+      - PHOENIX_WORKING_DIR=/mnt/phoenix
+      - PHOENIX_ENABLE_AUTH=false
+      - PHOENIX_ALLOW_ANONYMOUS=true
+    volumes:
+      - phoenix_data:/mnt/phoenix
+
+volumes:
+  phoenix_data:
