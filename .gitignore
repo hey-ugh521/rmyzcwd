@@ -43,3 +43,5 @@ media_gateway/*.bak*
 # 探针运行时数据
 ops/probe/state.db
 ops/probe/state.db-*
+
+mobius/
