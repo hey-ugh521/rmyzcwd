@@ -26,7 +26,8 @@
         "cfg": 5.5,
         "sampler_name": "euler_ancestral",
         "scheduler": "karras"
-      }
+      },
+      "default": false
     },
     {
       "id": "qwen_image_2_1",
@@ -53,7 +54,8 @@
         "clip": "qwen3vl_8b_w4a8.safetensors",
         "vae": "qwen_image_2.1_vae_bf16.safetensors"
       },
-      "notes": "Qwen-Image 2.1 Turbo 蒸馏版：CFGGuider cfg=1.0 + ManualSigmas 9 步表；prompt 用自然语言写清楚"
+      "notes": "Qwen-Image 2.1 Turbo 蒸馏版：CFGGuider cfg=1.0 + ManualSigmas 9 步表；prompt 用自然语言写清楚",
+      "default": true
     },
     {
       "id": "flux3_klein",
@@ -84,7 +86,8 @@
         "clip": "qwen3vl_4b_int8_convrot.safetensors",
         "vae": "flux2-vae.safetensors"
       },
-      "notes": "FLUX3 蒸馏版：16 步 / KSampler cfg 1.0 / ModelSamplingFlux shift=log(16)；官方建议配提示词增强器，本机由 agent 直接写完整 caption 替代"
+      "notes": "FLUX3 蒸馏版：16 步 / KSampler cfg 1.0 / ModelSamplingFlux shift=log(16)；官方建议配提示词增强器，本机由 agent 直接写完整 caption 替代",
+      "default": false
     }
   ]
 }

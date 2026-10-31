@@ -749,6 +749,15 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
                 f"未找到角色 {character_key!r}；可用: {available or '(无)'}",
             )
 
+    # P0.4：没有显式 model / workflow / 角色时，落到注册表里标记 default 的模型档案
+    # （当前默认 = qwen_image_2_1 千问；flux3 太慢，动漫模型只在角色/二次元时用）
+    if profile is None and not model_key and not body.get("workflow") and not character_key:
+        default_profile = next(
+            (m for m in load_model_registry(cfg) if m.get("default")), None
+        )
+        if default_profile is not None:
+            profile = default_profile
+
     policy = (character or {}).get("media_policy") or {}
     policy_key = "allow_image" if kind == "image" else "allow_voice"
     if character and policy.get(policy_key) is False:
@@ -2146,6 +2155,9 @@ server = MCPServer(
         "| 每次用户主动生图都要生成新的 idempotency_key；同一次逻辑请求重试必须复用同一个 key。"
         "| 轮询 60 次仍未结束：停止轮询、告知用户任务仍在后台执行并给出 task_id；"
         "轮询耗尽不等于失败，也不要取消后台任务。"
+        "【默认模型】不指定 model 时默认用 qwen_image_2_1（千问，速度均衡）；"
+        "flux3_klein 最慢（约 2~5 分钟），仅在用户明确要求电影感/摄影质感时使用；"
+        "anime_illustrious 仅在二次元/动漫角色（或需要 character/LoRA）时使用。"
         "【生图优先用角色档案】character 参数可传角色 id、中文名或别名"
         "（如 幽兰黛尔 / 布洛妮娅 / 符华 / 琪亚娜 / 爱莉希雅 / 德丽莎 …），"
         "系统会自动补齐 checkpoint、LoRA、权重、尺寸与画风提示词——比手工拼 LoRA 更稳。"
@@ -2497,7 +2509,7 @@ def _tool_body(
     body: dict[str, Any] = {
         "prompt": prompt,
         "negative": negative,
-        "workflow": workflow or "portrait",
+        "workflow": workflow or "",
         "character": character or "",
         "reference_image": reference_image_url or "",
         "source": source,
@@ -2604,6 +2616,7 @@ async def comfyui_generate(
     name="comfyui_task_submit",
     description=(
         "【生图首选】异步提交 ComfyUI 生图任务，1 秒内返回 task_id，不会阻塞。"
+        "默认模型是 qwen_image_2_1（千问，速度均衡）；不传 model 即用它。"
         "提交后用 comfyui_task_status 轮询（间隔 5~10 秒，最多 60 次）。"
         "每次用户主动发起的请求都要自己生成新的 idempotency_key；"
         "同一次逻辑请求的失败重试必须复用同一个 key，避免重复出图。"
@@ -2612,7 +2625,7 @@ async def comfyui_generate(
 async def comfyui_task_submit(
     prompt: str,
     negative: str = "",
-    workflow: str = "portrait",
+    workflow: str = "",
     width: int | None = None,
     height: int | None = None,
     seed: int | None = None,
