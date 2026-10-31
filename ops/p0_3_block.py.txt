@@ -1,0 +1,366 @@
+class _CancelView:
+    """执行期间检查取消标记的轻量视图（每次读库，不依赖内存对象）。"""
+
+    def __init__(self, store: "TaskStore", task_id: str) -> None:
+        self._store = store
+        self._task_id = task_id
+
+    @property
+    def cancel_requested(self) -> bool:
+        rec = self._store.get(self._task_id)
+        return bool(rec and rec.cancel_requested)
+
+    @property
+    def status(self) -> str:
+        rec = self._store.get(self._task_id)
+        return rec.status if rec is not None else STATUS_CANCELLED
+
+
+class TaskStore(DurableTaskStore):
+    """持久化任务队列（SQLite，并发 1）。
+
+    P0.3 变更：内存 dict + asyncio.Queue 换成 SQLite 快照表 + 事务性 outbox；
+    状态词汇统一为 pending/running/completed/failed/cancelled/submission_unknown；
+    支持幂等键与重启恢复。执行逻辑（_run_image/_run_voice）保持原样。
+    """
+
+    def __init__(self, cfg: Settings) -> None:
+        db_path = os.environ.get("MOBIUS_TASK_DB") or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "tasks.db"
+        )
+        super().__init__(db_path)
+        self.cfg = cfg
+        self._worker: asyncio.Task | None = None
+        self._outbox_task: asyncio.Task | None = None
+        self.active_id: str | None = None
+        log.info("任务库：%s", db_path)
+
+    # -- 生命周期 ---------------------------------------------------------
+    async def bootstrap(self) -> None:
+        """启动时恢复未完成任务，再拉起 worker 与 outbox 投递循环。"""
+        try:
+            stats = await self.recover(self._probe_comfy)
+            log.info("任务恢复完成：%s", stats)
+        except Exception:  # noqa: BLE001
+            log.exception("任务恢复失败（继续启动）")
+        self.ensure_worker()
+        if self._outbox_task is None or self._outbox_task.done():
+            self._outbox_task = asyncio.create_task(self._outbox_loop())
+
+    def ensure_worker(self) -> None:
+        if self._worker is None or self._worker.done():
+            self._worker = asyncio.create_task(self._worker_loop())
+            log.info("任务 worker 已启动（持久化队列，并发 1）")
+
+    async def _outbox_loop(self) -> None:
+        while True:
+            try:
+                if self.outbox_pending_count():
+                    await self.flush_outbox(self._send_core_event)
+            except Exception:  # noqa: BLE001
+                log.exception("outbox 投递循环异常")
+            await asyncio.sleep(5)
+
+    async def _send_core_event(self, item: dict[str, Any]) -> bool:
+        """把任务事实上报 Core。
+
+        Core 侧接口在 P0.4 才授权添加；未配置时保留在 outbox（不丢、不阻塞）。
+        """
+        url = os.environ.get("MOBIUS_CORE_TASK_EVENT_URL", "").strip()
+        if not url:
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=item)
+            return resp.status_code < 300
+        except Exception as exc:  # noqa: BLE001
+            log.warning("上报 Core 失败（保留重试）：%s", exc)
+            return False
+
+    # -- 恢复探测 ---------------------------------------------------------
+    async def _probe_comfy(self, prompt_id: str) -> tuple[str, dict[str, Any] | None]:
+        """判断 prompt_id 在 ComfyUI 里的状态：completed / active / absent / unknown。"""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{self.cfg.comfy_url}/history/{prompt_id}")
+                if resp.status_code == 200:
+                    entry = (resp.json() or {}).get(prompt_id)
+                    if entry:
+                        outputs = entry.get("outputs") or {}
+                        for _node_id, output in outputs.items():
+                            images = (output or {}).get("images") or []
+                            if images:
+                                image = images[0]
+                                query = urllib.parse.urlencode(
+                                    {
+                                        "filename": image.get("filename", ""),
+                                        "subfolder": image.get("subfolder", ""),
+                                        "type": image.get("type", "output"),
+                                    }
+                                )
+                                return (
+                                    "completed",
+                                    {
+                                        "url": f"{self.cfg.public_base}/img?{query}",
+                                        "path": f"/img?{query}",
+                                        "filename": image.get("filename", ""),
+                                        "subfolder": image.get("subfolder", ""),
+                                        "type": image.get("type", "output"),
+                                        "prompt_id": prompt_id,
+                                        "recovered": True,
+                                    },
+                                )
+                queue_resp = await client.get(f"{self.cfg.comfy_url}/queue")
+                if queue_resp.status_code == 200:
+                    data = queue_resp.json() or {}
+                    for bucket in ("queue_running", "queue_pending"):
+                        for item in data.get(bucket) or []:
+                            if isinstance(item, (list, tuple)) and len(item) > 1 and item[1] == prompt_id:
+                                return ("active", None)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("恢复探测失败 prompt_id=%s: %s", prompt_id, exc)
+            return ("unknown", None)
+        return ("absent", None)
+
+    # -- worker -----------------------------------------------------------
+    async def _worker_loop(self) -> None:
+        while True:
+            try:
+                task = self.claim_next()
+            except Exception:  # noqa: BLE001
+                log.exception("领取任务失败")
+                await asyncio.sleep(2)
+                continue
+            if task is None:
+                await asyncio.sleep(1.0)
+                continue
+
+            self.active_id = task.id
+            try:
+                if task.cancel_requested:
+                    self.finish(task.id, status=STATUS_CANCELLED)
+                    continue
+                if task.kind == "image":
+                    result = await self._run_image(task)
+                elif task.kind == "voice":
+                    result = await self._run_voice(task)
+                else:
+                    raise ApiError("unknown_kind", f"未知任务类型 {task.kind}", 400)
+
+                latest = self.get(task.id)
+                if latest is not None and latest.cancel_requested:
+                    self.finish(task.id, status=STATUS_CANCELLED, result=result)
+                    log.info("task %s 执行完成但已请求取消，记为 cancelled", task.id)
+                else:
+                    self.finish(task.id, status=STATUS_COMPLETED, result=result)
+                    log.info(
+                        "task %s succeeded: %s",
+                        task.id,
+                        (result or {}).get("filename") or (result or {}).get("audio_url") or "",
+                    )
+            except _TaskCanceled:
+                self.finish(task.id, status=STATUS_CANCELLED)
+                log.info("task %s canceled", task.id)
+            except ApiError as exc:
+                self.finish(
+                    task.id,
+                    status=STATUS_FAILED,
+                    error=exc.hint or exc.error,
+                    error_code=str(exc.error),
+                )
+                log.warning("task %s failed: %s %s", task.id, exc.error, exc.hint)
+            except Exception as exc:  # noqa: BLE001
+                self.finish(
+                    task.id,
+                    status=STATUS_FAILED,
+                    error=str(exc),
+                    error_code=type(exc).__name__,
+                )
+                log.exception("task %s failed", task.id)
+            finally:
+                # 任务结束也是一次「活动」：只在提交时记账会让 Core 误判闲置，
+                # 一次 90s 的生图就可能把刚出完图的 ComfyUI 睡掉。
+                touch_activity()
+                self.active_id = None
+
+    # -- 兼容旧接口 -------------------------------------------------------
+    async def wait(self, task_id: str, timeout: float) -> TaskRecord:
+        task_id = str(task_id)
+        if self.get(task_id) is None:
+            raise ApiError("unknown_task", f"未知任务 {task_id}", 404)
+        deadline = time.time() + float(timeout)
+        while time.time() < deadline:
+            rec = self.get(task_id)
+            if rec is not None and rec.status in TERMINAL:
+                return rec
+            await asyncio.sleep(0.5)
+        rec = self.get(task_id)
+        if rec is not None and rec.status in TERMINAL:
+            return rec
+        raise ApiError(
+            "task_timeout", f"等待任务 {task_id} 超时（{timeout:.0f}s）", 504
+        )
+
+    async def cancel(self, task_id: str) -> dict[str, Any]:
+        task_id = str(task_id)
+        rec = self.get(task_id)
+        if rec is None:
+            raise ApiError("unknown_task", f"未知任务 {task_id}", 404)
+        if rec.status in TERMINAL:
+            return {
+                "ok": False,
+                "error": "already_finished",
+                "status": rec.status,
+                "task": rec.public(),
+            }
+        was_running = rec.status == STATUS_RUNNING
+        self.request_cancel(task_id)
+        if was_running:
+            action = await comfy_cancel_prompt(self.cfg, rec.remote_id)
+            self.finish(task_id, status=STATUS_CANCELLED)
+            log.info("task %s canceled while running (remote=%s, action=%s)",
+                     task_id, rec.remote_id, action)
+        else:
+            action = "removed_from_queue"
+            log.info("task %s canceled while pending", task_id)
+        final = self.get(task_id)
+        return {
+            "ok": True,
+            "status": final.status if final else STATUS_CANCELLED,
+            "action": action,
+            "task": final.public() if final else None,
+        }
+
+    def record_voice_task(
+        self,
+        spec: dict[str, Any],
+        result: dict[str, Any] | None,
+        error: str | None = None,
+        source: str = "console",
+        user_id: str | None = None,
+        session_id: str | None = None,
+    ) -> TaskRecord:
+        """语音同步执行后补记（直接写终态，不经过 worker）。"""
+        return self.record_terminal(
+            kind="voice",
+            payload=spec,
+            spec=spec,
+            status=STATUS_COMPLETED if result else STATUS_FAILED,
+            result=result,
+            error=error,
+            error_code=None if result else "voice_failed",
+            source=source,
+            user_id=user_id,
+            session_id=session_id,
+        )
+
+    # -- 执行 -------------------------------------------------------------
+    def _add_warning(self, task_id: str, message: str) -> None:
+        rec = self.get(task_id)
+        warnings = list((rec.params.get("warnings") if rec else None) or [])
+        warnings.append(message)
+        self.update_params(task_id, {"warnings": warnings})
+
+    async def _run_image(self, task: TaskRecord) -> dict[str, Any]:
+        spec = task.spec
+        cancel_view = _CancelView(self, task.id)
+        _check_cancel(cancel_view)
+        nodes = build_nodes(self.cfg, spec)
+        self.update_params(
+            task.id,
+            {
+                "loras_applied": spec.get("loras_applied") or [],
+                "checkpoint": spec.get("checkpoint"),
+                "warnings": list(spec.get("warnings") or []),
+            },
+        )
+        _check_cancel(cancel_view)
+
+        if spec.get("reference_image"):
+            reference_name = await self._prepare_reference(task, nodes, spec["reference_image"])
+            if reference_name:
+                self.update_params(task.id, {"reference_image_name": reference_name})
+
+        ensure = await ensure_comfy(self.cfg)
+        if not ensure.get("ok"):
+            raise ApiError(
+                str(ensure.get("error") or "comfyui_unavailable"),
+                str(ensure.get("hint") or ""),
+                503,
+            )
+        _check_cancel(cancel_view)
+
+        started = time.time()
+        prompt_id = await comfy_submit(self.cfg, nodes)
+        self.set_remote_id(task.id, prompt_id)
+        self.update_params(task.id, {"prompt_id": prompt_id})
+        _check_cancel(cancel_view)
+
+        output = await comfy_wait_output(self.cfg, prompt_id, cancel_view)
+        seconds = round(time.time() - started, 1)
+        filename = output["filename"]
+        subfolder = output.get("subfolder", "")
+        image_type = output.get("type", "output")
+        query = urllib.parse.urlencode(
+            {"filename": filename, "subfolder": subfolder, "type": image_type}
+        )
+        result: dict[str, Any] = {
+            "url": f"{self.cfg.public_base}/img?{query}",
+            "path": f"/img?{query}",
+            "filename": filename,
+            "subfolder": subfolder,
+            "type": image_type,
+            "prompt_id": prompt_id,
+            "seconds": seconds,
+            "model": spec.get("model"),
+            "seed": spec.get("seed"),
+            "checkpoint": spec.get("checkpoint"),
+            "workflow": spec.get("workflow"),
+            "loras": spec.get("loras"),
+            "prompt": spec.get("prompt"),
+            "negative": spec.get("negative"),
+            "width": spec.get("width"),
+            "height": spec.get("height"),
+            "character": spec.get("character"),
+        }
+        local_path = (
+            os.path.join(self.cfg.comfy_output_dir, subfolder, filename)
+            if subfolder
+            else os.path.join(self.cfg.comfy_output_dir, filename)
+        )
+        if os.path.isfile(local_path):
+            result["local_path"] = local_path
+            result["bytes"] = os.path.getsize(local_path)
+        return result
+
+    async def _prepare_reference(
+        self, task: TaskRecord, nodes: dict[str, dict], reference: str
+    ) -> str | None:
+        load_ids = _find_load_image_nodes(nodes)
+        if not load_ids:
+            self._add_warning(
+                task.id, f"工作流没有 LoadImage 节点，reference_image={reference} 被忽略"
+            )
+            return None
+        if len(load_ids) > 1:
+            self._add_warning(
+                task.id, f"工作流有 {len(load_ids)} 个 LoadImage，仅填充第一个 {load_ids[0]}"
+            )
+        data, filename = await resolve_reference_bytes(self.cfg, reference)
+        uploaded_name = await comfy_upload_image(self.cfg, data, filename)
+        nodes[load_ids[0]].setdefault("inputs", {})["image"] = uploaded_name
+        return uploaded_name
+
+    async def _run_voice(self, task: TaskRecord) -> dict[str, Any]:
+        spec = task.spec
+        return await synth_tts(
+            self.cfg,
+            text=spec["prompt"],
+            voice=spec.get("voice") or "",
+            engine=spec.get("engine") or "kokoro",
+            speed=spec.get("speed") or 1.0,
+        )
+
+
+# 兼容旧类型标注
+Task = TaskRecord

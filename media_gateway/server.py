@@ -43,6 +43,19 @@ from mcp.server.mcpserver import MCPServer
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+try:  # 既支持 `python media_gateway/server.py`，也支持包方式导入
+    from taskstore import (  # type: ignore[import-not-found]
+        DurableTaskStore, TaskConflict, TaskRecord, TERMINAL,
+        STATUS_CANCELLED, STATUS_COMPLETED, STATUS_FAILED,
+        STATUS_PENDING, STATUS_RUNNING, STATUS_UNKNOWN, normalize_status,
+    )
+except ImportError:  # pragma: no cover
+    from .taskstore import (  # type: ignore[no-redef]
+        DurableTaskStore, TaskConflict, TaskRecord, TERMINAL,
+        STATUS_CANCELLED, STATUS_COMPLETED, STATUS_FAILED,
+        STATUS_PENDING, STATUS_RUNNING, STATUS_UNKNOWN, normalize_status,
+    )
+
 # ---------------------------------------------------------------------------
 # 常量 / 路径
 # ---------------------------------------------------------------------------
@@ -80,6 +93,7 @@ UNSUPPORTED_WORKFLOWS = {"panel"}
 LORA_WEIGHT_MIN = 0.0
 LORA_WEIGHT_MAX = 1.5
 MAX_VIEW_TIMEOUT = 600.0
+MAX_TASK_TIMEOUT = 1800.0  # P0.3：worker 执行上限（与视图等待分离）
 
 START_TS = time.time()
 log = logging.getLogger("mobius.gateway")
@@ -190,6 +204,8 @@ class Settings:
             _env("MOBIUS_COMFY_START_TIMEOUT", comfy.get("start_timeout_sec", 240))
         )
         self.view_timeout = float(_env("MOBIUS_VIEW_TIMEOUT", 180))
+        # P0.3：worker 执行上限与「API 视图等待」分离，避免长生成被视图超时误杀
+        self.task_timeout = float(_env("MOBIUS_TASK_TIMEOUT", 900))
         self.poll_interval = float(_env("MOBIUS_POLL_INTERVAL", 1.5))
         self.max_voice_bytes = int(_env("MOBIUS_MAX_VOICE_BYTES", 8 * 1024 * 1024))
         self.tts_timeout = float(_env("MOBIUS_TTS_TIMEOUT", 120))
@@ -1040,9 +1056,13 @@ def _summarize_comfy_messages(status: dict[str, Any]) -> str:
 
 
 async def comfy_wait_output(
-    cfg: Settings, prompt_id: str, task: "Task | None" = None
+    cfg: Settings,
+    prompt_id: str,
+    task: "Task | None" = None,
+    timeout: float | None = None,
 ) -> dict[str, Any]:
-    deadline = time.time() + min(cfg.view_timeout, MAX_VIEW_TIMEOUT)
+    limit = min(timeout or cfg.view_timeout, MAX_TASK_TIMEOUT)
+    deadline = time.time() + limit
     async with httpx.AsyncClient(timeout=20.0) as client:
         while time.time() < deadline:
             if task is not None:
@@ -1076,7 +1096,7 @@ async def comfy_wait_output(
                         )
             await asyncio.sleep(cfg.poll_interval)
     raise TimeoutError(
-        f"等待 ComfyUI 输出超时（{cfg.view_timeout:.0f}s），prompt_id={prompt_id}"
+        f"等待 ComfyUI 输出超时（{limit:.0f}s），prompt_id={prompt_id}"
     )
 
 
@@ -1229,239 +1249,322 @@ async def comfy_upload_image(cfg: Settings, data: bytes, filename: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class Task:
-    id: str
-    kind: str  # image | voice
-    status: str = "queued"
-    source: str = "console"
-    user_id: str | None = None
-    session_id: str | None = None
-    character: str | None = None
-    prompt: str = ""
-    params: dict[str, Any] = field(default_factory=dict)
-    result: dict[str, Any] | None = None
-    error: str | None = None
-    remote_id: str | None = None
-    created_at: float = field(default_factory=_now)
-    started_at: float | None = None
-    finished_at: float | None = None
-    # 内部字段（不对外）
-    spec: dict[str, Any] = field(default_factory=dict)
-    cancel_requested: bool = False
+class _CancelView:
+    """执行期间检查取消标记的轻量视图（每次读库，不依赖内存对象）。"""
 
-    def public(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "kind": self.kind,
-            "status": self.status,
-            "source": self.source,
-            "user_id": self.user_id,
-            "session_id": self.session_id,
-            "character": self.character,
-            "prompt": self.prompt,
-            "params": self.params,
-            "result": self.result,
-            "error": self.error,
-            "remote_id": self.remote_id,
-            "created_at": self.created_at,
-            "started_at": self.started_at,
-            "finished_at": self.finished_at,
-        }
+    def __init__(self, store: "TaskStore", task_id: str) -> None:
+        self._store = store
+        self._task_id = task_id
+
+    @property
+    def cancel_requested(self) -> bool:
+        rec = self._store.get(self._task_id)
+        return bool(rec and rec.cancel_requested)
+
+    @property
+    def status(self) -> str:
+        rec = self._store.get(self._task_id)
+        return rec.status if rec is not None else STATUS_CANCELLED
 
 
-class TaskStore:
-    """内存任务队列：并发 1，FIFO。"""
+class TaskStore(DurableTaskStore):
+    """持久化任务队列（SQLite，并发 1）。
+
+    P0.3 变更：内存 dict + asyncio.Queue 换成 SQLite 快照表 + 事务性 outbox；
+    状态词汇统一为 pending/running/completed/failed/cancelled/submission_unknown；
+    支持幂等键与重启恢复。执行逻辑（_run_image/_run_voice）保持原样。
+    """
 
     def __init__(self, cfg: Settings) -> None:
+        db_path = os.environ.get("MOBIUS_TASK_DB") or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "tasks.db"
+        )
+        super().__init__(db_path)
         self.cfg = cfg
-        self._tasks: dict[str, Task] = {}
-        self._queue: asyncio.Queue[str] = asyncio.Queue()
-        self._events: dict[str, asyncio.Event] = {}
         self._worker: asyncio.Task | None = None
+        self._outbox_task: asyncio.Task | None = None
         self.active_id: str | None = None
+        log.info("任务库：%s", db_path)
 
     # -- 生命周期 ---------------------------------------------------------
+    async def bootstrap(self) -> None:
+        """启动时恢复未完成任务，再拉起 worker 与 outbox 投递循环。"""
+        try:
+            stats = await self.recover(self._probe_comfy)
+            log.info("任务恢复完成：%s", stats)
+        except Exception:  # noqa: BLE001
+            log.exception("任务恢复失败（继续启动）")
+
+        # 恢复后仍是 running 的任务（ComfyUI 里还在跑）：重新接上等待，
+        # 否则它们会永远停在 running，没人收尾。
+        running = [t for t in self.list(limit=200) if t.status == STATUS_RUNNING]
+        for task in running:
+            asyncio.create_task(self._resume_running(task))
+        if running:
+            log.info("已重新接管 %d 个运行中的任务", len(running))
+
+        self.ensure_worker()
+        if self._outbox_task is None or self._outbox_task.done():
+            self._outbox_task = asyncio.create_task(self._outbox_loop())
+
+    async def _resume_running(self, task: TaskRecord) -> None:
+        """重启后接管一个已在 ComfyUI 执行的图片任务。"""
+        prompt_id = task.remote_id
+        if not prompt_id or task.kind != "image":
+            return
+        cancel_view = _CancelView(self, task.id)
+        try:
+            output = await comfy_wait_output(
+                self.cfg, prompt_id, cancel_view, timeout=self.cfg.task_timeout
+            )
+            if (self.get(task.id) or task).cancel_requested:
+                self.finish(task.id, status=STATUS_CANCELLED)
+                return
+            result = self._build_image_result(task, task.spec, prompt_id, output, 0.0)
+            self.finish(task.id, status=STATUS_COMPLETED, result=result)
+            log.info("重启后接管的任务 %s 已完成：%s", task.id, result.get("filename"))
+        except _TaskCanceled:
+            self.finish(task.id, status=STATUS_CANCELLED)
+        except Exception as exc:  # noqa: BLE001
+            self.finish(
+                task.id, status=STATUS_FAILED, error=str(exc),
+                error_code=type(exc).__name__,
+            )
+            log.warning("重启后接管的任务 %s 失败：%s", task.id, exc)
+
     def ensure_worker(self) -> None:
         if self._worker is None or self._worker.done():
             self._worker = asyncio.create_task(self._worker_loop())
-            log.info("任务 worker 已启动（并发 1）")
+            log.info("任务 worker 已启动（持久化队列，并发 1）")
 
+    async def _outbox_loop(self) -> None:
+        while True:
+            try:
+                if self.outbox_pending_count():
+                    await self.flush_outbox(self._send_core_event)
+            except Exception:  # noqa: BLE001
+                log.exception("outbox 投递循环异常")
+            await asyncio.sleep(5)
+
+    async def _send_core_event(self, item: dict[str, Any]) -> bool:
+        """把任务事实上报 Core。
+
+        Core 侧接口在 P0.4 才授权添加；未配置时保留在 outbox（不丢、不阻塞）。
+        """
+        url = os.environ.get("MOBIUS_CORE_TASK_EVENT_URL", "").strip()
+        if not url:
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=item)
+            return resp.status_code < 300
+        except Exception as exc:  # noqa: BLE001
+            log.warning("上报 Core 失败（保留重试）：%s", exc)
+            return False
+
+    # -- 恢复探测 ---------------------------------------------------------
+    async def _probe_comfy(self, prompt_id: str) -> tuple[str, dict[str, Any] | None]:
+        """判断 prompt_id 在 ComfyUI 里的状态：completed / active / absent / unknown。"""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{self.cfg.comfy_url}/history/{prompt_id}")
+                if resp.status_code == 200:
+                    entry = (resp.json() or {}).get(prompt_id)
+                    if entry:
+                        outputs = entry.get("outputs") or {}
+                        for _node_id, output in outputs.items():
+                            images = (output or {}).get("images") or []
+                            if images:
+                                image = images[0]
+                                query = urllib.parse.urlencode(
+                                    {
+                                        "filename": image.get("filename", ""),
+                                        "subfolder": image.get("subfolder", ""),
+                                        "type": image.get("type", "output"),
+                                    }
+                                )
+                                return (
+                                    "completed",
+                                    {
+                                        "url": f"{self.cfg.public_base}/img?{query}",
+                                        "path": f"/img?{query}",
+                                        "filename": image.get("filename", ""),
+                                        "subfolder": image.get("subfolder", ""),
+                                        "type": image.get("type", "output"),
+                                        "prompt_id": prompt_id,
+                                        "recovered": True,
+                                    },
+                                )
+                queue_resp = await client.get(f"{self.cfg.comfy_url}/queue")
+                if queue_resp.status_code == 200:
+                    data = queue_resp.json() or {}
+                    for bucket in ("queue_running", "queue_pending"):
+                        for item in data.get(bucket) or []:
+                            if isinstance(item, (list, tuple)) and len(item) > 1 and item[1] == prompt_id:
+                                return ("active", None)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("恢复探测失败 prompt_id=%s: %s", prompt_id, exc)
+            return ("unknown", None)
+        return ("absent", None)
+
+    # -- worker -----------------------------------------------------------
     async def _worker_loop(self) -> None:
         while True:
-            task_id = await self._queue.get()
-            task = self._tasks.get(task_id)
             try:
-                if task is None or task.status != "queued":
+                task = self.claim_next()
+            except Exception:  # noqa: BLE001
+                log.exception("领取任务失败")
+                await asyncio.sleep(2)
+                continue
+            if task is None:
+                await asyncio.sleep(1.0)
+                continue
+
+            self.active_id = task.id
+            try:
+                if task.cancel_requested:
+                    self.finish(task.id, status=STATUS_CANCELLED)
                     continue
-                self.active_id = task_id
-                task.status = "running"
-                task.started_at = _now()
-                task.params["started"] = task.started_at
-                try:
-                    if task.kind == "image":
-                        await self._run_image(task)
-                    elif task.kind == "voice":
-                        await self._run_voice(task)
-                    if task.status == "running":
-                        task.status = "succeeded"
-                        task.finished_at = _now()
-                except TaskCanceled:
-                    task.status = "canceled"
-                    task.finished_at = task.finished_at or _now()
-                    log.info("task %s canceled", task.id)
-                except ApiError as exc:
-                    if task.cancel_requested:
-                        task.status = "canceled"
-                    else:
-                        task.status = "failed"
-                        task.error = exc.error
-                        task.params["hint"] = exc.hint
-                    task.finished_at = _now()
-                    log.warning("task %s failed: %s %s", task.id, exc.error, exc.hint)
-                except Exception as exc:  # noqa: BLE001
-                    if task.cancel_requested:
-                        task.status = "canceled"
-                    else:
-                        task.status = "failed"
-                        task.error = str(exc)
-                        log.exception("task %s failed", task.id)
-                    task.finished_at = _now()
-                finally:
-                    # 任务结束也是一次"活动"：只在提交时记账的话，一次 90s 的生图
-                    # 会让 Core 误以为已经闲置 90s（实测会把刚出完图的 ComfyUI 睡掉）。
-                    touch_activity()
-                    self.active_id = None
-                    event = self._events.get(task.id)
-                    if event is not None:
-                        event.set()
+                if task.kind == "image":
+                    result = await self._run_image(task)
+                elif task.kind == "voice":
+                    result = await self._run_voice(task)
+                else:
+                    raise ApiError("unknown_kind", f"未知任务类型 {task.kind}", 400)
+
+                latest = self.get(task.id)
+                if latest is not None and latest.cancel_requested:
+                    self.finish(task.id, status=STATUS_CANCELLED, result=result)
+                    log.info("task %s 执行完成但已请求取消，记为 cancelled", task.id)
+                else:
+                    self.finish(task.id, status=STATUS_COMPLETED, result=result)
+                    log.info(
+                        "task %s succeeded: %s",
+                        task.id,
+                        (result or {}).get("filename") or (result or {}).get("audio_url") or "",
+                    )
+            except _TaskCanceled:
+                self.finish(task.id, status=STATUS_CANCELLED)
+                log.info("task %s canceled", task.id)
+            except ApiError as exc:
+                self.finish(
+                    task.id,
+                    status=STATUS_FAILED,
+                    error=exc.hint or exc.error,
+                    error_code=str(exc.error),
+                )
+                log.warning("task %s failed: %s %s", task.id, exc.error, exc.hint)
+            except Exception as exc:  # noqa: BLE001
+                self.finish(
+                    task.id,
+                    status=STATUS_FAILED,
+                    error=str(exc),
+                    error_code=type(exc).__name__,
+                )
+                log.exception("task %s failed", task.id)
             finally:
-                self._queue.task_done()
+                # 任务结束也是一次「活动」：只在提交时记账会让 Core 误判闲置，
+                # 一次 90s 的生图就可能把刚出完图的 ComfyUI 睡掉。
+                touch_activity()
+                self.active_id = None
 
-    # -- API --------------------------------------------------------------
-    def submit(
-        self,
-        kind: str,
-        spec: dict[str, Any],
-        request_body: dict[str, Any] | None = None,
-        source: str = "console",
-        user_id: str | None = None,
-        session_id: str | None = None,
-    ) -> Task:
-        prefix = "g_" if kind == "image" else "v_"
-        task_id = prefix + uuid.uuid4().hex[:8]
-        requested = {
-            key: value
-            for key, value in (request_body or {}).items()
-            if key not in ("prompt", "text")
-        }
-        task = Task(
-            id=task_id,
-            kind=kind,
-            source=source or "console",
-            user_id=user_id,
-            session_id=session_id,
-            character=spec.get("character"),
-            prompt=spec.get("prompt", ""),
-            params={
-                "workflow": spec.get("workflow"),
-                "checkpoint": spec.get("checkpoint"),
-                "loras": spec.get("loras") or [],
-                "lora_source": spec.get("lora_source"),
-                "width": spec.get("width"),
-                "height": spec.get("height"),
-                "seed": spec.get("seed"),
-                "negative": spec.get("negative"),
-                "reference_image": spec.get("reference_image"),
-                "warnings": list(spec.get("warnings") or []),
-                "requested": requested,
-            },
-            spec=spec,
-        )
-        self._tasks[task_id] = task
-        self._events[task_id] = asyncio.Event()
-        self._queue.put_nowait(task_id)
-        touch_activity()
-        log.info("task %s queued (%s, workflow=%s)", task_id, kind, spec.get("workflow"))
-        return task
-
-    def get(self, task_id: str) -> Task | None:
-        return self._tasks.get(str(task_id))
-
-    def list(
-        self,
-        limit: int = 50,
-        status: str | None = None,
-        source: str | None = None,
-    ) -> list[Task]:
-        tasks = list(self._tasks.values())
-        if status:
-            tasks = [task for task in tasks if task.status == status]
-        if source:
-            tasks = [task for task in tasks if task.source == source]
-        tasks.sort(key=lambda task: task.created_at, reverse=True)
-        return tasks[: max(1, min(int(limit or 50), 200))]
-
-    async def wait(self, task_id: str, timeout: float) -> Task:
-        task = self._tasks.get(str(task_id))
-        if task is None:
+    # -- 兼容旧接口 -------------------------------------------------------
+    async def wait(self, task_id: str, timeout: float) -> TaskRecord:
+        task_id = str(task_id)
+        if self.get(task_id) is None:
             raise ApiError("unknown_task", f"未知任务 {task_id}", 404)
-        event = self._events.setdefault(str(task_id), asyncio.Event())
-        if task.status in ("succeeded", "failed", "canceled"):
-            return task
-        try:
-            await asyncio.wait_for(event.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
-            raise ApiError(
-                "task_timeout", f"等待任务 {task_id} 超时（{timeout:.0f}s）", 504
-            )
-        return task
+        deadline = time.time() + float(timeout)
+        while time.time() < deadline:
+            rec = self.get(task_id)
+            if rec is not None and rec.status in TERMINAL:
+                return rec
+            await asyncio.sleep(0.5)
+        rec = self.get(task_id)
+        if rec is not None and rec.status in TERMINAL:
+            return rec
+        raise ApiError(
+            "task_timeout", f"等待任务 {task_id} 超时（{timeout:.0f}s）", 504
+        )
 
     async def cancel(self, task_id: str) -> dict[str, Any]:
-        task = self._tasks.get(str(task_id))
-        if task is None:
+        task_id = str(task_id)
+        rec = self.get(task_id)
+        if rec is None:
             raise ApiError("unknown_task", f"未知任务 {task_id}", 404)
-        if task.status in ("succeeded", "failed", "canceled"):
+        if rec.status in TERMINAL:
             return {
                 "ok": False,
                 "error": "already_finished",
-                "status": task.status,
-                "task": task.public(),
+                "status": rec.status,
+                "task": rec.public(),
             }
-        task.cancel_requested = True
-        if task.status == "queued":
-            task.status = "canceled"
-            task.finished_at = _now()
-            event = self._events.get(task.id)
-            if event is not None:
-                event.set()
-            action = "removed_from_queue"
-            log.info("task %s canceled while queued", task.id)
-        else:
-            action = await comfy_cancel_prompt(self.cfg, task.remote_id)
-            task.status = "canceled"
-            task.finished_at = _now()
-            event = self._events.get(task.id)
-            if event is not None:
-                event.set()
+        was_running = rec.status == STATUS_RUNNING
+        self.request_cancel(task_id)
+        if was_running:
+            action = await comfy_cancel_prompt(self.cfg, rec.remote_id)
+            self.finish(task_id, status=STATUS_CANCELLED)
             log.info("task %s canceled while running (remote=%s, action=%s)",
-                     task.id, task.remote_id, action)
-        return {"ok": True, "status": "canceled", "action": action, "task": task.public()}
+                     task_id, rec.remote_id, action)
+        else:
+            action = "removed_from_queue"
+            log.info("task %s canceled while pending", task_id)
+        final = self.get(task_id)
+        return {
+            "ok": True,
+            "status": final.status if final else STATUS_CANCELLED,
+            "action": action,
+            "task": final.public() if final else None,
+        }
 
-    # -- 执行 --------------------------------------------------------------
-    async def _run_image(self, task: Task) -> None:
+    def record_voice_task(
+        self,
+        spec: dict[str, Any],
+        result: dict[str, Any] | None,
+        error: str | None = None,
+        source: str = "console",
+        user_id: str | None = None,
+        session_id: str | None = None,
+    ) -> TaskRecord:
+        """语音同步执行后补记（直接写终态，不经过 worker）。"""
+        return self.record_terminal(
+            kind="voice",
+            payload=spec,
+            spec=spec,
+            status=STATUS_COMPLETED if result else STATUS_FAILED,
+            result=result,
+            error=error,
+            error_code=None if result else "voice_failed",
+            source=source,
+            user_id=user_id,
+            session_id=session_id,
+        )
+
+    # -- 执行 -------------------------------------------------------------
+    def _add_warning(self, task_id: str, message: str) -> None:
+        rec = self.get(task_id)
+        warnings = list((rec.params.get("warnings") if rec else None) or [])
+        warnings.append(message)
+        self.update_params(task_id, {"warnings": warnings})
+
+    async def _run_image(self, task: TaskRecord) -> dict[str, Any]:
         spec = task.spec
-        _check_cancel(task)
+        cancel_view = _CancelView(self, task.id)
+        _check_cancel(cancel_view)
         nodes = build_nodes(self.cfg, spec)
-        task.params["loras_applied"] = spec.get("loras_applied") or []
-        task.params["checkpoint"] = spec.get("checkpoint")
-        task.params["warnings"] = list(spec.get("warnings") or [])
-        _check_cancel(task)
+        self.update_params(
+            task.id,
+            {
+                "loras_applied": spec.get("loras_applied") or [],
+                "checkpoint": spec.get("checkpoint"),
+                "warnings": list(spec.get("warnings") or []),
+            },
+        )
+        _check_cancel(cancel_view)
 
         if spec.get("reference_image"):
             reference_name = await self._prepare_reference(task, nodes, spec["reference_image"])
             if reference_name:
-                task.params["reference_image_name"] = reference_name
+                self.update_params(task.id, {"reference_image_name": reference_name})
 
         ensure = await ensure_comfy(self.cfg)
         if not ensure.get("ok"):
@@ -1470,23 +1573,36 @@ class TaskStore:
                 str(ensure.get("hint") or ""),
                 503,
             )
-        _check_cancel(task)
+        _check_cancel(cancel_view)
 
         started = time.time()
         prompt_id = await comfy_submit(self.cfg, nodes)
-        task.remote_id = prompt_id
-        task.params["prompt_id"] = prompt_id
-        _check_cancel(task)
+        self.set_remote_id(task.id, prompt_id)
+        self.update_params(task.id, {"prompt_id": prompt_id})
+        _check_cancel(cancel_view)
 
-        output = await comfy_wait_output(self.cfg, prompt_id, task)
+        output = await comfy_wait_output(
+            self.cfg, prompt_id, cancel_view, timeout=self.cfg.task_timeout
+        )
         seconds = round(time.time() - started, 1)
+        return self._build_image_result(task, spec, prompt_id, output, seconds)
+
+    def _build_image_result(
+        self,
+        task: TaskRecord,
+        spec: dict[str, Any],
+        prompt_id: str,
+        output: dict[str, Any],
+        seconds: float,
+    ) -> dict[str, Any]:
+        """把 ComfyUI 输出整理成对外的结果（恢复路径也复用）。"""
         filename = output["filename"]
         subfolder = output.get("subfolder", "")
         image_type = output.get("type", "output")
         query = urllib.parse.urlencode(
             {"filename": filename, "subfolder": subfolder, "type": image_type}
         )
-        task.result = {
+        result: dict[str, Any] = {
             "url": f"{self.cfg.public_base}/img?{query}",
             "path": f"/img?{query}",
             "filename": filename,
@@ -1494,7 +1610,6 @@ class TaskStore:
             "type": image_type,
             "prompt_id": prompt_id,
             "seconds": seconds,
-            # 复现所需的最小参数集：同 seed + 同参数应能出一模一样的图
             "model": spec.get("model"),
             "seed": spec.get("seed"),
             "checkpoint": spec.get("checkpoint"),
@@ -1506,82 +1621,52 @@ class TaskStore:
             "height": spec.get("height"),
             "character": spec.get("character"),
         }
-        local_path = os.path.join(
-            self.cfg.comfy_output_dir, subfolder, filename
-        ) if subfolder else os.path.join(self.cfg.comfy_output_dir, filename)
+        local_path = (
+            os.path.join(self.cfg.comfy_output_dir, subfolder, filename)
+            if subfolder
+            else os.path.join(self.cfg.comfy_output_dir, filename)
+        )
         if os.path.isfile(local_path):
-            task.result["local_path"] = local_path
-            task.result["bytes"] = os.path.getsize(local_path)
-        log.info("task %s succeeded: %s (%ss)", task.id, filename, seconds)
+            result["local_path"] = local_path
+            result["bytes"] = os.path.getsize(local_path)
+        return result
 
     async def _prepare_reference(
-        self, task: Task, nodes: dict[str, dict], reference: str
+        self, task: TaskRecord, nodes: dict[str, dict], reference: str
     ) -> str | None:
         load_ids = _find_load_image_nodes(nodes)
         if not load_ids:
-            task.params.setdefault("warnings", []).append(
-                f"工作流没有 LoadImage 节点，reference_image={reference} 被忽略"
+            self._add_warning(
+                task.id, f"工作流没有 LoadImage 节点，reference_image={reference} 被忽略"
             )
             return None
         if len(load_ids) > 1:
-            task.params.setdefault("warnings", []).append(
-                f"工作流有 {len(load_ids)} 个 LoadImage，仅填充第一个 {load_ids[0]}"
+            self._add_warning(
+                task.id, f"工作流有 {len(load_ids)} 个 LoadImage，仅填充第一个 {load_ids[0]}"
             )
         data, filename = await resolve_reference_bytes(self.cfg, reference)
         uploaded_name = await comfy_upload_image(self.cfg, data, filename)
         nodes[load_ids[0]].setdefault("inputs", {})["image"] = uploaded_name
         return uploaded_name
 
-    async def _run_voice(self, task: Task) -> None:
+    async def _run_voice(self, task: TaskRecord) -> dict[str, Any]:
         spec = task.spec
-        result = await synth_tts(
+        return await synth_tts(
             self.cfg,
             text=spec["prompt"],
             voice=spec.get("voice") or "",
             engine=spec.get("engine") or "kokoro",
             speed=spec.get("speed") or 1.0,
         )
-        task.result = result
-        task.finished_at = _now()
-
-    def record_voice_task(
-        self,
-        spec: dict[str, Any],
-        result: dict[str, Any] | None,
-        error: str | None = None,
-        source: str = "console",
-        user_id: str | None = None,
-        session_id: str | None = None,
-    ) -> Task:
-        """语音任务同步执行后补记，供 Console/任务中心查看。"""
-        task = Task(
-            id="v_" + uuid.uuid4().hex[:8],
-            kind="voice",
-            status="succeeded" if result else "failed",
-            source=source or "console",
-            user_id=user_id,
-            session_id=session_id,
-            character=spec.get("character"),
-            prompt=spec.get("prompt", ""),
-            params={
-                "engine": spec.get("engine"),
-                "voice": spec.get("voice"),
-                "speed": spec.get("speed"),
-            },
-            result=result,
-            error=error,
-            started_at=_now(),
-            finished_at=_now(),
-            spec=spec,
-        )
-        self._tasks[task.id] = task
-        self._events[task.id] = asyncio.Event()
-        self._events[task.id].set()
-        return task
 
 
-def _check_cancel(task: Task | None) -> None:
-    if task is not None and (task.cancel_requested or task.status == "canceled"):
+# 兼容旧类型标注
+Task = TaskRecord
+
+def _check_cancel(task) -> None:
+    """执行期间检查取消标记（兼容 TaskRecord / _CancelView）。"""
+    if task is not None and (getattr(task, "cancel_requested", False) or
+                             getattr(task, "status", "") in ("canceled", STATUS_CANCELLED)):
         raise _TaskCanceled()
 
 
@@ -1878,7 +1963,7 @@ async def collect_status(cfg: Settings) -> dict[str, Any]:
         f"{cfg.core_url}/v1/models", 1.5
     )
 
-    tasks = list(store._tasks.values())  # noqa: SLF001 - 同一进程内部读取
+    tasks = store.list(limit=200)
     return {
         "gateway": {
             "state": "ready",
@@ -1903,16 +1988,16 @@ async def collect_status(cfg: Settings) -> dict[str, Any]:
             "last_activity_at": round(LAST_ACTIVITY_TS, 3),
             "seconds_since": round(time.time() - LAST_ACTIVITY_TS, 1),
             "active_tasks": sum(
-                1 for t in tasks if t.status in ("queued", "running")
+                1 for t in tasks if t.status in (STATUS_PENDING, STATUS_RUNNING)
             ),
         },
         "queue": {
             "concurrency": cfg.concurrency,
             "active": 1 if store.active_id else 0,
             "active_task": store.active_id,
-            "pending": store._queue.qsize(),  # noqa: SLF001
+            "pending": store.pending_count(),  # noqa: SLF001
             "total": len(tasks),
-            "succeeded": sum(1 for t in tasks if t.status == "succeeded"),
+            "completed": sum(1 for t in tasks if t.status == STATUS_COMPLETED),
             "failed": sum(1 for t in tasks if t.status == "failed"),
         },
         "device": comfy.get("device"),
@@ -1927,32 +2012,47 @@ async def collect_status(cfg: Settings) -> dict[str, Any]:
 async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool) -> dict[str, Any]:
     spec = resolve_spec(cfg, body, kind="image")
     await require_comfy(cfg)  # 契约 §5.1：不可达先 ensure，失败立即返回错误
-    task = store.submit(
-        "image",
-        spec,
-        body,
-        source=str(body.get("source") or "console"),
-        user_id=body.get("user_id"),
-        session_id=body.get("session_id"),
-    )
+    idem = str(body.get("idempotency_key") or "").strip() or None
+    try:
+        task, idempotent_hit = store.submit(
+            kind="image",
+            payload={
+                key: value
+                for key, value in body.items()
+                if key not in ("source", "user_id", "session_id")
+            },
+            spec=spec,
+            source=str(body.get("source") or "console"),
+            user_id=body.get("user_id"),
+            session_id=body.get("session_id"),
+            idempotency_key=idem,
+        )
+    except TaskConflict as exc:
+        raise ApiError(
+            "idempotency_conflict",
+            f"幂等键已被任务 {exc.task_id} 使用，但请求内容不同",
+            409,
+            existing_task_id=exc.task_id,
+        ) from exc
     if async_mode:
         return {
             "ok": True,
             "task_id": task.id,
             "status": task.status,
+            "idempotent_hit": idempotent_hit,
             "workflow": spec["workflow"],
             "checkpoint": spec["checkpoint"],
             "loras": spec["loras"],
             "warnings": spec["warnings"],
         }
     finished = await store.wait(task.id, cfg.view_timeout + 120)
-    if finished.status == "succeeded":
+    if finished.status == STATUS_COMPLETED:
         result = dict(finished.result or {})
         result.update(
             {
                 "ok": True,
                 "task_id": finished.id,
-                "status": "succeeded",
+                "status": STATUS_COMPLETED,
                 "workflow": spec["workflow"],
                 "checkpoint": spec["checkpoint"],
                 "loras": spec["loras"],
@@ -1961,12 +2061,12 @@ async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool)
             }
         )
         return result
-    if finished.status == "canceled":
+    if finished.status == STATUS_CANCELLED:
         raise ApiError("task_canceled", "任务已被取消", 409)
     raise ApiError(
         finished.error or "task_failed",
         str(finished.params.get("hint") or ""),
-        500 if finished.status == "failed" else 503,
+        500 if finished.status == STATUS_FAILED else 503,
     )
 
 
@@ -2073,10 +2173,10 @@ async def route_pulse(request: Request) -> Response:
         "last_activity_at": round(LAST_ACTIVITY_TS, 3),
         "seconds_since": round(time.time() - LAST_ACTIVITY_TS, 1),
         "active_tasks": sum(
-            1 for t in list(store._tasks.values())  # noqa: SLF001
-            if t.status in ("queued", "running")
+            1 for t in store.list(limit=200)
+            if t.status in (STATUS_PENDING, STATUS_RUNNING)
         ),
-        "queue_pending": store._queue.qsize(),  # noqa: SLF001
+        "queue_pending": store.pending_count(),  # noqa: SLF001
     })
 
 
@@ -2447,17 +2547,20 @@ async def comfyui_task_submit(
     character: str = "",
     loras: Annotated[list[dict[str, Any]] | None, Field(description="LoRA 数组：[{\"name\":\"xxx.safetensors\",\"weight\":0.75}]；仅 anime_illustrious 支持")] = None,
     reference_image_url: str = "",
+    idempotency_key: str = "",
 ) -> str:
-    """异步提交生图任务。参数同 comfyui_generate。"""
+    """异步提交生图任务。参数同 comfyui_generate。
+
+    idempotency_key：同一个逻辑请求的重试请带上同一个 key，避免重复出图。
+    """
     try:
-        result = await submit_generate(
-            settings,
-            _tool_body(
-                prompt, negative, workflow, width, height, seed,
-                character, loras, reference_image_url,
-            ),
-            async_mode=True,
+        body = _tool_body(
+            prompt, negative, workflow, width, height, seed,
+            character, loras, reference_image_url,
         )
+        if idempotency_key:
+            body["idempotency_key"] = idempotency_key
+        result = await submit_generate(settings, body, async_mode=True)
         return _json(result)
     except Exception as exc:  # noqa: BLE001
         return _tool_error(exc)
@@ -2695,7 +2798,7 @@ class _AppWithWorker:
     async def __call__(self, scope, receive, send) -> None:
         if not self._started:
             self._started = True
-            store.ensure_worker()
+            await store.bootstrap()
         await self.inner(scope, receive, send)
 
 
