@@ -34,3 +34,4 @@ data/sqlite_backup_state.json
 .promptfoo/
 tests/promptfoo/.promptfoo/
 phoenix_data/
+config.json.bak-*
