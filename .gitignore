@@ -35,3 +35,7 @@ data/sqlite_backup_state.json
 tests/promptfoo/.promptfoo/
 phoenix_data/
 config.json.bak-*
+
+# P0.3 任务库与本地备份
+media_gateway/data/
+media_gateway/*.bak*
