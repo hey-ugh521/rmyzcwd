@@ -45,12 +45,15 @@ ChatGPT/Codex 桌面端等 —— 都在吃显存/带宽。
 理由：qwen 实测 739s，比 Illustrious（约 169s）慢 4 倍以上，
 与"默认用千问因为其他模型太慢"的初衷相反。
 
+**验证结果（04:29）**：网关重启后 `submit` 不传 model → `workflow=portrait` ✅；
+排队任务已清空（g_e6f46814 cancelled/interrupted、g_a8ce3bf4 cancelled/no_remote_id）。
+
 ## 本轮未达成 / 待做
 
 | 项 | 说明 |
 |---|---|
 | 第 4 步性能目标 | ❌ 未达成（只完成了归因，没有提速） |
-| 默认回退的端到端验证 | ⚠️ 文件与网关已改；MCP 提交验证被多次重启打断，未取到干净样本 |
+| 默认回退的端到端验证 | ✅ 已验证：网关重启后 submit 不传 model → `workflow=portrait` |
 | ComfyUI 参数调优 | 待做：`--reserve-vram` / `--disable-smart-memory` 对比测试 |
 | 生成期间关闭 Wallpaper Engine | 待你确认（会改变桌面显示） |
 | qwen 的可用方案 | 需要 12GB+ 显存，或换更小量化/TE 上 CPU 的方案 |
