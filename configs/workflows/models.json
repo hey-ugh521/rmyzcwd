@@ -27,7 +27,7 @@
         "sampler_name": "euler_ancestral",
         "scheduler": "karras"
       },
-      "default": false
+      "default": true
     },
     {
       "id": "qwen_image_2_1",
@@ -55,7 +55,7 @@
         "vae": "qwen_image_2.1_vae_bf16.safetensors"
       },
       "notes": "Qwen-Image 2.1 Turbo 蒸馏版：CFGGuider cfg=1.0 + ManualSigmas 9 步表；prompt 用自然语言写清楚",
-      "default": true
+      "default": false
     },
     {
       "id": "flux3_klein",
