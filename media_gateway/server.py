@@ -206,6 +206,8 @@ class Settings:
         self.view_timeout = float(_env("MOBIUS_VIEW_TIMEOUT", 180))
         # P0.3：worker 执行上限与「API 视图等待」分离，避免长生成被视图超时误杀
         self.task_timeout = float(_env("MOBIUS_TASK_TIMEOUT", 900))
+        # P0.4-B：同一任务的两次有效状态查询最小间隔（毫秒）
+        self.poll_min_interval_ms = float(_env("MOBIUS_POLL_MIN_INTERVAL_MS", 5000))
         self.poll_interval = float(_env("MOBIUS_POLL_INTERVAL", 1.5))
         self.max_voice_bytes = int(_env("MOBIUS_MAX_VOICE_BYTES", 8 * 1024 * 1024))
         self.tts_timeout = float(_env("MOBIUS_TTS_TIMEOUT", 120))
@@ -2071,6 +2073,60 @@ async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool)
 
 
 # ---------------------------------------------------------------------------
+# P0.4-B 轮询限流（仅作用于 comfyui_task_status 的读取路径）
+# 说明：状态放在内存里（Gateway 重启后重置为「首次查询」），
+#       不改任务状态机与持久化结构。
+# ---------------------------------------------------------------------------
+
+_poll_state: dict[str, dict[str, float]] = {}
+
+
+def _poll_gate(task_id: str, status: str) -> dict[str, Any] | None:
+    """返回 None 表示放行；返回 dict 表示要告知调用方 poll_too_fast。"""
+    now = time.time()
+    state = _poll_state.setdefault(task_id, {"last_valid": 0.0, "attempts": 0.0, "valid": 0.0})
+    state["attempts"] += 1
+
+    # 终态任务：允许立即读取，不受间隔限制
+    if status in TERMINAL:
+        state["valid"] += 1
+        state["last_valid"] = now
+        return None
+
+    interval_s = max(settings.poll_min_interval_ms, 0.0) / 1000.0
+    if state["last_valid"] and interval_s > 0:
+        since = now - state["last_valid"]
+        if since < interval_s:
+            retry_ms = max(int(round((interval_s - since) * 1000)), 1)
+            # 关键：不更新 last_valid，避免被拒绝的查询把等待窗口不断推后
+            log.warning(
+                "poll_too_fast task=%s since=%.2fs retry=%dms (valid=%d attempts=%d)",
+                task_id, since, retry_ms, int(state["valid"]), int(state["attempts"]),
+            )
+            return {
+                "ok": False,
+                "error": "poll_too_fast",
+                "task_id": task_id,
+                "retry_after_ms": retry_ms,
+                "interval_ms": int(interval_s * 1000),
+                "valid_queries": int(state["valid"]),
+                "attempted_queries": int(state["attempts"]),
+            }
+
+    state["valid"] += 1
+    state["last_valid"] = now
+    return None
+
+
+def _poll_stats(task_id: str) -> dict[str, int]:
+    state = _poll_state.get(task_id) or {"last_valid": 0.0, "attempts": 0.0, "valid": 0.0}
+    return {
+        "valid_queries": int(state["valid"]),
+        "attempted_queries": int(state["attempts"]),
+    }
+
+
+# ---------------------------------------------------------------------------
 # MCP 服务器 + REST 路由
 # ---------------------------------------------------------------------------
 
@@ -2597,7 +2653,10 @@ async def comfyui_task_status(task_id: str) -> str:
         task = store.get(task_id)
         if task is None:
             return _json({"ok": False, "error": "unknown_task", "task_id": task_id})
-        return _json({"ok": True, "task": task.public()})
+        throttled = _poll_gate(task_id, task.status)
+        if throttled is not None:
+            return _json(throttled)
+        return _json({"ok": True, "task": task.public(), "poll": _poll_stats(task_id)})
     except Exception as exc:  # noqa: BLE001
         return _tool_error(exc)
 
