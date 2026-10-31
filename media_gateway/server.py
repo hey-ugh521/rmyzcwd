@@ -2082,6 +2082,14 @@ server = MCPServer(
         "生图工具返回图片 URL，agent 应在回复中用 markdown 图片引用该 URL；"
         "tts_speak 返回 audio_url，必须把该 URL 以纯文本原样放在回复最后一行，LangBot 会自动转成语音消息。"
         "异步任务请用 comfyui_task_submit 提交后用 comfyui_task_status 查询。"
+        "【生图必须走异步流程，P0.4】生图 = comfyui_task_submit（立即拿 task_id）→ 每 5~10 秒"
+        "comfyui_task_status 轮询（最多 60 次）→ 按状态处理：pending/running 继续等，"
+        "completed 交付产物，failed 报错并附 error_code，cancelled 如实说已取消，"
+        "submission_unknown 说明结果不确定且禁止自动重提。"
+        "| 不要用 comfyui_generate（同步阻塞，已标弃用）；异步失败时也不要退回它。"
+        "| 每次用户主动生图都要生成新的 idempotency_key；同一次逻辑请求重试必须复用同一个 key。"
+        "| 轮询 60 次仍未结束：停止轮询、告知用户任务仍在后台执行并给出 task_id；"
+        "轮询耗尽不等于失败，也不要取消后台任务。"
         "【生图优先用角色档案】character 参数可传角色 id、中文名或别名"
         "（如 幽兰黛尔 / 布洛妮娅 / 符华 / 琪亚娜 / 爱莉希雅 / 德丽莎 …），"
         "系统会自动补齐 checkpoint、LoRA、权重、尺寸与画风提示词——比手工拼 LoRA 更稳。"
@@ -2457,6 +2465,9 @@ def _tool_body(
 @server.tool(
     name="comfyui_generate",
     description=(
+        "【已弃用 · 不要再用于常规生图】同步阻塞接口，会占用执行线程直到出图完成。"
+        "常规生图请改用 comfyui_task_submit + comfyui_task_status 的异步流程。"
+        "本工具仅在历史兼容场景保留。"
         "调用本机 ComfyUI 生成图片，等待完成并返回图片 URL。"
         "【必须按画风选模型】用 model 指定模型档案："
         "anime_illustrious=二次元/动漫角色（唯一支持 character 与 LoRA）；"
@@ -2535,7 +2546,12 @@ async def comfyui_generate(
 
 @server.tool(
     name="comfyui_task_submit",
-    description="异步提交 ComfyUI 生图任务，立即返回 task_id；用 comfyui_task_status 查询进度。",
+    description=(
+        "【生图首选】异步提交 ComfyUI 生图任务，1 秒内返回 task_id，不会阻塞。"
+        "提交后用 comfyui_task_status 轮询（间隔 5~10 秒，最多 60 次）。"
+        "每次用户主动发起的请求都要自己生成新的 idempotency_key；"
+        "同一次逻辑请求的失败重试必须复用同一个 key，避免重复出图。"
+    ),
 )
 async def comfyui_task_submit(
     prompt: str,
@@ -2566,7 +2582,16 @@ async def comfyui_task_submit(
         return _tool_error(exc)
 
 
-@server.tool(name="comfyui_task_status", description="查询网关异步任务状态（task_id 形如 g_xxx / v_xxx）。")
+@server.tool(
+    name="comfyui_task_status",
+    description=(
+        "查询异步任务状态（task_id 形如 g_xxx / v_xxx）。"
+        "status 取值：pending / running / completed / failed / cancelled / submission_unknown。"
+        "pending、running → 继续等待；completed → 读取 result 交付产物；"
+        "failed → 报道 error_code 与 error_message；cancelled → 如实说已取消；"
+        "submission_unknown → 结果不确定，禁止自动重新提交，请用户确认。"
+    ),
+)
 async def comfyui_task_status(task_id: str) -> str:
     try:
         task = store.get(task_id)

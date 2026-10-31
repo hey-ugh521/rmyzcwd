@@ -77,7 +77,7 @@ async def main() -> int:
             submit_ms = (time.time() - t0) * 1000
             task_id = sub.get("task_id")
             check("1.1 submit 返回 task_id", bool(task_id), json.dumps(sub)[:200])
-            check(f"1.2 submit 时延 {submit_ms:.0f}ms < 3000ms", submit_ms < 3000)
+            check(f"1.2 submit 时延 {submit_ms:.0f}ms < 1000ms（原设计阈值）", submit_ms < 1000)
 
             # ---- 2. 状态机观察 ----
             seen: list[str] = []
@@ -142,5 +142,6 @@ async def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(asyncio.run(main()))
+
 
 
