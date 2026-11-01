@@ -276,6 +276,34 @@ def check_state_probe(dry_run=False):
 
 
 
+
+# ---------------------------------------------------------------- 只读运维 MCP（DSH 用）
+OPS_MCP_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\mcp_ops_server.py"
+OPS_MCP_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
+
+
+def check_ops_mcp(dry_run=False):
+    """8901（只读运维 MCP）未监听时拉起，供 DSH 诊断使用。"""
+    if port_alive(8901):
+        return
+    if dry_run:
+        log("ops MCP：8901 未监听（[dry-run] 跳过拉起）")
+        return
+    if not os.path.exists(OPS_MCP_SCRIPT):
+        log(f"ops MCP：脚本缺失 {OPS_MCP_SCRIPT}")
+        return
+    try:
+        subprocess.Popen(
+            [OPS_MCP_PYTHON, OPS_MCP_SCRIPT, "--port", "8901"],
+            cwd=os.path.dirname(os.path.dirname(OPS_MCP_SCRIPT)),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        log("ops MCP：8901 未监听，已拉起")
+    except Exception as exc:
+        log(f"ops MCP 拉起失败：{type(exc).__name__}: {exc}")
+
+
 # ---------------------------------------------------------------- Pipeline 提示词守卫
 GUARD_SCRIPT = r"C:\\Users\\lenovo\\Desktop\\_说明文档\\mobius\\ops\\pipeline_guard.py"
 _guard_state = {"last": 0.0}
@@ -1188,6 +1216,7 @@ def main():
         # check_sqlite_backup(args.dry_run)
         check_pg_redis(args.dry_run)
         check_pg_backup(args.dry_run)
+        check_ops_mcp(args.dry_run)
         # MCP 工具调用失败签名 → 重建 LangBot 会话（先于会话顺序检查）
         check_langbot_tool_failure(args.dry_run)
         check_mcp_session(args.dry_run)

@@ -1,0 +1,28 @@
+# Möbius 运维 agent（只读）——DSH headless 的 patch 叠加层
+# 用法：dsh --profile headless --patch ops/dsh/mobius-ops.yml -- "任务"
+#
+# 设计目标：
+#   1. 通过 MCP 连接本机只读运维服务（127.0.0.1:8901），获取状态/任务/探针/日志
+#   2. 关闭 shell / 终端 / 编辑类工具，杜绝无人值守时的写操作
+#   3. 保留 fs 读取与搜索（只读诊断够用）
+
+# 新增 MCP 客户端条目（patch 不能直接新增行，必须用 insert）
+- insert:
+    - id: mcp-mobius-ops
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: mobius
+        transport: streamable-http
+        url: http://127.0.0.1:8901/mcp
+        toolCallTimeoutMs: 20000
+        failOnStartupError: false
+
+# 关闭写操作类工具
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-bash
+  disabled: true
+
+- id: plugin-manager
+  disabled: true
