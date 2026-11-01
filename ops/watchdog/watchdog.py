@@ -476,8 +476,22 @@ def log(msg):
     print(f"[{now_str()}] {msg}", flush=True)
 
 
-def http_get(url, timeout=8):
-    with urllib.request.urlopen(url, timeout=timeout) as r:
+def _napcat_token() -> str:
+    """从 D:/AI/mobius/.env 读取 NapCat OneBot HTTP token。"""
+    env_file = "D:/AI/mobius/.env"
+    try:
+        if os.path.exists(env_file):
+            for line in open(env_file, encoding="utf-8"):
+                if line.startswith("NAPCAT_HTTP_TOKEN="):
+                    return line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return ""
+
+
+def http_get(url, timeout=8, headers=None):
+    req = urllib.request.Request(url, headers=headers or {})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
@@ -557,7 +571,7 @@ def napcat_waiting_qr():
 def check_napcat(dry_run):
     """NapCat 假死检测。返回 True 表示它还活着。"""
     try:
-        data = http_get(f"{NAPCAT_API}/get_status", timeout=8)
+        data = http_get(f"{NAPCAT_API}/get_status", timeout=8, headers={"Authorization": f"Bearer {_napcat_token()}"})
         online = bool(data.get("data", {}).get("online"))
         if online:
             _state["napcat_fail"] = 0
