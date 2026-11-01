@@ -311,6 +311,81 @@ def check_pipeline_guard(dry_run=False):
 
 
 
+
+# ---------------------------------------------------------------- 空闲重启门控（P2）
+# LangBot 的 MCP 类重启会打断进行中的对话：有活动时延迟，超时或 run 卡死才强制。
+DEFER_IDLE_SEC = float(os.environ.get("MOBIUS_DEFER_IDLE_SEC", "60"))
+DEFER_RUN_STUCK_SEC = float(os.environ.get("MOBIUS_DEFER_RUN_STUCK_SEC", "600"))
+DEFER_MAX_SEC = float(os.environ.get("MOBIUS_DEFER_MAX_SEC", "900"))
+_defer_state = {"since": 0.0, "count": 0}
+
+
+def _pg_password() -> str:
+    env_file = "D:/AI/mobius/.env"
+    try:
+        if os.path.exists(env_file):
+            for line in open(env_file, encoding="utf-8"):
+                if line.startswith("PG_PASSWORD="):
+                    return line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return os.environ.get("PG_PASSWORD", "")
+
+
+def langbot_activity() -> dict:
+    """读 PG 判断是否有进行中的 run 或刚发生的消息。"""
+    try:
+        import psycopg
+        dsn = f"postgresql://postgres:{_pg_password()}@127.0.0.1:55432/langbot"
+        with psycopg.connect(dsn, connect_timeout=3) as con:
+            row = con.execute(
+                "SELECT COUNT(*) AS n, EXTRACT(EPOCH FROM (now() - MIN(created_at))) AS oldest"
+                " FROM agent_run WHERE status = 'running'"
+            ).fetchone()
+            msg = con.execute(
+                "SELECT EXTRACT(EPOCH FROM (now() - MAX(timestamp))) AS last_msg FROM monitoring_messages"
+            ).fetchone()
+        return {
+            "known": True,
+            "running": int(row[0] or 0),
+            "oldest_run_age": float(row[1] or 0),
+            "last_msg_age": float(msg[0] or 9999),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"known": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+def defer_langbot_restart(why: str, dry_run: bool = False) -> bool:
+    """返回 True 表示本次推迟重启（不执行 restart）。"""
+    now_ts = time.time()
+    act = langbot_activity()
+    if not act.get("known"):
+        log(f"重启门控：无法读取活动状态（{act.get('error')}），按空闲处理")
+        return False
+    busy = act["running"] > 0 or act["last_msg_age"] < DEFER_IDLE_SEC
+    if not busy:
+        _defer_state.update({"since": 0.0, "count": 0})
+        return False
+    if _defer_state["since"] == 0.0:
+        _defer_state["since"] = now_ts
+    _defer_state["count"] += 1
+    elapsed = now_ts - _defer_state["since"]
+    stuck = act["oldest_run_age"]
+    if stuck > DEFER_RUN_STUCK_SEC:
+        log(f"重启门控：最老 run 已 {stuck:.0f}s（>{DEFER_RUN_STUCK_SEC:.0f}s），判定卡死，强制重启")
+        _defer_state.update({"since": 0.0, "count": 0})
+        return False
+    if elapsed > DEFER_MAX_SEC:
+        log(f"重启门控：已推迟 {elapsed:.0f}s（>{DEFER_MAX_SEC:.0f}s），强制重启")
+        _defer_state.update({"since": 0.0, "count": 0})
+        return False
+    log(
+        f"重启门控：延迟重启 LangBot（{why}）——运行中 run={act['running']}，"
+        f"最后消息 {act['last_msg_age']:.0f}s 前，已推迟 {elapsed:.0f}s"
+    )
+    return True
+
+
 # ---------------------------------------------------------------- 版本自检（P1：纳入版本控制）
 WATCHDOG_CANONICAL = r"C:\\Users\\lenovo\\Desktop\\_说明文档\\mobius\\ops\\watchdog\\watchdog.py"
 
@@ -544,6 +619,10 @@ def cool(container):
 
 
 def restart(container, dry_run, why):
+    # P2：LangBot 的 MCP 类重启先看忙闲，有活动就推迟（硬故障不受影响）
+    if container == "langbot" and "MCP" in why and not dry_run:
+        if defer_langbot_restart(why):
+            return False
     if cool(container):
         log(f"{container} 处于冷却期，跳过重启（{why}）")
         return False
