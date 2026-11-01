@@ -45,3 +45,8 @@ ops/probe/state.db
 ops/probe/state.db-*
 
 mobius/
+
+# 阶段0 数据/密钥（不入库）
+.env
+*.env
+pgbackup/
