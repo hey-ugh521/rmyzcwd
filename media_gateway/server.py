@@ -2535,6 +2535,7 @@ def _tool_body(
         "prompt": prompt,
         "negative": negative,
         "workflow": workflow or "",
+        "model": str(extra.get("model") or ""),
         "character": character or "",
         "reference_image": reference_image_url or "",
         "source": source,
@@ -2651,6 +2652,7 @@ async def comfyui_task_submit(
     prompt: str,
     negative: str = "",
     workflow: str = "",
+    model: Annotated[str, Field(description="模型档案：anime_illustrious=二次元/角色（唯一支持 character/LoRA）｜qwen_image_2_1=写实通用（较慢）｜flux3_klein=写实摄影")] = "",
     width: int | None = None,
     height: int | None = None,
     seed: int | None = None,
@@ -2666,7 +2668,7 @@ async def comfyui_task_submit(
     try:
         body = _tool_body(
             prompt, negative, workflow, width, height, seed,
-            character, loras, reference_image_url,
+            character, loras, reference_image_url, model=model,
         )
         if idempotency_key:
             body["idempotency_key"] = idempotency_key

@@ -277,6 +277,53 @@ def check_state_probe(dry_run=False):
 
 
 
+
+# ---------------------------------------------------------------- ComfyUI 预热（消除冷启动代价）
+WARMUP_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\warmup_media.py"
+WARMUP_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
+WARMUP_MARKER = r"C:\Users\lenovo\Desktop\_说明文档\mobius\logs\.comfyui_warm_pid"
+
+
+def _comfyui_pid():
+    try:
+        r = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=15)
+        for line in (r.stdout or "").splitlines():
+            if ":8188" in line and "LISTENING" in line.upper():
+                return line.split()[-1]
+    except Exception:
+        return None
+    return None
+
+
+def check_comfy_warmup(dry_run=False):
+    """ComfyUI 就绪且是新进程时，后台跑一次千问预热（消除模型初始化/编译的首次代价）。"""
+    pid = _comfyui_pid()
+    if not pid:
+        return
+    try:
+        warm_pid = open(WARMUP_MARKER, encoding="utf-8").read().strip()
+    except OSError:
+        warm_pid = ""
+    if warm_pid == pid:
+        return
+    if dry_run:
+        log(f"ComfyUI 预热：[dry-run] 新进程 pid={pid}，跳过")
+        return
+    if not os.path.exists(WARMUP_SCRIPT):
+        return
+    try:
+        subprocess.Popen(
+            [WARMUP_PYTHON, WARMUP_SCRIPT, "--model", "qwen_image_2_1"],
+            cwd=os.path.dirname(os.path.dirname(WARMUP_SCRIPT)),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        open(WARMUP_MARKER, "w", encoding="utf-8").write(pid)
+        log(f"ComfyUI 预热：检测到新进程 pid={pid}，已在后台提交预热任务")
+    except Exception as exc:
+        log(f"ComfyUI 预热失败：{type(exc).__name__}: {exc}")
+
+
 # ---------------------------------------------------------------- 只读运维 MCP（DSH 用）
 OPS_MCP_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\mcp_ops_server.py"
 OPS_MCP_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
@@ -1217,6 +1264,7 @@ def main():
         check_pg_redis(args.dry_run)
         check_pg_backup(args.dry_run)
         check_ops_mcp(args.dry_run)
+        check_comfy_warmup(args.dry_run)
         # MCP 工具调用失败签名 → 重建 LangBot 会话（先于会话顺序检查）
         check_langbot_tool_failure(args.dry_run)
         check_mcp_session(args.dry_run)
