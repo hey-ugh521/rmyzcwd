@@ -26,6 +26,9 @@ def _load_config() -> dict:
 
 CFG: dict = _load_config()
 DB_PATH = (BASE / CFG.get("db", "data/mobius.db")).resolve()
+# 阶段 3：存储后端可切换（sqlite 默认；pg 走 PostgreSQL）
+DB_BACKEND = str(os.environ.get("CORE_DB_BACKEND") or CFG.get("db_backend") or "sqlite").lower()
+PG_DSN = str(os.environ.get("CORE_DB_DSN") or CFG.get("db_dsn") or "")
 CHARS_DIR = (BASE / CFG.get("characters_dir", "data/characters")).resolve()
 DATA_DIR = DB_PATH.parent
 LOG_DIR = BASE / "logs"
@@ -41,7 +44,57 @@ def uid(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
-def conn() -> sqlite3.Connection:
+class _PgConnection:
+    """把 psycopg 连接包成 sqlite3 风格的极小适配器（? 占位符 + dict 行）。"""
+
+    def __init__(self) -> None:
+        import psycopg
+        from psycopg.rows import dict_row
+
+        if not PG_DSN:
+            raise RuntimeError("CORE_DB_BACKEND=pg 但缺少 CORE_DB_DSN/db_dsn")
+        self._c = psycopg.connect(PG_DSN, row_factory=dict_row, autocommit=False)
+
+    @staticmethod
+    def _sql(sql: str) -> str:
+        return sql.replace("?", "%s")
+
+    def execute(self, sql: str, args: tuple = ()):
+        return self._c.execute(self._sql(sql), args)
+
+    def executemany(self, sql: str, seq) -> None:
+        with self._c.cursor() as cur:
+            cur.executemany(self._sql(sql), seq)
+
+    def executescript(self, script: str) -> None:
+        for stmt in script.split(";"):
+            if stmt.strip():
+                self._c.execute(stmt)
+
+    def commit(self) -> None:
+        self._c.commit()
+
+    def rollback(self) -> None:
+        self._c.rollback()
+
+    def close(self) -> None:
+        self._c.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        if exc_type is None:
+            self._c.commit()
+        else:
+            self._c.rollback()
+        self._c.close()
+        return False
+
+
+def conn():
+    if DB_BACKEND == "pg":
+        return _PgConnection()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DB_PATH, timeout=15)
     c.row_factory = sqlite3.Row
@@ -108,7 +161,10 @@ def init_db() -> None:
     with _lock:
         c = conn()
         try:
-            c.executescript(SCHEMA)
+            script = SCHEMA
+            if DB_BACKEND == "pg":
+                script = script.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
+            c.executescript(script)
             c.commit()
         finally:
             c.close()
