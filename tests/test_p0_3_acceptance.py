@@ -38,7 +38,17 @@ def check(name: str, cond: bool, detail: str = "") -> None:
         print(f"  [FAIL] {name} {detail}")
 
 
+STORE_BACKEND = os.environ.get("MOBIUS_TASK_STORE", "sqlite").lower()
+PG_DSN = os.environ.get("MOBIUS_TASK_DSN", "")
+
+
 def db_count(sql: str, args: tuple = ()) -> int:
+    """任务库计数：按后端选择 SQLite 或 PostgreSQL。"""
+    if STORE_BACKEND == "pg":
+        import psycopg
+        pg_sql = sql.replace("?", "%s")
+        with psycopg.connect(PG_DSN) as con:
+            return int(con.execute(pg_sql, args).fetchone()[0])
     con = sqlite3.connect(f"file:{TASK_DB}?mode=ro", uri=True, timeout=20)
     try:
         return int(con.execute(sql, args).fetchone()[0])
@@ -126,7 +136,7 @@ async def main() -> int:
                   json.dumps(conflict)[:200])
 
     # ---- 4/5. 落库与 outbox ----
-    check("4.1 任务已持久化到 SQLite",
+    check("4.1 任务已持久化（后端=%s）" % STORE_BACKEND,
           db_count("SELECT COUNT(*) FROM task_snapshot WHERE task_id=?", (task_id,)) == 1)
     check("4.2 outbox 事件已写入（待投递 Core）",
           db_count("SELECT COUNT(*) FROM outbox") >= 1,

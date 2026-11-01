@@ -1681,7 +1681,32 @@ def _check_cancel(task) -> None:
         raise _TaskCanceled()
 
 
-store = TaskStore(settings)
+# 阶段 2：任务存储后端可切换（sqlite 默认；pg 走 PostgreSQL）
+if os.environ.get("MOBIUS_TASK_STORE", "sqlite").lower() == "pg":
+    from pg_taskstore import PgTaskStore
+
+    class PgGatewayStore(PgTaskStore):
+        """PG 存储 + 复用网关层的 worker/恢复/执行逻辑。"""
+
+        def __init__(self, settings_obj, dsn: str, outbox_limit: int = 500) -> None:
+            self.cfg = settings_obj
+            self._worker = None
+            self._outbox_task = None
+            self._submitted = {}
+            super().__init__(dsn, outbox_limit=outbox_limit)
+
+    # 把 TaskStore 上的网关层方法（不含 __init__）挂到 PG 版本
+    for _name in (
+        "bootstrap", "_resume_running", "ensure_worker", "_outbox_loop", "_send_core_event",
+        "_probe_comfy", "_worker_loop", "wait", "cancel", "record_voice_task", "_add_warning",
+        "_run_image", "_build_image_result", "_prepare_reference", "_run_voice",
+    ):
+        setattr(PgGatewayStore, _name, getattr(TaskStore, _name))
+
+    store = PgGatewayStore(settings, os.environ["MOBIUS_TASK_DSN"], outbox_limit=500)
+    log.info("任务存储后端：PostgreSQL")
+else:
+    store = TaskStore(settings)
 
 
 # ---------------------------------------------------------------------------
