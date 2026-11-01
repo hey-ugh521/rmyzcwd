@@ -119,115 +119,122 @@ def connect_ro(path: str) -> sqlite3.Connection:
     return con
 
 
-def load_runs(window_hours: float = 12) -> list[dict]:
-    if not os.path.exists(LANGBOT_DB):
-        return []
-    cutoff = time.time() - window_hours * 3600
-    con = connect_ro(LANGBOT_DB)
+
+# --------------------------------------------------------------------------- 数据源（PostgreSQL，阶段 4）
+# LangBot / Gateway 均已迁移到 PG；探针直接读 PG（双库），不再读旧 SQLite。
+PG_HOST = os.environ.get("MOBIUS_PG_HOST", "127.0.0.1")
+PG_PORT = int(os.environ.get("MOBIUS_PG_PORT", "55432"))
+PG_USER = os.environ.get("MOBIUS_PG_USER", "postgres")
+PG_PASSWORD = os.environ.get("PG_PASSWORD", "")
+
+
+def _load_env_file() -> None:
+    """从 D:/AI/mobius/.env 读取 PG_PASSWORD（watchdog 直接调用时无需注入环境）。"""
+    global PG_PASSWORD
+    env_path = r"D:/AI/mobius/.env"
+    if PG_PASSWORD or not os.path.exists(env_path):
+        return
     try:
+        for line in open(env_path, encoding="utf-8"):
+            if line.startswith("PG_PASSWORD="):
+                PG_PASSWORD = line.split("=", 1)[1].strip()
+                return
+    except Exception:  # noqa: BLE001
+        pass
+
+
+_load_env_file()
+LANGBOT_DBNAME = "langbot"
+GATEWAY_DBNAME = "mobius"
+
+
+def _pg_connect(dbname: str):
+    import psycopg
+    from psycopg.rows import dict_row
+
+    dsn = f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{dbname}"
+    return psycopg.connect(dsn, row_factory=dict_row)
+
+
+def _ts(value):
+    """PG 返回值可能是 datetime 或 str（naive UTC），统一转本地时间 + epoch。"""
+    if value is None:
+        return None, None
+    if isinstance(value, str):
+        return utc_text_to_local(value)
+    aware = value.replace(tzinfo=dt.timezone.utc).astimezone(TZ)
+    return aware.isoformat(timespec="seconds"), aware.timestamp()
+
+
+def load_runs(window_hours: float = 12) -> list[dict]:
+    cutoff = time.time() - window_hours * 3600
+    with _pg_connect(LANGBOT_DBNAME) as con:
         rows = con.execute(
             "SELECT id, run_id, conversation_id, status, created_at, started_at, finished_at,"
             " status_reason FROM agent_run ORDER BY id DESC LIMIT 200"
         ).fetchall()
-    finally:
-        con.close()
     out = []
     for r in rows:
-        created_iso, created_epoch = utc_text_to_local(r["created_at"])
+        created_iso, created_epoch = _ts(r["created_at"])
         if created_epoch is None or created_epoch < cutoff:
             continue
-        finished_iso, finished_epoch = utc_text_to_local(r["finished_at"])
-        started_iso, started_epoch = utc_text_to_local(r["started_at"])
+        finished_iso, finished_epoch = _ts(r["finished_at"])
+        started_iso, started_epoch = _ts(r["started_at"])
         out.append({
-            "run_id": r["run_id"],
-            "run_seq": str(r["id"]),
-            "session_id": r["conversation_id"],
-            "status": r["status"],
-            "started": created_iso,
-            "started_epoch": created_epoch,
-            "started_actual": started_iso,
-            "started_actual_epoch": started_epoch,
-            "finished": finished_iso,
-            "finished_epoch": finished_epoch,
+            "run_id": r["run_id"], "run_seq": str(r["id"]), "session_id": r["conversation_id"],
+            "status": r["status"], "started": created_iso, "started_epoch": created_epoch,
+            "started_actual": started_iso, "started_actual_epoch": started_epoch,
+            "finished": finished_iso, "finished_epoch": finished_epoch,
             "reason": r["status_reason"],
         })
     return out
 
 
 def load_messages(window_hours: float = 12, limit: int = 200) -> list[dict]:
-    if not os.path.exists(LANGBOT_DB):
-        return []
     cutoff = time.time() - window_hours * 3600
-    con = connect_ro(LANGBOT_DB)
-    try:
+    with _pg_connect(LANGBOT_DBNAME) as con:
         rows = con.execute(
             "SELECT id, timestamp, session_id, role, message_content, run_id, parent_message_id"
-            " FROM monitoring_messages ORDER BY timestamp DESC LIMIT ?", (limit,)
+            " FROM monitoring_messages ORDER BY timestamp DESC LIMIT %s", (limit,)
         ).fetchall()
-    finally:
-        con.close()
     out = []
     for r in rows:
-        iso, ep = utc_text_to_local(r["timestamp"])
+        iso, ep = _ts(r["timestamp"])
         if ep is None or ep < cutoff:
             continue
-        out.append({
-            "msg_id": r["id"],
-            "ts": iso,
-            "epoch": ep,
-            "session_id": r["session_id"],
-            "role": r["role"],
-            "content": r["message_content"] or "",
-            "run_id": r["run_id"],
-            "parent": r["parent_message_id"],
-        })
+        out.append({"msg_id": r["id"], "ts": iso, "epoch": ep, "session_id": r["session_id"],
+                    "role": r["role"], "content": r["message_content"] or "",
+                    "run_id": r["run_id"], "parent": r["parent_message_id"]})
     return out
 
 
 def load_tool_calls(window_hours: float = 12) -> list[dict]:
-    if not os.path.exists(LANGBOT_DB):
-        return []
     cutoff = time.time() - window_hours * 3600
-    con = connect_ro(LANGBOT_DB)
-    try:
+    with _pg_connect(LANGBOT_DBNAME) as con:
         rows = con.execute(
             "SELECT timestamp, tool_name, status, duration, session_id, message_id, arguments, result"
             " FROM monitoring_tool_calls ORDER BY timestamp DESC LIMIT 500"
         ).fetchall()
-    finally:
-        con.close()
     out = []
     for r in rows:
-        iso, ep = utc_text_to_local(r["timestamp"])
+        iso, ep = _ts(r["timestamp"])
         if ep is None or ep < cutoff:
             continue
-        out.append({
-            "ts": iso,
-            "epoch": ep,
-            "tool": r["tool_name"],
-            "status": r["status"],
-            "duration_ms": r["duration"],
-            "session_id": r["session_id"],
-            "message_id": r["message_id"],
-            "arguments": r["arguments"] or "",
-            "result": r["result"] or "",
-        })
+        out.append({"ts": iso, "epoch": ep, "tool": r["tool_name"], "status": r["status"],
+                    "duration_ms": r["duration"], "session_id": r["session_id"],
+                    "message_id": r["message_id"], "arguments": r["arguments"] or "",
+                    "result": r["result"] or ""})
     return out
 
 
 def load_tasks(window_hours: float = 12) -> list[dict]:
-    if not os.path.exists(GATEWAY_DB):
-        return []
     cutoff = time.time() - window_hours * 3600
-    con = connect_ro(GATEWAY_DB)
-    try:
+    with _pg_connect(GATEWAY_DBNAME) as con:
         rows = con.execute(
             "SELECT task_id, kind, status, created_at, started_at, finished_at, result_json,"
             " error_code, error_message, attempts, idempotency_key"
             " FROM task_snapshot ORDER BY created_at DESC LIMIT 200"
         ).fetchall()
-    finally:
-        con.close()
     out = []
     for r in rows:
         created = float(r["created_at"] or 0)
@@ -239,20 +246,12 @@ def load_tasks(window_hours: float = 12) -> list[dict]:
         except Exception:  # noqa: BLE001
             pass
         out.append({
-            "task_id": r["task_id"],
-            "kind": r["kind"],
-            "status": r["status"],
-            "created": epoch_to_local(created),
-            "created_epoch": created,
-            "started": epoch_to_local(r["started_at"]),
-            "started_epoch": r["started_at"],
-            "finished": epoch_to_local(r["finished_at"]),
-            "finished_epoch": r["finished_at"],
-            "result": result,
-            "error_code": r["error_code"],
-            "error_message": r["error_message"],
-            "attempts": r["attempts"],
-            "idempotency_key": r["idempotency_key"],
+            "task_id": r["task_id"], "kind": r["kind"], "status": r["status"],
+            "created": epoch_to_local(created), "created_epoch": created,
+            "started": epoch_to_local(r["started_at"]), "started_epoch": r["started_at"],
+            "finished": epoch_to_local(r["finished_at"]), "finished_epoch": r["finished_at"],
+            "result": result, "error_code": r["error_code"], "error_message": r["error_message"],
+            "attempts": r["attempts"], "idempotency_key": r["idempotency_key"],
         })
     return out
 
@@ -277,7 +276,6 @@ def load_maintenance(limit: int = 300) -> list[dict]:
     return out
 
 
-# --------------------------------------------------------------------------- 组装过程树
 def extract_task_id(tool: dict) -> str | None:
     for blob in (tool.get("result") or "", tool.get("arguments") or ""):
         m = re.search(r'"(g_[0-9a-f]{6,}|v_[0-9a-f]{6,})"', blob)
