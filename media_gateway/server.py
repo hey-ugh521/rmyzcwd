@@ -2922,7 +2922,20 @@ class _AppWithWorker:
     async def __call__(self, scope, receive, send) -> None:
         if not self._started:
             self._started = True
-            await store.bootstrap()
+            # PG 短暂不可用时不要直接崩：重试后仍失败则继续启动（worker 会自愈）
+            for attempt in range(3):
+                try:
+                    await store.bootstrap()
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("网关初始化失败（第 %d 次）：%s", attempt + 1, exc)
+                    await asyncio.sleep(2 * (attempt + 1))
+            else:
+                log.error("网关初始化重试耗尽，继续启动（worker 将持续重试）")
+                try:
+                    store.ensure_worker()
+                except Exception:  # noqa: BLE001
+                    log.exception("worker 启动失败")
         await self.inner(scope, receive, send)
 
 

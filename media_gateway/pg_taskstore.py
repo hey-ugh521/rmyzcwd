@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from typing import Any, Awaitable, Callable
 
@@ -92,7 +93,28 @@ class PgTaskStore:
 
     # -- 连接/事务 --------------------------------------------------------
     def _connect(self) -> psycopg.Connection:
-        return psycopg.connect(self._dsn, row_factory=dict_row, autocommit=False)
+        """带重试的连接：PG 短暂不可用时等待而不是直接崩。"""
+        last_exc: Exception | None = None
+        for attempt in range(5):
+            try:
+                return psycopg.connect(
+                    self._dsn, row_factory=dict_row, autocommit=False, connect_timeout=3
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                delay = min(0.5 * (2 ** attempt), 8.0)
+                log.warning("PG 连接失败（第 %d 次，%.1fs 后重试）：%s", attempt + 1, delay, exc)
+                time.sleep(delay)
+        assert last_exc is not None
+        raise last_exc
+
+    def ping(self) -> bool:
+        try:
+            with self._connect() as con:
+                con.execute("SELECT 1")
+            return True
+        except Exception:  # noqa: BLE001
+            return False
 
     def ensure_schema(self) -> None:
         with self._connect() as con:
