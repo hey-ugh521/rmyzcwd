@@ -2113,6 +2113,22 @@ async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool)
 # ---------------------------------------------------------------------------
 
 _poll_state: dict[str, dict[str, float]] = {}
+_poll_shared_gate = None
+
+
+def _shared_poll_gate():
+    """轮询节流的共享门（Redis，多实例一致；不可用时自动回退进程内）。"""
+    global _poll_shared_gate
+    if _poll_shared_gate is None:
+        try:
+            from .pollthrottle import SharedPollGate
+        except ImportError:
+            from pollthrottle import SharedPollGate
+        _poll_shared_gate = SharedPollGate(
+            os.environ.get("MOBIUS_REDIS_URL", ""), namespace="mobius:poll"
+        )
+        log.info("轮询节流共享门：backend=%s", _poll_shared_gate.backend)
+    return _poll_shared_gate
 
 
 def _poll_gate(task_id: str, status: str) -> dict[str, Any] | None:
@@ -2127,22 +2143,23 @@ def _poll_gate(task_id: str, status: str) -> dict[str, Any] | None:
         state["last_valid"] = now
         return None
 
-    interval_s = max(settings.poll_min_interval_ms, 0.0) / 1000.0
-    if state["last_valid"] and interval_s > 0:
-        since = now - state["last_valid"]
-        if since < interval_s:
-            retry_ms = max(int(round((interval_s - since) * 1000)), 1)
+    interval_ms = max(settings.poll_min_interval_ms, 0.0)
+    if interval_ms > 0:
+        allowed, retry_ms = _shared_poll_gate().acquire(task_id, interval_ms)
+        if not allowed:
+            retry_ms = max(int(retry_ms), 1)
             # 关键：不更新 last_valid，避免被拒绝的查询把等待窗口不断推后
             log.warning(
-                "poll_too_fast task=%s since=%.2fs retry=%dms (valid=%d attempts=%d)",
-                task_id, since, retry_ms, int(state["valid"]), int(state["attempts"]),
+                "poll_too_fast task=%s retry=%dms backend=%s (valid=%d attempts=%d)",
+                task_id, retry_ms, _shared_poll_gate().backend,
+                int(state["valid"]), int(state["attempts"]),
             )
             return {
                 "ok": False,
                 "error": "poll_too_fast",
                 "task_id": task_id,
                 "retry_after_ms": retry_ms,
-                "interval_ms": int(interval_s * 1000),
+                "interval_ms": int(interval_ms),
                 "valid_queries": int(state["valid"]),
                 "attempted_queries": int(state["attempts"]),
             }
