@@ -1,0 +1,21 @@
+services:
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    container_name: napcat
+    restart: always
+    environment:
+      - NAPCAT_UID=1000
+      - NAPCAT_GID=1000
+      # 固定账号走快速登录（-q），免扫码直接用现有登录态恢复会话；
+      # 不设 ACCOUNT 时每次启动都走二维码，扫码频繁失败会被风控
+      - ACCOUNT=3947356403
+    ports:
+      - "127.0.0.1:6099:6099"   # WebUI（扫码登录 + 配置）
+      # 宿主机侧避开 3000：Open WebUI（D:\AI\.uv-bin\open-webui.exe）默认也用 3000。
+      # LangBot 在 docker 网络内用 ws://napcat:3001，不依赖宿主机映射，所以挪端口不影响机器人。
+      - "127.0.0.1:13000:3000"  # OneBot HTTP
+      - "127.0.0.1:13001:3001"  # OneBot WebSocket
+    volumes:
+      - ./napcat/config:/app/napcat/config
+      - ./napcat/qq:/app/.config/QQ
+
