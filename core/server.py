@@ -313,6 +313,21 @@ async def api_sleep():
 
 # ---------------------------------------------------------------- 任务
 
+
+
+@app.post("/v1/tasks/events")
+async def api_task_event(request: Request):
+    """接收 Gateway outbox 事件（幂等，按 seq 去重）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "invalid_json"}
+    try:
+        res = store.task_apply_event(body if isinstance(body, dict) else {})
+        return {"ok": True, **res}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
 @app.get("/api/tasks")
 async def api_tasks(limit: int = 50, status: str | None = None, source: str | None = None):
     await _sync_tasks()

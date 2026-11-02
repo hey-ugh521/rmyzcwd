@@ -612,3 +612,59 @@ def constitution_text(char_id: str | None) -> str:
 
 
 init_db()
+
+
+# ---------------------------------------------------------------- Gateway 事件投影
+_GW_STATUS = {
+    "pending": "queued", "running": "running",
+    "completed": "succeeded", "failed": "failed",
+    "cancelled": "canceled", "canceled": "canceled",
+    "submission_unknown": "failed",
+}
+
+
+def task_apply_event(event: dict) -> dict:
+    """把 Gateway outbox 事件幂等投影到 Core 任务表（按 seq 去重）。"""
+    seq = int(event.get("seq") or 0)
+    last = int(kv_get("gateway_outbox_last_seq", 0) or 0)
+    if seq and seq <= last:
+        return {"duplicate": True, "seq": seq}
+    payload = event.get("payload") or {}
+    tid = str(payload.get("task_id") or event.get("task_id") or "")
+    if not tid:
+        return {"skipped": "no_task_id"}
+    status = _GW_STATUS.get(str(payload.get("status") or ""), "running")
+    existing = task_get(tid)
+    now_ts = now()
+    result = payload.get("result")
+    error = payload.get("error_message")
+    if existing is None:
+        row = {
+            "id": tid, "kind": str(payload.get("kind") or "image"), "status": status,
+            "source": str(payload.get("source") or "gateway"),
+            "user_id": payload.get("user_id"), "session_id": payload.get("session_id"),
+            "character": payload.get("character"), "prompt": str(payload.get("prompt") or ""),
+            "params": _dumps({"event_seq": seq}), "result": _dumps(result) if result is not None else None,
+            "error": error, "remote_id": payload.get("remote_id"),
+            "created_at": float(payload.get("created_at") or now_ts),
+            "started_at": payload.get("started_at"),
+            "finished_at": payload.get("finished_at"),
+            "updated_at": now_ts,
+        }
+        with conn() as c:
+            c.execute(
+                f"INSERT INTO tasks({','.join(TASK_COLS)}) VALUES({','.join('?' * len(TASK_COLS))})",
+                tuple(row[k] for k in TASK_COLS),
+            )
+    else:
+        fields = {"status": status, "updated_at": now_ts}
+        if result is not None:
+            fields["result"] = result
+        if error:
+            fields["error"] = error
+        if payload.get("finished_at"):
+            fields["finished_at"] = payload["finished_at"]
+        task_update(tid, **fields)
+    if seq:
+        kv_set("gateway_outbox_last_seq", seq)
+    return {"applied": True, "seq": seq, "task_id": tid, "status": status}
