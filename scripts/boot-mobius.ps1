@@ -23,7 +23,14 @@ function Log([string]$m) {
 }
 
 function Test-Port([int]$port) {
-    return [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+    try {
+        $client = New-Object Net.Sockets.TcpClient
+        $iar = $client.BeginConnect('127.0.0.1', $port, $null, $null)
+        if (-not $iar.AsyncWaitHandle.WaitOne(1500)) { $client.Close(); return $false }
+        $client.EndConnect($iar)
+        $client.Close()
+        return $true
+    } catch { return $false }
 }
 
 Log "=== boot 开始（pid=$PID, once=$Once） ==="

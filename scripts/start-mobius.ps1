@@ -14,8 +14,14 @@ $logs = Join-Path $root 'logs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 
 function Test-Port([int]$port) {
-    $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-    return [bool]$c
+    try {
+        $client = New-Object Net.Sockets.TcpClient
+        $iar = $client.BeginConnect('127.0.0.1', $port, $null, $null)
+        if (-not $iar.AsyncWaitHandle.WaitOne(1500)) { $client.Close(); return $false }
+        $client.EndConnect($iar)
+        $client.Close()
+        return $true
+    } catch { return $false }
 }
 
 if (-not (Test-Path $py)) { throw "找不到 Python: $py" }
