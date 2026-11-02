@@ -278,6 +278,57 @@ def check_state_probe(dry_run=False):
 
 
 
+
+# ---------------------------------------------------------------- NapCat 重启后重建 OneBot 连接
+# 背景（2026-11-02）：断网 → NapCat 重登/容器重启 → LangBot 的 forward_ws 连接变僵死，
+# 内核仍显示 ESTABLISHED，但 LangBot 收不到任何事件（静默丢消息），只能手动重启 LangBot。
+NAPCAT_STATE_FILE = r"C:\Users\lenovo\Desktop\_说明文档\qqbot\.napcat_started_at"
+
+
+def _container_started_at(name):
+    try:
+        r = subprocess.run(["docker", "inspect", "-f", "{{.State.StartedAt}}", name],
+                           capture_output=True, text=True, timeout=15)
+        return (r.stdout or "").strip() or None
+    except Exception:
+        return None
+
+
+def _napcat_online():
+    token = _napcat_token()
+    try:
+        data = http_get(f"{NAPCAT_API}/get_status", timeout=6,
+                        headers={"Authorization": f"Bearer {token}"})
+        return bool((data.get("data") or {}).get("online"))
+    except Exception:
+        return False
+
+
+def check_napcat_restart_relink(dry_run=False):
+    """NapCat 容器重启后，等它恢复在线，主动重启 LangBot 重建 OneBot 连接。"""
+    started = _container_started_at("napcat")
+    if not started:
+        return
+    try:
+        previous = open(NAPCAT_STATE_FILE, encoding="utf-8").read().strip()
+    except OSError:
+        previous = ""
+    if previous == started:
+        return
+    if not previous:
+        open(NAPCAT_STATE_FILE, "w", encoding="utf-8").write(started)
+        return
+    # 容器重启了：先记下新值，避免重复触发
+    open(NAPCAT_STATE_FILE, "w", encoding="utf-8").write(started)
+    if not _napcat_online():
+        log("NapCat 容器重启，但当前不在线，跳过重连（等下一轮 QQ 恢复流程）")
+        return
+    if dry_run:
+        log("NapCat 容器重启 → [dry-run] 跳过重启 LangBot")
+        return
+    restart("langbot", False, "NapCat 容器重启导致 OneBot 连接僵死，重建连接")
+
+
 # ---------------------------------------------------------------- ComfyUI 预热（消除冷启动代价）
 WARMUP_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\warmup_media.py"
 WARMUP_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
@@ -1265,6 +1316,7 @@ def main():
         check_pg_backup(args.dry_run)
         check_ops_mcp(args.dry_run)
         check_comfy_warmup(args.dry_run)
+        check_napcat_restart_relink(args.dry_run)
         # MCP 工具调用失败签名 → 重建 LangBot 会话（先于会话顺序检查）
         check_langbot_tool_failure(args.dry_run)
         check_mcp_session(args.dry_run)
