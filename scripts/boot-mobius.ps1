@@ -55,6 +55,13 @@ try {
 }
 
 # 3. watchdog（单实例锁在 38999，重复启动会自己退出，所以可以直接拉）
+function Test-Watchdog {
+    try {
+        $p = Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object { $_.CommandLine -match 'watchdog\.py' }
+        return [bool]$p
+    } catch { return $false }
+}
+
 function Start-Watchdog {
     $wd = Join-Path $root '..\qqbot\watchdog.py'
     if (-not (Test-Path $wd)) { Log "找不到 watchdog: $wd"; return }
@@ -132,7 +139,7 @@ function Start-ComfyUI {
     }
 }
 
-if (-not (Test-Port 38999)) { Start-Watchdog } else { Log "watchdog 已在运行" }
+if (-not (Test-Watchdog)) { Start-Watchdog } else { Log "watchdog 已在运行" }
 
 # 3.6 自检结论：把「开机自启到底成没成」写成一行结论，不用再去翻别处
 Write-BootVerdict {
@@ -179,7 +186,7 @@ while ($true) {
         Log "Core 掉线，重新拉起"
         try { & (Join-Path $PSScriptRoot 'start-mobius.ps1') *>> $log } catch { Log "重拉 Core 失败: $($_.Exception.Message)" }
     }
-    if (-not (Test-Port 38999)) {
+    if (-not (Test-Watchdog)) {
         Log "watchdog 掉线，重新拉起"
         Start-Watchdog
     }
