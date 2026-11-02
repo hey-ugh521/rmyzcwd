@@ -279,6 +279,115 @@ def check_state_probe(dry_run=False):
 
 
 
+
+# ---------------------------------------------------------------- DSH 两段式自愈（D2）
+# 规则：同一类故障 30 分钟内第 2 次 → 唤起 DSH 只读诊断（read-only profile），
+#       产出 logs/incidents/*.md；不自动执行任何处置动作。
+DSH_NODE = r"D:\Program Files\nodejs\node.exe"
+DSH_BIN = r"D:\AI\tools\npm-global\node_modules\@deepseek-ai\dsh\lib\bin.js"
+DSH_PATCH = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\dsh\mobius-ops.yml"
+INCIDENT_DIR = r"C:\Users\lenovo\Desktop\_说明文档\mobius\logs\incidents"
+INCIDENT_STATE = r"C:\Users\lenovo\Desktop\_说明文档\qqbot\.incident_state.json"
+INCIDENT_WINDOW_SEC = 1800
+INCIDENT_REPEAT = 2
+INCIDENT_COOLDOWN_SEC = 21600  # 同因故障 6 小时内只诊断一次
+
+
+def _incident_key(why):
+    import re
+    return re.sub(r"[0-9]+", "N", str(why)).strip()[:80]
+
+
+def _incident_state_load():
+    try:
+        return json.loads(open(INCIDENT_STATE, encoding="utf-8").read())
+    except Exception:
+        return {}
+
+
+def _incident_state_save(st):
+    try:
+        open(INCIDENT_STATE, "w", encoding="utf-8").write(json.dumps(st, ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def _log_tail_for_incident(n=60):
+    try:
+        return "\n".join(open(LOG_FILE, encoding="utf-8", errors="replace").read().splitlines()[-n:])
+    except Exception:
+        return ""
+
+
+def _dsh_available():
+    return os.path.exists(DSH_NODE) and os.path.exists(DSH_BIN) and os.path.exists(DSH_PATCH)
+
+
+def _escalate_incident(why, dry_run=False):
+    """同因故障重复出现时唤起 DSH 只读诊断，写 incident 报告。返回是否已升级。"""
+    if dry_run:
+        log(f"DSH 升级：[dry-run] 将诊断：{why}")
+        return True
+    if not _dsh_available():
+        log("DSH 升级：dsh 或 patch 不存在，跳过（降级为纯规则）")
+        return False
+    state = _incident_state_load()
+    key = _incident_key(why)
+    now_ts = time.time()
+    rec = state.get(key) or {"count": 0, "first_ts": now_ts, "last_diag_ts": 0}
+    if now_ts - float(rec.get("last_diag_ts") or 0) < INCIDENT_COOLDOWN_SEC:
+        return False
+    os.makedirs(INCIDENT_DIR, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    slug = "".join(ch if ch.isalnum() else "-" for ch in key)[:40].strip("-")
+    report = os.path.join(INCIDENT_DIR, f"incident-{stamp}-{slug}.md")
+    prompt = (
+        "你是 Möbius 的只读运维诊断 agent。请用 mobius MCP 工具（mobius_status / task_list / "
+        "message_state / log_tail / pg_health）诊断以下故障，禁止提出或执行任何写操作。\n\n"
+        f"【故障原因】{why}\n\n"
+        f"【watchdog 最近日志】\n{_log_tail_for_incident(60)}\n\n"
+        "输出 Markdown 报告：1) 现象与证据 2) 可能根因（按可能性排序）3) 建议的处置动作"
+        "（仅供人工确认）4) 复现条件。不要臆造数据，读不到就如实说明。"
+    )
+    try:
+        fh = open(report, "w", encoding="utf-8")
+        fh.write(f"# Incident: {why}\n\n- 触发时间：{time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                 f"- watchdog 判断：同类故障 30 分钟内重复出现，升级 DSH 只读诊断\n\n---\n\n")
+        fh.flush()
+        errfh = open(report + ".stderr.log", "w", encoding="utf-8")
+        subprocess.Popen(
+            [DSH_NODE, DSH_BIN, "--profile", "headless", "--patch", DSH_PATCH, prompt],
+            stdout=fh, stderr=errfh,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            cwd=r"C:\Users\lenovo\Desktop\_说明文档\mobius",
+        )
+        rec.update({"count": int(rec.get("count") or 0) + 1, "last_ts": now_ts,
+                    "last_diag_ts": now_ts, "report": report})
+        state[key] = rec
+        _incident_state_save(state)
+        log(f"DSH 升级：已唤起只读诊断，报告将写入 {report}")
+        return True
+    except Exception as exc:
+        log(f"DSH 升级失败：{type(exc).__name__}: {exc}")
+        return False
+
+
+def check_incident_escalation(why, dry_run=False):
+    """在 restart() 记录故障时调用：同因第 2 次触发 DSH 诊断。"""
+    state = _incident_state_load()
+    key = _incident_key(why)
+    now_ts = time.time()
+    rec = state.get(key) or {"count": 0, "first_ts": now_ts, "last_diag_ts": 0}
+    if now_ts - float(rec.get("first_ts") or now_ts) > INCIDENT_WINDOW_SEC:
+        rec = {"count": 0, "first_ts": now_ts, "last_diag_ts": rec.get("last_diag_ts") or 0}
+    rec["count"] = int(rec.get("count") or 0) + 1
+    rec["last_ts"] = now_ts
+    state[key] = rec
+    _incident_state_save(state)
+    if rec["count"] >= INCIDENT_REPEAT:
+        return _escalate_incident(why, dry_run)
+    return False
+
 # ---------------------------------------------------------------- NapCat 重启后重建 OneBot 连接
 # 背景（2026-11-02）：断网 → NapCat 重登/容器重启 → LangBot 的 forward_ws 连接变僵死，
 # 内核仍显示 ESTABLISHED，但 LangBot 收不到任何事件（静默丢消息），只能手动重启 LangBot。
@@ -753,6 +862,7 @@ def restart(container, dry_run, why):
         log(f"{container} 处于冷却期，跳过重启（{why}）")
         return False
     log(f"重启 {container}：{why}")
+    check_incident_escalation(why, dry_run)
     if not dry_run:
         subprocess.run(["docker", "restart", container], capture_output=True, timeout=180)
         _state["last_restart"][container] = time.time()
