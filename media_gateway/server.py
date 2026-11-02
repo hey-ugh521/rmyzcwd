@@ -1033,9 +1033,14 @@ async def comfy_get_queue(cfg: Settings, timeout: float = 5.0) -> dict[str, Any]
         return {}
 
 
+class _SubmissionUnknown(Exception):
+    """POST /prompt 已发出但未拿到确定结果：结果不确定，禁止自动重提。"""
+
+
 async def comfy_submit(cfg: Settings, nodes: dict[str, dict]) -> str:
     payload = {"prompt": nodes, "client_id": "mobius-media-gateway"}
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    submit_timeout = float(os.environ.get("MOBIUS_COMFY_SUBMIT_TIMEOUT", "60"))
+    async with httpx.AsyncClient(timeout=submit_timeout) as client:
         resp = await client.post(f"{cfg.comfy_url}/prompt", json=payload)
     if resp.status_code != 200:
         detail = resp.text[:1200]
@@ -1457,6 +1462,9 @@ class TaskStore(DurableTaskStore):
             except _TaskCanceled:
                 self.finish(task.id, status=STATUS_CANCELLED)
                 log.info("task %s canceled", task.id)
+            except _SubmissionUnknown as exc:
+                self.mark_submission_unknown(task.id, str(exc))
+                log.warning("task %s submission_unknown: %s", task.id, exc)
             except ApiError as exc:
                 self.finish(
                     task.id,
@@ -1587,7 +1595,14 @@ class TaskStore(DurableTaskStore):
         _check_cancel(cancel_view)
 
         started = time.time()
-        prompt_id = await comfy_submit(self.cfg, nodes)
+        try:
+            prompt_id = await comfy_submit(self.cfg, nodes)
+        except httpx.ConnectTimeout:
+            raise
+        except httpx.TimeoutException as exc:
+            raise _SubmissionUnknown(
+                f"提交 ComfyUI 超时（{type(exc).__name__}），无法确认是否已入队"
+            ) from exc
         self.set_remote_id(task.id, prompt_id)
         self.update_params(task.id, {"prompt_id": prompt_id})
         _check_cancel(cancel_view)
