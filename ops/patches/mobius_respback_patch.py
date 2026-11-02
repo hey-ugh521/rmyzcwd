@@ -14,6 +14,7 @@ import sys
 NEW_FN = r'''async def _mobius_bridge_media_urls(logger, message_chain) -> None:
     """把回复文本里的图片 URL 下载成 Image 段（内网地址用户打不开）。"""
     import base64
+    import os
     import re
 
     import httpx
@@ -24,6 +25,16 @@ NEW_FN = r'''async def _mobius_bridge_media_urls(logger, message_chain) -> None:
 
     def _clean(url: str) -> str:
         return url.rstrip(trailing)
+
+    # 兜底：回复里只有音频文件名（tts_xxx.wav）时，按固定网关地址拼出 URL
+    audio_base = os.environ.get("MOBIUS_AUDIO_BASE", "http://host.docker.internal:8899/audio?file=")
+    audio_name = re.compile(r"(tts_[A-Za-z0-9_\-]+\.(?:wav|mp3|ogg|opus|silk))", re.IGNORECASE)
+    extra_audio: list[str] = []
+    for seg in message_chain:
+        if isinstance(seg, platform_message.Plain):
+            for m in audio_name.finditer(seg.text or ""):
+                extra_audio.append(audio_base + m.group(1))
+                seg.text = (seg.text or "").replace(m.group(1), "")
 
     urls: list[str] = []
     for seg in message_chain:
@@ -39,7 +50,7 @@ NEW_FN = r'''async def _mobius_bridge_media_urls(logger, message_chain) -> None:
         return
 
     images = []
-    for url in dict.fromkeys(urls):
+    for url in dict.fromkeys(urls + extra_audio):
         try:
             async with httpx.AsyncClient(timeout=20) as client:
                 resp = await client.get(url)
@@ -47,6 +58,13 @@ NEW_FN = r'''async def _mobius_bridge_media_urls(logger, message_chain) -> None:
             if resp.status_code == 200 and ctype.startswith("image/"):
                 images.append(
                     platform_message.Image(base64=base64.b64encode(resp.content).decode())
+                )
+                for seg in message_chain:
+                    if isinstance(seg, platform_message.Plain) and url in (seg.text or ""):
+                        seg.text = (seg.text or "").replace(url, "").strip()
+            elif resp.status_code == 200 and ctype.startswith("audio/"):
+                images.append(
+                    platform_message.Voice(base64=base64.b64encode(resp.content).decode())
                 )
                 for seg in message_chain:
                     if isinstance(seg, platform_message.Plain) and url in (seg.text or ""):
@@ -59,7 +77,7 @@ NEW_FN = r'''async def _mobius_bridge_media_urls(logger, message_chain) -> None:
             logger.warning("图片 URL 下载失败（保留原链接）: %s %s", url, exc)
     if images:
         message_chain.extend(images)
-        logger.info("已把 %d 张图片 URL 转为图片消息", len(images))
+        logger.info("已把 %d 个媒体 URL 转为媒体消息（图片/语音）", len(images))
 '''
 
 
