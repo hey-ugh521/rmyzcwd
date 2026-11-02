@@ -477,6 +477,39 @@ def check_kokoro(dry_run=False):
         log(f"Kokoro 拉起失败：{type(exc).__name__}: {exc}")
 
 
+
+# ---------------------------------------------------------------- 记忆嵌入服务保活（bge-m3 :8903）
+EMBED_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\memory\embed_server.py"
+EMBED_PYTHON = r"D:\AI\mobius-memory\Scripts\python.exe"
+EMBED_MODEL_PATH = r"D:\AI\models\bge-m3-st\models--BAAI--bge-m3\snapshots\5617a9f61b028005a4858fdac845db406aefb181"
+
+
+def check_embed_server(dry_run=False):
+    """8903（记忆嵌入）未监听时拉起，供 LongTermMemory / Graphiti 使用。"""
+    if port_alive(8903):
+        return
+    if dry_run:
+        log("记忆嵌入：8903 未监听（[dry-run] 跳过拉起）")
+        return
+    if not os.path.exists(EMBED_SCRIPT) or not os.path.exists(EMBED_PYTHON):
+        return
+    env = dict(os.environ)
+    env["MOBIUS_EMBED_MODEL"] = EMBED_MODEL_PATH
+    env["MOBIUS_EMBED_PATH"] = r"D:\AI\models\bge-m3-st"
+    env["HF_HUB_OFFLINE"] = "1"
+    try:
+        subprocess.Popen(
+            [EMBED_PYTHON, EMBED_SCRIPT, "--port", "8903"],
+            cwd=os.path.dirname(os.path.dirname(EMBED_SCRIPT)),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            env=env,
+        )
+        log("记忆嵌入：8903 未监听，已拉起（冷启动约 60-150s）")
+    except Exception as exc:
+        log(f"记忆嵌入拉起失败：{type(exc).__name__}: {exc}")
+
+
 # ---------------------------------------------------------------- ComfyUI 预热（消除冷启动代价）
 WARMUP_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\warmup_media.py"
 WARMUP_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
@@ -1515,6 +1548,7 @@ def main():
         check_pg_backup(args.dry_run)
         check_ops_mcp(args.dry_run)
         check_comfy_warmup(args.dry_run)
+        check_embed_server(args.dry_run)
         check_kokoro(args.dry_run)
         check_napcat_restart_relink(args.dry_run)
         # MCP 工具调用失败签名 → 重建 LangBot 会话（先于会话顺序检查）
