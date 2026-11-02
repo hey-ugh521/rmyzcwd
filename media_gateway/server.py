@@ -2991,6 +2991,10 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=None, help="监听端口（默认取配置，8899）")
     parser.add_argument("--host", default=None, help="监听地址（默认 0.0.0.0）")
     args = parser.parse_args()
+    _host = os.environ.get("MOBIUS_GATEWAY_HOST", "127.0.0.1")
+    if _port_in_use(_host, args.port):
+        log.warning("已有网关实例在监听 %s:%s，本实例退出", _host, args.port)
+        return 0
     if args.port:
         settings.apply_port(args.port)
     if args.host:
@@ -3011,6 +3015,15 @@ def main() -> None:
         flush=True,
     )
     uvicorn.run(app, host=settings.host, port=settings.port, log_level="warning")
+
+
+def _port_in_use(host: str, port: int) -> bool:
+    import socket
+    try:
+        with socket.create_connection((host, port), timeout=1.5):
+            return True
+    except OSError:
+        return False
 
 
 if __name__ == "__main__":

@@ -115,10 +115,27 @@ if ($null -eq $pulse) {
     }
 }
 
+
+# 3.7 ComfyUI 开机自启（Core 的 prewarm_on_start 已在 Core 启动时拉起，这里兜底）
+function Start-ComfyUI {
+    try {
+        $st = Invoke-RestMethod -Uri 'http://127.0.0.1:8900/api/status' -TimeoutSec 15
+        # Core 的 prewarm_on_start 会拉起 ComfyUI，这里最多等 300s 就绪
+        for ($i = 0; $i -lt 150; $i++) {
+            try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', 8188); $c.Close(); Log "ComfyUI 已就绪（8188）"; return } catch { }
+            Start-Sleep -Seconds 2
+        }
+        Log ("ComfyUI 300s 内未就绪，尝试唤醒（mode={0}）" -f $st.media.mode)
+        try { Invoke-RestMethod -Uri 'http://127.0.0.1:8900/api/media/wake' -Method Post -TimeoutSec 60 | Out-Null } catch { }
+    } catch {
+        Log ("ComfyUI 唤醒失败: {0}" -f $_.Exception.Message)
+    }
+}
+
 if (-not (Test-Port 38999)) { Start-Watchdog } else { Log "watchdog 已在运行" }
 
 # 3.6 自检结论：把「开机自启到底成没成」写成一行结论，不用再去翻别处
-function Write-BootVerdict {
+Write-BootVerdict {
     $rows = @()
     # Core
     try {
@@ -150,6 +167,7 @@ function Write-BootVerdict {
     Log ("开机自检：{0}" -f $verdict)
     if ($verdict -notmatch 'FAIL') { Log "开机自检结论：PASS" } else { Log "开机自检结论：FAIL（看上面哪一项）" }
 }
+Start-ComfyUI
 Write-BootVerdict
 
 if ($Once) { Log "=== boot 结束（--Once） ==="; return }
