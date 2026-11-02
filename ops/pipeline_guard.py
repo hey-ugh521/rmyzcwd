@@ -36,6 +36,9 @@ RUNNER = "plugin:langbot-team/LocalAgent/default"
 GUARD_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "prompts", "pipeline-guard.json"
 )
+PROMPT_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "prompts", "pipeline-prompt.txt"
+)
 
 
 def current() -> dict:
@@ -53,6 +56,7 @@ def current() -> dict:
         "prompt_sha256": hashlib.sha256(text.encode()).hexdigest(),
         "exception_handling": cfg.get("output", {}).get("misc", {}).get("exception-handling"),
         "updated_at": str(updated),
+        "_prompt_text": text,
     }
 
 
@@ -61,17 +65,39 @@ def main() -> int:
     ap.add_argument("--snapshot", action="store_true")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--show", action="store_true")
+    ap.add_argument("--restore", action="store_true")
     args = ap.parse_args()
 
     cur = current()
+    if args.restore:
+        if not os.path.exists(PROMPT_FILE):
+            print("⚠️ 无基准提示词全文，无法恢复")
+            return 2
+        text = open(PROMPT_FILE, encoding="utf-8").read()
+        with psycopg.connect(DSN) as con:
+            row = con.execute("select uuid, config from legacy_pipelines").fetchone()
+            uuid, cfg = row
+            if isinstance(cfg, str):
+                cfg = json.loads(cfg)
+            cfg["ai"]["runner_config"][RUNNER]["prompt"][0]["content"] = text
+            con.execute(
+                "update legacy_pipelines set config=%s, updated_at=now() where uuid=%s",
+                (json.dumps(cfg, ensure_ascii=False), uuid),
+            )
+            con.commit()
+        print(f"✅ 已恢复提示词（len={len(text)}）到 pipeline {uuid}")
+        return 0
+
     if args.show or not (args.snapshot or args.check):
-        print(json.dumps(cur, ensure_ascii=False, indent=2))
+        print(json.dumps({k: v for k, v in cur.items() if k != "_prompt_text"}, ensure_ascii=False, indent=2))
         return 0
 
     if args.snapshot:
         os.makedirs(os.path.dirname(GUARD_FILE), exist_ok=True)
+        with open(PROMPT_FILE, "w", encoding="utf-8") as fh:
+            fh.write(cur.get("_prompt_text") or "")
         with open(GUARD_FILE, "w", encoding="utf-8") as fh:
-            json.dump(cur, fh, ensure_ascii=False, indent=2)
+            json.dump({k: v for k, v in cur.items() if k != "_prompt_text"}, fh, ensure_ascii=False, indent=2)
         print(f"已建立基准: {GUARD_FILE}")
         print(json.dumps(cur, ensure_ascii=False, indent=2))
         return 0

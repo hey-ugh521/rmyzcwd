@@ -556,7 +556,7 @@ _guard_state = {"last": 0.0}
 
 
 def check_pipeline_guard(dry_run=False):
-    """每 30 分钟校验 pipeline 提示词是否被静默覆盖（只告警，不修改）。"""
+    """每 30 分钟校验 pipeline 提示词；漂移时按快照自动恢复并重载 LangBot。"""
     now = time.time()
     if now - _guard_state["last"] < 1800:
         return
@@ -577,7 +577,16 @@ def check_pipeline_guard(dry_run=False):
         )
         out = (r.stdout or "").strip()
         if "漂移" in out:
-            log("⚠️ 提示词守卫：pipeline 配置发生漂移！" + out.replace("\n", " ")[:200])
+            log("提示词守卫：检测到漂移，尝试自动恢复 …")
+            rr = subprocess.run([sys.executable, GUARD_SCRIPT, "--restore"],
+                                capture_output=True, text=True, timeout=60, env=env)
+            r2 = subprocess.run([sys.executable, GUARD_SCRIPT, "--check"],
+                                capture_output=True, text=True, timeout=60, env=env)
+            ok = "一致" in (r2.stdout or "")
+            log("提示词守卫：恢复%s（%s）" % (
+                "成功" if ok else "失败", (rr.stdout or "").strip().replace("\n", " ")[:120]))
+            if ok:
+                restart("langbot", False, "提示词漂移已恢复，重载流水线")
         elif r.returncode != 0:
             log("提示词守卫执行失败：" + (out or (r.stderr or "").strip())[:160])
     except Exception as exc:
