@@ -1,8 +1,8 @@
 {
   "pipeline_uuid": "2e939868-ac11-42c9-aa13-ad96208edb18",
   "prompt_role": "system",
-  "prompt_len": 6948,
-  "prompt_sha256": "0638d25f3751fb6e6af711257135310a7bf59b135b840e93f3c338cb763e639f",
+  "prompt_len": 1445,
+  "prompt_sha256": "a20ffeb6705780bb1d9535ca8d8a7ec6cbb756da9d335272b8b5d40e23b0d418",
   "exception_handling": "show-hint",
-  "updated_at": "2026-11-01 08:11:44.640147"
+  "updated_at": "2026-11-02 09:51:37.375147"
 }
