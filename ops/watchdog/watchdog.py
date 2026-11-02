@@ -825,6 +825,27 @@ def bot_logs(count=40):
 
 
 def last_delivered_event():
+    """最近一条「用户消息已投递到流水线」的时间（epoch）。
+
+    修复（2026-11-02）：LangBot 的 bot 日志接口在重启后可能返回空，
+    导致此前的判定完全失明。改为优先读 PG monitoring_messages 的 user 行，
+    bot 日志仅作回退。
+    """
+    try:
+        import psycopg
+        dsn = f"postgresql://postgres:{_pg_password()}@127.0.0.1:55432/langbot"
+        with psycopg.connect(dsn, connect_timeout=3) as con:
+            row = con.execute(
+                "select max(timestamp) from monitoring_messages where role='user'"
+            ).fetchone()
+        if row and row[0]:
+            dt = row[0]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            return dt.timestamp()
+        return 0.0
+    except Exception as exc:  # noqa: BLE001
+        log(f"读取 PG 投递时间失败，回退 bot 日志：{type(exc).__name__}")
     newest = 0.0
     for entry in bot_logs():
         if "delivered to Pipeline" not in (entry.get("text") or ""):
@@ -836,6 +857,26 @@ def last_delivered_event():
 
 
 def last_llm_epoch():
+    """最近一次 LLM 调用时间（epoch）。
+
+    优先读 LangBot 的 PostgreSQL（2026-11 已完成 SQLite → PG 迁移）；
+    PG 不可用才回退旧 SQLite。两者存的都是 UTC 的 naive 时间戳。
+
+    修复（2026-11-02）：此前只读迁移前的 SQLite，读到的是 11-01 的旧数据，
+    导致「投递-调用滞后」虚高约 20 小时并误判重启 LangBot。
+    """
+    try:
+        import psycopg
+        dsn = f"postgresql://postgres:{_pg_password()}@127.0.0.1:55432/langbot"
+        with psycopg.connect(dsn, connect_timeout=3) as con:
+            row = con.execute("select max(timestamp) from monitoring_llm_calls").fetchone()
+        if row and row[0]:
+            dt = row[0]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            return dt.timestamp()
+    except Exception as exc:  # noqa: BLE001
+        log(f"读取 PG LLM 调用时间失败，回退 SQLite：{type(exc).__name__}")
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     try:
         row = con.execute(
