@@ -438,6 +438,45 @@ def check_napcat_restart_relink(dry_run=False):
     restart("langbot", False, "NapCat 容器重启导致 OneBot 连接僵死，重建连接")
 
 
+
+# ---------------------------------------------------------------- Kokoro 语音保活
+KOKORO_PORT = 7870
+KOKORO_CFG = r"C:\Users\lenovo\Desktop\_说明文档\mobius\config.json"
+_kokoro_last_start = {"ts": 0.0}
+
+
+def check_kokoro(dry_run=False):
+    """7870（Kokoro TTS）未监听时按 Core 配置拉起；冷启动约 150 秒，冷却 300 秒。"""
+    if port_alive(KOKORO_PORT):
+        return
+    if time.time() - _kokoro_last_start["ts"] < 300:
+        return
+    if dry_run:
+        log("Kokoro：7870 未监听（[dry-run] 跳过拉起）")
+        return
+    try:
+        cfg = json.loads(open(KOKORO_CFG, encoding="utf-8").read())
+        svc = (cfg.get("services") or {}).get("kokoro") or {}
+        exe = svc.get("python")
+        cwd = svc.get("cwd")
+        args = svc.get("args") or []
+        if not exe or not cwd or not args:
+            log("Kokoro：配置不完整，跳过拉起")
+            return
+        if not os.path.exists(exe) or not os.path.isdir(cwd):
+            log("Kokoro：解释器或工作目录不存在，跳过拉起")
+            return
+        subprocess.Popen(
+            [exe, *args], cwd=cwd,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        _kokoro_last_start["ts"] = time.time()
+        log("Kokoro：7870 未监听，已按配置拉起（冷启动约 150s）")
+    except Exception as exc:
+        log(f"Kokoro 拉起失败：{type(exc).__name__}: {exc}")
+
+
 # ---------------------------------------------------------------- ComfyUI 预热（消除冷启动代价）
 WARMUP_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\warmup_media.py"
 WARMUP_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
@@ -1467,6 +1506,7 @@ def main():
         check_pg_backup(args.dry_run)
         check_ops_mcp(args.dry_run)
         check_comfy_warmup(args.dry_run)
+        check_kokoro(args.dry_run)
         check_napcat_restart_relink(args.dry_run)
         # MCP 工具调用失败签名 → 重建 LangBot 会话（先于会话顺序检查）
         check_langbot_tool_failure(args.dry_run)
