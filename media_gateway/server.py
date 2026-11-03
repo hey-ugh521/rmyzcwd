@@ -1860,14 +1860,14 @@ async def list_voices(cfg: Settings) -> dict[str, Any]:
 
 
 async def synth_tts(
-    cfg: Settings, text: str, voice: str = "", engine: str = "kokoro", speed: float = 1.0
+    cfg: Settings, text: str, voice: str = "", engine: str = "mobius", speed: float = 1.0
 ) -> dict[str, Any]:
     text = str(text or "").strip()
     if not text:
         raise ApiError("missing_text", "text 不能为空")
     if len(text) > 4000:
         raise ApiError("text_too_long", "text 过长（>4000 字符），请拆分后合成")
-    engine = str(engine or "kokoro").strip().lower()
+    engine = str(engine or "mobius").strip().lower()
     if engine not in ("kokoro", "mobius", "f5"):
         raise ApiError("unknown_engine", f"未知 TTS 引擎 {engine!r}；可用: kokoro / mobius")
     base_url = cfg.kokoro_url if engine == "kokoro" else cfg.f5_url
@@ -1883,21 +1883,32 @@ async def synth_tts(
         "response_format": "wav",
         "speed": speed,
     }
+    async def _post_tts(eng: str) -> tuple[Any, str]:
+        target = cfg.kokoro_url if eng == "kokoro" else cfg.f5_url
+        voice_name = "mobius" if eng in ("mobius", "f5") else "zf_xiaobei"
+        body = dict(payload)
+        body["voice"] = voice_name
+        try:
+            async with httpx.AsyncClient(timeout=cfg.tts_timeout) as client:
+                return await client.post(f"{target}/v1/audio/speech", json=body), target
+        except Exception as exc:  # noqa: BLE001
+            raise ApiError("tts_unavailable", f"TTS 引擎 {eng} 不可达（{target}）: {exc}", 503) from exc
+
     try:
-        async with httpx.AsyncClient(timeout=cfg.tts_timeout) as client:
-            resp = await client.post(f"{base_url}/v1/audio/speech", json=payload)
-    except Exception as exc:
-        raise ApiError(
-            "tts_unavailable",
-            f"TTS 引擎 {engine} 不可达（{base_url}）: {exc}",
-            503,
-        )
+        resp, _target = await _post_tts(engine)
+    except ApiError:
+        if engine == "kokoro":
+            raise
+        logger.warning("TTS 引擎 %s 不可达，回退 kokoro", engine)
+        engine = "kokoro"
+        resp, _target = await _post_tts(engine)
     if resp.status_code != 200:
-        raise ApiError(
-            "tts_failed",
-            f"TTS 引擎返回 HTTP {resp.status_code}: {resp.text[:300]}",
-            502,
-        )
+        if engine != "kokoro":
+            logger.warning("TTS 引擎 %s 返回 %s，回退 kokoro", engine, resp.status_code)
+            engine = "kokoro"
+            resp, _target = await _post_tts(engine)
+        if resp.status_code != 200:
+            raise ApiError("tts_failed", f"TTS 引擎 {engine} 返回 HTTP {resp.status_code}: {resp.text[:300]}", 502)
     audio = resp.content
     if not audio:
         raise ApiError("tts_empty_audio", "TTS 返回空音频", 502)
@@ -2838,7 +2849,7 @@ async def comfyui_queue_status() -> str:
     ),
 )
 async def tts_speak(
-    text: str, voice: str = "", engine: str = "kokoro", speed: float = 1.0
+    text: str, voice: str = "", engine: str = "mobius", speed: float = 1.0
 ) -> str:
     """合成语音。
 

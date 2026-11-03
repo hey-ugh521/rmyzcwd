@@ -510,6 +510,32 @@ def check_embed_server(dry_run=False):
         log(f"记忆嵌入拉起失败：{type(exc).__name__}: {exc}")
 
 
+
+# ---------------------------------------------------------------- 八重樱 TTS 服务保活（7873 原生 + 7871 适配层）
+GSV_START_PS1 = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\tts\start-gsv.ps1"
+GSV_PWSH = r"D:\Tools\PowerShell7\pwsh.exe"
+
+
+def check_gsv_tts(dry_run=False):
+    """7871（OpenAI 兼容适配层）未监听时，整套拉起 GPT-SoVITS 语音服务。"""
+    if port_alive(7871):
+        return
+    if dry_run:
+        log("八重樱 TTS：7871 未监听（[dry-run] 跳过拉起）")
+        return
+    if not os.path.exists(GSV_START_PS1):
+        return
+    try:
+        subprocess.Popen(
+            [GSV_PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", GSV_START_PS1],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        log("八重樱 TTS：7871 未监听，已拉起（冷启动约 60-120s）")
+    except Exception as exc:
+        log(f"八重樱 TTS 拉起失败：{type(exc).__name__}: {exc}")
+
+
 # ---------------------------------------------------------------- ComfyUI 预热（消除冷启动代价）
 WARMUP_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\warmup_media.py"
 WARMUP_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
@@ -1549,6 +1575,7 @@ def main():
         check_ops_mcp(args.dry_run)
         check_comfy_warmup(args.dry_run)
         check_embed_server(args.dry_run)
+        check_gsv_tts(args.dry_run)
         check_kokoro(args.dry_run)
         check_napcat_restart_relink(args.dry_run)
         # MCP 工具调用失败签名 → 重建 LangBot 会话（先于会话顺序检查）
