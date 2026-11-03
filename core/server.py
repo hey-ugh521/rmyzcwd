@@ -91,6 +91,8 @@ async def _prewarm():
     try:
         await sup.ensure_gateway()
         await sup.start("comfyui")
+        if "gsv" in getattr(sup, "services", {}):
+            await sup.start("gsv")
     except Exception as e:
         store.audit("supervisor", "prewarm.fail", {"error": str(e)}, result="fail")
 
