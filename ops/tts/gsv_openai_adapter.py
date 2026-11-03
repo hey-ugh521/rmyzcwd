@@ -46,7 +46,7 @@ async def health():
 
 @app.post("/v1/audio/speech")
 async def speech(req: SpeechRequest):
-    speed = (req.speed if req.speed and req.speed > 0 else SPEED) * 0.9  # 八重樱语速略慢
+    speed = req.speed if req.speed and req.speed > 0 else SPEED  # 1.0x（上一条节奏更合适）
     payload = {
         "text": req.input,
         "text_lang": "zh",
