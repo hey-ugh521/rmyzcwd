@@ -42,7 +42,9 @@ DB = r"C:\Users\lenovo\Desktop\_说明文档\qqbot\langbot\data\langbot.db"
 
 MCP_PORT = 8899
 MCP_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
-MCP_SCRIPT = r"D:\AI\qqbot-mcp\comfyui_mcp.py"
+MCP_SCRIPT = r"D:\AI\qqbot-mcp\comfyui_mcp.py"  # 旧版，仅保留常量避免误用
+GATEWAY_START_PS1 = r"C:\Users\lenovo\Desktop\_说明文档\mobius\scripts\start-gateway.ps1"
+PWSH_EXE = r"D:\Tools\PowerShell7\pwsh.exe"
 MCP_LOG = r"D:\AI\qqbot-mcp\mcp_server.log"
 
 # Möbius Core：宿主媒体服务的唯一监管者（8900）。
@@ -1116,7 +1118,7 @@ def check_mcp(dry_run):
     if not dry_run:
         logf = open(MCP_LOG, "a", encoding="utf-8")
         subprocess.Popen(
-            [MCP_PYTHON, MCP_SCRIPT, "--port", str(MCP_PORT)],
+            [PWSH_EXE, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", GATEWAY_START_PS1],
             stdout=logf,
             stderr=subprocess.STDOUT,
             creationflags=0x00000008,
