@@ -18,8 +18,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 UPSTREAM = "http://127.0.0.1:7873/tts"
-REF_AUDIO = r"D:/AI/yae_dataset/segments/vocal_p3_44k.wav_10_002.wav"
-REF_TEXT = "舰长，喜欢樱花吗？明年的春天，一起去赏樱吧。"
+REF_AUDIO = r"D:/AI/teresa_dataset/segments/teresa_0156.wav"
+REF_TEXT = "我好像闻到了皮肤被火焰亲吻的气味"
 SPEED = 1.0
 PORT = 7871
 

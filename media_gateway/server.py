@@ -1899,12 +1899,12 @@ async def synth_tts(
     except ApiError:
         if engine == "kokoro":
             raise
-        logger.warning("TTS 引擎 %s 不可达，回退 kokoro", engine)
+        log.warning("TTS 引擎 %s 不可达，回退 kokoro", engine)
         engine = "kokoro"
         resp, _target = await _post_tts(engine)
     if resp.status_code != 200:
         if engine != "kokoro":
-            logger.warning("TTS 引擎 %s 返回 %s，回退 kokoro", engine, resp.status_code)
+            log.warning("TTS 引擎 %s 返回 %s，回退 kokoro", engine, resp.status_code)
             engine = "kokoro"
             resp, _target = await _post_tts(engine)
         if resp.status_code != 200:
