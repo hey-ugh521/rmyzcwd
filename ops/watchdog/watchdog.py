@@ -495,6 +495,9 @@ def check_embed_server(dry_run=False):
         return
     if not os.path.exists(EMBED_SCRIPT) or not os.path.exists(EMBED_PYTHON):
         return
+    if time.time() - _state["last_start"].get("embed", 0) < COOLDOWN_SECONDS:
+        log("记忆嵌入：8903 未监听，处于冷却期，跳过拉起")
+        return
     env = dict(os.environ)
     env["MOBIUS_EMBED_MODEL"] = EMBED_MODEL_PATH
     env["MOBIUS_EMBED_PATH"] = r"D:\AI\models\bge-m3-st"
@@ -507,6 +510,7 @@ def check_embed_server(dry_run=False):
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             env=env,
         )
+        _state["last_start"]["embed"] = time.time()
         log("记忆嵌入：8903 未监听，已拉起（冷启动约 60-150s）")
     except Exception as exc:
         log(f"记忆嵌入拉起失败：{type(exc).__name__}: {exc}")
@@ -527,12 +531,16 @@ def check_gsv_tts(dry_run=False):
         return
     if not os.path.exists(GSV_START_PS1):
         return
+    if time.time() - _state["last_start"].get("gsv", 0) < COOLDOWN_SECONDS:
+        log("八重樱 TTS：7871 未监听，处于冷却期，跳过拉起")
+        return
     try:
         subprocess.Popen(
             [GSV_PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", GSV_START_PS1],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        _state["last_start"]["gsv"] = time.time()
         log("八重樱 TTS：7871 未监听，已拉起（冷启动约 60-120s）")
     except Exception as exc:
         log(f"八重樱 TTS 拉起失败：{type(exc).__name__}: {exc}")
