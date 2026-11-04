@@ -61,7 +61,7 @@ def ensure_native() -> None:
     if port_open(7873):
         try:
             _get("http://127.0.0.1:7873/set_gpt_weights?weights_path=GPT_weights_v4/teresa4-e20.ckpt", 180)
-            _get("http://127.0.0.1:7873/set_sovits_weights?weights_path=SoVITS_weights_v4/teresa4_e6_s390_l32.pth", 180)
+            _get("http://127.0.0.1:7873/set_sovits_weights?weights_path=GPT_SoVITS/pretrained_models/gsv-v4-pretrained/s2Gv4.pth", 180)
             log("微调权重加载完成")
         except Exception as exc:  # noqa: BLE001
             log(f"权重加载失败: {exc}")

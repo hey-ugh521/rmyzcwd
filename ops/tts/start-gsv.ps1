@@ -17,7 +17,7 @@ if (-not (Test-Port 7873)) {
 # 2) 加载微调权重
 try {
     Invoke-RestMethod 'http://127.0.0.1:7873/set_gpt_weights?weights_path=GPT_weights_v4/teresa4-e20.ckpt' -TimeoutSec 180 | Out-Null
-    Invoke-RestMethod 'http://127.0.0.1:7873/set_sovits_weights?weights_path=SoVITS_weights_v4/teresa4_e6_s390_l32.pth' -TimeoutSec 180 | Out-Null
+    Invoke-RestMethod 'http://127.0.0.1:7873/set_sovits_weights?weights_path=GPT_SoVITS/pretrained_models/gsv-v4-pretrained/s2Gv4.pth' -TimeoutSec 180 | Out-Null
 } catch { }
 
 # 3) OpenAI 适配层
