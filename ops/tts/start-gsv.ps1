@@ -10,7 +10,7 @@ function Test-Port($port) {
 
 # 1) 原生 API
 if (-not (Test-Port 7873)) {
-    Start-Process -FilePath $py -ArgumentList 'api_v2.py','-a','127.0.0.1','-p','7873','-c','GPT_SoVITS/configs/tts_infer_v4.yaml' -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput "$root\api_native.log" -RedirectStandardError "$root\api_native.err.log"
+    Start-Process -FilePath $py -ArgumentList 'api_v2.py','-a','127.0.0.1','-p','7873','-c','GPT_SoVITS/configs/tts_infer_v4_fp32.yaml' -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput "$root\api_native.log" -RedirectStandardError "$root\api_native.err.log"
     for ($i = 0; $i -lt 90; $i++) { Start-Sleep -Seconds 2; if (Test-Port 7873) { break } }
 }
 

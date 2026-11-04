@@ -48,7 +48,7 @@ def ensure_native() -> None:
     log("启动 GPT-SoVITS 原生 API (7873)")
     subprocess.Popen(
         [PY, "api_v2.py", "-a", "127.0.0.1", "-p", "7873",
-         "-c", "GPT_SoVITS/configs/tts_infer_v4.yaml"],
+         "-c", "GPT_SoVITS/configs/tts_infer_v4_fp32.yaml"],
         cwd=ROOT,
         stdout=open(os.path.join(ROOT, "api_native.log"), "a", encoding="utf-8"),
         stderr=open(os.path.join(ROOT, "api_native.err.log"), "a", encoding="utf-8"),
