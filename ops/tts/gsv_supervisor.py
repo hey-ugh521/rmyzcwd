@@ -48,7 +48,7 @@ def ensure_native() -> None:
     log("启动 GPT-SoVITS 原生 API (7873)")
     subprocess.Popen(
         [PY, "api_v2.py", "-a", "127.0.0.1", "-p", "7873",
-         "-c", "GPT_SoVITS/configs/tts_infer_yae.yaml"],
+         "-c", "GPT_SoVITS/configs/tts_infer_v4.yaml"],
         cwd=ROOT,
         stdout=open(os.path.join(ROOT, "api_native.log"), "a", encoding="utf-8"),
         stderr=open(os.path.join(ROOT, "api_native.err.log"), "a", encoding="utf-8"),
@@ -60,8 +60,8 @@ def ensure_native() -> None:
             break
     if port_open(7873):
         try:
-            _get("http://127.0.0.1:7873/set_gpt_weights?weights_path=GPT_weights_v2/teresa-e20.ckpt", 180)
-            _get("http://127.0.0.1:7873/set_sovits_weights?weights_path=SoVITS_weights_v2/teresa_e6_s762.pth", 180)
+            _get("http://127.0.0.1:7873/set_gpt_weights?weights_path=GPT_weights_v4/teresa4-e20.ckpt", 180)
+            _get("http://127.0.0.1:7873/set_sovits_weights?weights_path=SoVITS_weights_v4/teresa4_e6_s390_l32.pth", 180)
             log("微调权重加载完成")
         except Exception as exc:  # noqa: BLE001
             log(f"权重加载失败: {exc}")

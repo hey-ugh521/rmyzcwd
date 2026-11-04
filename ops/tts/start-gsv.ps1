@@ -10,14 +10,14 @@ function Test-Port($port) {
 
 # 1) 原生 API
 if (-not (Test-Port 7873)) {
-    Start-Process -FilePath $py -ArgumentList 'api_v2.py','-a','127.0.0.1','-p','7873','-c','GPT_SoVITS/configs/tts_infer_yae.yaml' -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput "$root\api_native.log" -RedirectStandardError "$root\api_native.err.log"
+    Start-Process -FilePath $py -ArgumentList 'api_v2.py','-a','127.0.0.1','-p','7873','-c','GPT_SoVITS/configs/tts_infer_v4.yaml' -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput "$root\api_native.log" -RedirectStandardError "$root\api_native.err.log"
     for ($i = 0; $i -lt 90; $i++) { Start-Sleep -Seconds 2; if (Test-Port 7873) { break } }
 }
 
 # 2) 加载微调权重
 try {
-    Invoke-RestMethod 'http://127.0.0.1:7873/set_gpt_weights?weights_path=GPT_weights_v2/teresa-e20.ckpt' -TimeoutSec 180 | Out-Null
-    Invoke-RestMethod 'http://127.0.0.1:7873/set_sovits_weights?weights_path=SoVITS_weights_v2/teresa_e6_s762.pth' -TimeoutSec 180 | Out-Null
+    Invoke-RestMethod 'http://127.0.0.1:7873/set_gpt_weights?weights_path=GPT_weights_v4/teresa4-e20.ckpt' -TimeoutSec 180 | Out-Null
+    Invoke-RestMethod 'http://127.0.0.1:7873/set_sovits_weights?weights_path=SoVITS_weights_v4/teresa4_e6_s390_l32.pth' -TimeoutSec 180 | Out-Null
 } catch { }
 
 # 3) OpenAI 适配层
