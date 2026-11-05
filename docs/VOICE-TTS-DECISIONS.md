@@ -1,7 +1,8 @@
 # 语音（TTS）选型与配置决策
 
-> 2026-11-05 定稿。目标角色：崩坏3 **德丽莎**（中文 CV）。
-> 结论：保留 **GPT-SoVITS v4（fp32）** 作为生产语音；IndexTTS-2.5 已部署但暂不接入。
+> 2026-11-06 更新：生产语音已切换为**迷迭香（明日方舟）社区 GPT-SoVITS 模型**。
+> 背景：德丽莎复刻质量受限（数据 10.89 分钟、单 CV），试听与指标显示社区迷迭香模型（0.736 相似度、σ0.004）复刻质量更好；用户确认采用迷迭香。
+> 历史：德丽莎 GPT-SoVITS v4（fp32）保留为可回滚方案；IndexTTS-2.5 已部署未接入。
 
 ---
 
@@ -9,15 +10,16 @@
 
 | 项 | 值 |
 |---|---|
-| 推理框架 | GPT-SoVITS v4（便携包 `D:\AI\GPT-SoVITS-v4\...`） |
+| 推理框架 | GPT-SoVITS v4 运行时（便携包 `D:\AI\GPT-SoVITS-v4\...`） |
 | 推理精度 | **fp32**（`GPT_SoVITS/configs/tts_infer_v4_fp32.yaml`） |
-| GPT (T2S) | 微调权重 `GPT_weights_v4/teresa4-e20.ckpt` |
-| SoVITS | **v4 基座** `gsv-v4-pretrained/s2Gv4.pth`（不用 LoRA） |
-| 参考音 | `D:\AI\teresa_dataset\segments\ref44_0140.wav`（44.1kHz，原文「吸血鬼德丽莎抓住你了」） |
+| GPT (T2S) | 社区权重 `D:\AI\community_models\Rosmontis\GPT_weights\Rosmontis-e10.ckpt` |
+| SoVITS | 社区权重 `D:\AI\community_models\Rosmontis\SoVITS_weights\Rosmontis_e200_s5600.pth` |
+| 参考音 | `D:\AI\community_models\Rosmontis\Data\问候.wav`（44.1kHz，原文「啊，你是，博士。」） |
 | 输出 | 48kHz |
 | 服务 | 原生 API `127.0.0.1:7873` + OpenAI 兼容适配层 `127.0.0.1:7871` |
 | 网关 | `tts_speak` 默认 `engine=mobius`，失败自动回退 kokoro |
 | 启动 | `ops/tts/start-gsv.ps1`，watchdog 保活；Core `services.gsv` 开机预热 |
+| 回滚（德丽莎） | GPT `GPT_weights_v4/teresa4-e20.ckpt` + SoVITS `gsv-v4-pretrained/s2Gv4.pth` + 参考音 `D:\AI\teresa_dataset\segments\ref44_0140.wav`（「吸血鬼德丽莎抓住你了」），改回 `start-gsv.ps1`/`gsv_supervisor.py`/`gsv_openai_adapter.py` 三处即可 |
 
 ---
 

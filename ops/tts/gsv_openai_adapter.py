@@ -18,8 +18,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 UPSTREAM = "http://127.0.0.1:7873/tts"
-REF_AUDIO = r"D:/AI/teresa_dataset/segments/ref44_0140.wav"
-REF_TEXT = "吸血鬼德丽莎抓住你了"
+REF_AUDIO = r"D:/AI/community_models/Rosmontis/Data/问候.wav"
+REF_TEXT = "啊，你是，博士。"
 SPEED = 1.0
 PORT = 7871
 
@@ -74,3 +74,4 @@ async def speech(req: SpeechRequest):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="info")
+

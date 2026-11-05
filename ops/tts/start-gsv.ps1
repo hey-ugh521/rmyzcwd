@@ -1,4 +1,4 @@
-# 启动 GPT-SoVITS 八重樱微调语音服务（原生 API 7873 + OpenAI 适配层 7871）
+# 启动 GPT-SoVITS 迷迭香社区模型语音服务（原生 API 7873 + OpenAI 适配层 7871）
 # 用法：powershell -ExecutionPolicy Bypass -File ops\tts\start-gsv.ps1
 $ErrorActionPreference = 'SilentlyContinue'
 $root = 'D:\AI\GPT-SoVITS-v4\GPT-SoVITS-v4-20250529-nvidia50'
@@ -16,8 +16,8 @@ if (-not (Test-Port 7873)) {
 
 # 2) 加载微调权重
 try {
-    Invoke-RestMethod 'http://127.0.0.1:7873/set_gpt_weights?weights_path=GPT_weights_v4/teresa4-e20.ckpt' -TimeoutSec 180 | Out-Null
-    Invoke-RestMethod 'http://127.0.0.1:7873/set_sovits_weights?weights_path=GPT_SoVITS/pretrained_models/gsv-v4-pretrained/s2Gv4.pth' -TimeoutSec 180 | Out-Null
+    Invoke-RestMethod 'http://127.0.0.1:7873/set_gpt_weights?weights_path=D:\AI\community_models\Rosmontis\GPT_weights\Rosmontis-e10.ckpt' -TimeoutSec 180 | Out-Null
+    Invoke-RestMethod 'http://127.0.0.1:7873/set_sovits_weights?weights_path=D:\AI\community_models\Rosmontis\SoVITS_weights\Rosmontis_e200_s5600.pth' -TimeoutSec 180 | Out-Null
 } catch { }
 
 # 3) OpenAI 适配层
