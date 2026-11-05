@@ -546,6 +546,38 @@ def check_gsv_tts(dry_run=False):
         log(f"八重樱 TTS 拉起失败：{type(exc).__name__}: {exc}")
 
 
+
+# ---------------------------------------------------------------- 记忆 MCP 服务保活（:8902）
+MEMORY_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\memory\memory_mcp.py"
+MEMORY_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
+MEMORY_CWD = r"C:\Users\lenovo\Desktop\_说明文档\mobius"
+
+
+def check_memory_service(dry_run=False):
+    """8902（长期记忆 MCP）未监听时拉起；LangBot 的工具依赖它。"""
+    if port_alive(8902):
+        return
+    if dry_run:
+        log("记忆服务：8902 未监听（[dry-run] 跳过拉起）")
+        return
+    if not os.path.exists(MEMORY_SCRIPT):
+        return
+    if time.time() - _state["last_start"].get("memory", 0) < COOLDOWN_SECONDS:
+        log("记忆服务：8902 未监听，处于冷却期，跳过拉起")
+        return
+    try:
+        subprocess.Popen(
+            [MEMORY_PYTHON, MEMORY_SCRIPT, "--port", "8902"],
+            cwd=MEMORY_CWD,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        _state["last_start"]["memory"] = time.time()
+        log("记忆服务：8902 未监听，已拉起（冷启动约 10-30s）")
+    except Exception as exc:
+        log(f"记忆服务拉起失败：{type(exc).__name__}: {exc}")
+
+
 # ---------------------------------------------------------------- ComfyUI 预热（消除冷启动代价）
 WARMUP_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\warmup_media.py"
 WARMUP_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
@@ -1586,6 +1618,7 @@ def main():
         check_comfy_warmup(args.dry_run)
         check_embed_server(args.dry_run)
         check_gsv_tts(args.dry_run)
+        check_memory_service(args.dry_run)
         check_kokoro(args.dry_run)
         check_napcat_restart_relink(args.dry_run)
         # MCP 工具调用失败签名 → 重建 LangBot 会话（先于会话顺序检查）
