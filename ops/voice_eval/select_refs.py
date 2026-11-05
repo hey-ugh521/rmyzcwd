@@ -35,7 +35,10 @@ def main() -> int:
             except Exception:  # noqa: BLE001
                 continue
             dur = info.frames / info.samplerate
-            if 3.0 <= dur <= 6.0:
+            text = texts.get(r["file"], "")
+            # 文本与音频必须匹配：字数不能太少（否则 GPT 容易提前停止）
+            rate = len(text) / dur if dur > 0 else 0
+            if 3.0 <= dur <= 6.0 and len(text) >= 8 and 2.5 <= rate <= 7.0:
                 chosen = (r, path, dur)
                 break
         if chosen is None:

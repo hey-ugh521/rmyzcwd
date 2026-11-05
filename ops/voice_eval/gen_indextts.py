@@ -20,6 +20,7 @@ CKPT = os.path.join(BASE, "checkpoints")
 OUT = r"D:\AI\voice_eval\gen\indextts"
 REF = r"D:\AI\teresa_dataset\segments\ref44_0140.wav"
 TEXTS = r"D:\AI\voice_eval\test_texts.json"
+IDS = {"t01", "t04", "t06", "t10"}
 
 # [happy, angry, sad, afraid, disgusted, melancholic, surprised, calm]
 EMO_VEC = {
@@ -45,6 +46,8 @@ def main() -> int:
         d = os.path.join(OUT, emo)
         os.makedirs(d, exist_ok=True)
         for t in texts:
+            if t["id"] not in IDS:
+                continue
             dst = os.path.join(d, f"{t['id']}.wav")
             if os.path.exists(dst) and os.path.getsize(dst) > 10000:
                 continue

@@ -17,6 +17,7 @@ REFS = r"D:\AI\voice_eval\refs.json"
 GOLD_EXTRA = [r"D:\AI\teresa_dataset\segments\ref44_0140.wav"]
 GEN_ROOT = r"D:\AI\voice_eval\gen"
 OUT_CSV = r"D:\AI\voice_eval\metrics.csv"
+IDS = {"t01", "t04", "t06", "t10"}
 OUT_MD = r"D:\AI\voice_eval\report.md"
 
 EMO2VEC_DIR = r"D:\AI\models\modelscope\iic\emotion2vec_plus_large"
@@ -40,6 +41,8 @@ def speaker_embed(model, path: str) -> np.ndarray:
     emb = res[0].get("spk_embedding")
     if emb is None:
         emb = res[0].get("embedding")
+    if hasattr(emb, "detach"):
+        emb = emb.detach().cpu().numpy()
     return np.asarray(emb).reshape(-1)
 
 
@@ -85,7 +88,7 @@ def main() -> int:
             if not os.path.isdir(d):
                 continue
             for fname in sorted(os.listdir(d)):
-                if not fname.endswith(".wav"):
+                if not fname.endswith(".wav") or fname[:-4] not in IDS:
                     continue
                 path = os.path.join(d, fname)
                 try:
