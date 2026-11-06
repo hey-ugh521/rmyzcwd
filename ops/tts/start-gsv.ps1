@@ -8,8 +8,12 @@ function Test-Port($port) {
     try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', $port); $c.Close(); return $true } catch { return $false }
 }
 
-# 1) 原生 API
-if (-not (Test-Port 7873)) {
+# 1) 原生 API（若已有 api_v2 进程在启动中，则等待而不是再拉一个）
+$existing = Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object { $_.CommandLine -match 'api_v2\.py' }
+if ($existing -and (-not (Test-Port 7873))) {
+    for ($i = 0; $i -lt 120; $i++) { Start-Sleep -Seconds 2; if (Test-Port 7873) { break } }
+}
+if ((-not (Test-Port 7873)) -and (-not $existing)) {
     Start-Process -FilePath $py -ArgumentList 'api_v2.py','-a','127.0.0.1','-p','7873','-c','GPT_SoVITS/configs/tts_infer_v4_fp32.yaml' -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput "$root\api_native.log" -RedirectStandardError "$root\api_native.err.log"
     for ($i = 0; $i -lt 90; $i++) { Start-Sleep -Seconds 2; if (Test-Port 7873) { break } }
 }

@@ -547,6 +547,37 @@ def check_gsv_tts(dry_run=False):
 
 
 
+
+# ---------------------------------------------------------------- PowerContext 服务保活（:8000）
+POWERCONTEXT_EXE = r"C:\Users\lenovo\.local\bin\powercontext.exe"
+POWERCONTEXT_CWD = r"D:\AI\powercontext-config"
+
+
+def check_powercontext(dry_run=False):
+    """8000（PowerContext 上下文/记忆服务）未监听时拉起；LangBot 的 PowerContext 插件依赖它。"""
+    if port_alive(8000):
+        return
+    if dry_run:
+        log("PowerContext：8000 未监听（[dry-run] 跳过拉起）")
+        return
+    if not os.path.exists(POWERCONTEXT_EXE):
+        return
+    if time.time() - _state["last_start"].get("powercontext", 0) < COOLDOWN_SECONDS:
+        log("PowerContext：8000 未监听，处于冷却期，跳过拉起")
+        return
+    try:
+        subprocess.Popen(
+            [POWERCONTEXT_EXE, "server", "run", "--env-file", ".env"],
+            cwd=POWERCONTEXT_CWD,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        _state["last_start"]["powercontext"] = time.time()
+        log("PowerContext：8000 未监听，已拉起（冷启动约 5-10s）")
+    except Exception as exc:
+        log(f"PowerContext 拉起失败：{type(exc).__name__}: {exc}")
+
+
 # ---------------------------------------------------------------- 记忆 MCP 服务保活（:8902）
 MEMORY_SCRIPT = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\memory\memory_mcp.py"
 MEMORY_PYTHON = r"D:\AI\qqbot-mcp\Scripts\python.exe"
@@ -1619,6 +1650,7 @@ def main():
         check_embed_server(args.dry_run)
         check_gsv_tts(args.dry_run)
         check_memory_service(args.dry_run)
+        check_powercontext(args.dry_run)
         check_kokoro(args.dry_run)
         check_napcat_restart_relink(args.dry_run)
         # MCP 工具调用失败签名 → 重建 LangBot 会话（先于会话顺序检查）
