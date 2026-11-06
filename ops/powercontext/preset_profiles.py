@@ -76,6 +76,26 @@ def remember(scope_id: str, text: str, reason: str) -> bool:
     return status == 200
 
 
+def create_scope_and_bind(bot_uuid: str, sender_id: str) -> str | None:
+    """账号尚未出现在 LangBot 消息里时，也可预先开通 Scope。"""
+    status, payload = call(
+        "POST", "/v1/scopes",
+        {
+            "title": f"QQ {sender_id}",
+            "summary": f"LangBot 用户 {sender_id} 的独立上下文与记忆",
+            "idempotency_key": f"langbot-speaker-{bot_uuid}-{sender_id}",
+        },
+    )
+    if status not in (200, 201):
+        return None
+    scope_id = payload.get("scope_id")
+    if not scope_id:
+        return None
+    key = {"integration": "langbot", "kind": "speaker", "external_id": external_id(bot_uuid, sender_id)}
+    status, _ = call("PUT", "/v1/scope-bindings", {"key": key, "scope_id": scope_id})
+    return scope_id if status in (200, 201) else None
+
+
 def main() -> int:
     apply_default = "--default" in sys.argv
     config = json.load(open(PROFILES, encoding="utf-8"))
@@ -94,12 +114,15 @@ def main() -> int:
         ).fetchall()
 
     known = {user_id for _, user_id, _ in rows}
+    with psycopg.connect(DSN, autocommit=True) as conn:
+        bot_row = conn.execute(
+            "select uuid from bots where name like '%群友%' limit 1"
+        ).fetchone()
+        primary_bot = bot_row[0] if bot_row else (bot_uuids[0] if bot_uuids else None)
+
     targets: dict[str, list[str]] = {}
     for qq, items in accounts.items():
-        if qq not in known:
-            print(f"  ! QQ {qq} 尚未在 LangBot 出现过，跳过（等 watchdog 开通后再跑）")
-            continue
-        targets[qq] = list(items or [])
+        targets[qq] = list(items or []) + default_items
     if apply_default:
         for qq in known:
             targets.setdefault(qq, []).extend(default_items)
@@ -107,8 +130,12 @@ def main() -> int:
     total_added = 0
     for qq, items in targets.items():
         scope = resolve_scope(bot_uuids, qq)
+        if not scope and primary_bot:
+            scope = create_scope_and_bind(primary_bot, qq)
+            if scope:
+                print(f"  + QQ {qq} 自动开通 Scope {scope}")
         if not scope:
-            print(f"  ! QQ {qq} 没有绑定 Scope，跳过（先跑 provision.py）")
+            print(f"  ! QQ {qq} 没有绑定 Scope，跳过（PowerContext 不可用或开通失败）")
             continue
         existing = list_texts(scope)
         added = 0
