@@ -253,9 +253,18 @@ class TaskRecord:
 
     @property
     def spec(self) -> dict[str, Any]:
-        """执行用的完整参数（由 params + payload 还原）。"""
+        """执行用的完整参数（由 params + payload 还原）。
+
+        注意：payload 是用户原始请求，params 只存了执行参数的子集。
+        `prompt` 列存的是 resolve_spec 合成后的最终 prompt（角色 style_prompt + 用户输入），
+        必须以它为准；否则角色卡在异步任务里会退化成只有用户输入。
+        """
         merged = dict(self.payload)
         merged.update(self.params)
+        if self.prompt:
+            merged["prompt"] = self.prompt
+        if self.character:
+            merged.setdefault("character", self.character)
         return merged
 
     def public(self) -> dict[str, Any]:
