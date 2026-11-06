@@ -78,7 +78,32 @@ def provision(bot_uuid: str, sender_id: str, display: str) -> str | None:
         "PUT", "/v1/scope-bindings",
         {"key": binding_key(bot_uuid, sender_id), "scope_id": scope_id},
     )
-    return scope_id if status in (200, 201) else None
+    if status not in (200, 201):
+        return None
+    apply_preset_profile(scope_id, sender_id)
+    return scope_id
+
+
+PRESETS = r"C:\Users\lenovo\Desktop\_说明文档\mobius\config\account_profiles.json"
+
+
+def apply_preset_profile(scope_id: str, sender_id: str) -> None:
+    """新开通账号时写入预设画像（default + 该 QQ 的专属条目）。"""
+    try:
+        config = json.load(open(PRESETS, encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return
+    items = list(config.get("default") or []) + list((config.get("accounts") or {}).get(sender_id) or [])
+    if not items:
+        return
+    status, payload = call("POST", "/v1/memory/entries/list", {"scope_id": scope_id})
+    existing = {e.get("text", "").strip() for e in (payload.get("entries") or [])} if status == 200 else set()
+    for text in items:
+        text = (text or "").strip()
+        if not text or text in existing:
+            continue
+        call("POST", "/v1/memory/remember",
+             {"scope_id": scope_id, "kind": "profile", "text": text, "reason": "preset-profile"})
 
 
 def main() -> int:
