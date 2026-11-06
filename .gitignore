@@ -50,3 +50,6 @@ mobius/
 .env
 *.env
 pgbackup/
+
+# 网关运行时锁文件
+media_gateway/.gateway.lock
