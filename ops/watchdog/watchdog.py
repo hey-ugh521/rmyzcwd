@@ -523,16 +523,19 @@ GSV_PWSH = r"D:\Tools\PowerShell7\pwsh.exe"
 
 
 def check_gsv_tts(dry_run=False):
-    """7871（OpenAI 兼容适配层）未监听时，整套拉起 GPT-SoVITS 语音服务。"""
-    if port_alive(7871):
+    """7871（适配层）或 7873（原生 API）任一未监听时，整套拉起 GPT-SoVITS 语音服务。"""
+    adapter_ok = port_alive(7871)
+    native_ok = port_alive(7873)
+    if adapter_ok and native_ok:
         return
+    missing = "7873 原生 API" if adapter_ok else ("7871 适配层" if native_ok else "7871/7873")
     if dry_run:
-        log("八重樱 TTS：7871 未监听（[dry-run] 跳过拉起）")
+        log(f"八重樱 TTS：{missing} 未监听（[dry-run] 跳过拉起）")
         return
     if not os.path.exists(GSV_START_PS1):
         return
     if time.time() - _state["last_start"].get("gsv", 0) < COOLDOWN_SECONDS:
-        log("八重樱 TTS：7871 未监听，处于冷却期，跳过拉起")
+        log(f"八重樱 TTS：{missing} 未监听，处于冷却期，跳过拉起")
         return
     try:
         subprocess.Popen(
@@ -541,7 +544,7 @@ def check_gsv_tts(dry_run=False):
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         _state["last_start"]["gsv"] = time.time()
-        log("八重樱 TTS：7871 未监听，已拉起（冷启动约 60-120s）")
+        log(f"八重樱 TTS：{missing} 未监听，已拉起（冷启动约 60-120s）")
     except Exception as exc:
         log(f"八重樱 TTS 拉起失败：{type(exc).__name__}: {exc}")
 
