@@ -3010,10 +3010,10 @@ _mcp_app = server.streamable_http_app(
     streamable_http_path="/mcp",
     host="0.0.0.0",
     json_response=False,
-    stateless_http=False,
-    # 默认 30 分钟回收空闲会话。QQ 机器人经常一停就是半小时以上，
-    # 会话被回收后 LangBot 侧重连又可能撞上线程池满 → 调用挂死到 180s 超时
-    # （2026-10-29 23:57 实测发生过）。这里直接不回收。
+    # stateless：每次请求独立处理，不依赖长连接会话。
+    # 这样网关重启后 LangBot 不需要重建 MCP 会话，也不会积累僵尸会话
+    # （2026-11-06：stateful 模式下网关重启导致 tts/comfyui 工具在 LangBot 侧消失）。
+    stateless_http=True,
     session_idle_timeout=None,
 )
 app = _AppWithWorker(_mcp_app)
