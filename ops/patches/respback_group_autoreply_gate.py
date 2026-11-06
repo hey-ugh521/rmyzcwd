@@ -44,16 +44,18 @@ class SendResponseBackStage(stage.PipelineStage):
         message_chain = query.resp_message_chain[-1]
 
         # Möbius: 群聊自动发言判断——模型不想回应时只输出 <pass/>，这里直接丢弃。
+        # 注意：消息链里可能还有 At/Quote 等段，只检查纯文本段。
         _pass_markers = {"<pass/>", "<pass>", "</pass>", "pass", "[pass]", "（不回复）"}
-        if message_chain and all(
-            isinstance(seg, platform_message.Plain) for seg in message_chain
-        ):
-            _joined = " ".join((seg.text or "").strip() for seg in message_chain).strip().lower()
-            if _joined in _pass_markers or _joined == "":
-                self.ap.logger.info("mobius: 群聊发言判断为不回应，已跳过发送")
-                return entities.StageProcessResult(
-                    result_type=entities.ResultType.CONTINUE, new_query=query
-                )
+        _plain_text = " ".join(
+            (seg.text or "").strip()
+            for seg in message_chain
+            if isinstance(seg, platform_message.Plain)
+        ).strip().lower()
+        if _plain_text in _pass_markers or _plain_text == "":
+            self.ap.logger.info("mobius: 群聊发言判断为不回应，已跳过发送")
+            return entities.StageProcessResult(
+                result_type=entities.ResultType.CONTINUE, new_query=query
+            )
 
         await _mobius_bridge_media_urls(self.ap.logger, message_chain)
 
