@@ -18,7 +18,7 @@ Console ───────────┘        ├─ 任务中心 / 审计
 
 | 路径 | 说明 |
 |---|---|
-| `docs/ARCHITECTURE.md` | 统一接口规格（唯一契约，改它要同步所有实现） |
+| `docs/ARCHITECTURE-v1.1.md` | 统一接口规格（唯一契约，改它要同步所有实现；v1.0 已归档到 `docs/archive/reports-history/`） |
 | `docs/ACCEPTANCE.md` | 验收标准与端到端流程（产品侧看这个） |
 | `core/` | Core 本体：`store.py`（库/档案）`services.py`（监管+网关客户端）`agent.py`（LLM+工具）`server.py`（HTTP） |
 | `core/console/` | 内嵌单页控制台（无构建） |

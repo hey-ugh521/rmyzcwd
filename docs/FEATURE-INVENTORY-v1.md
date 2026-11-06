@@ -4,6 +4,10 @@
 > 依据：仓库文档（ACCEPTANCE/ARCHITECTURE/STATUS）+ bot 运行时实测（14 个 MCP 工具、7 个插件、当前 prompt、日志）
 > 原则：只写有证据的状态；没验证的标「未验证」，不写成已完成
 
+> **时效提示（2026-11-06）**：本文件是 11-03 的快照，保留原样作为规划输入。
+> 其中「语音送达未验证」「群聊触发规则未做」「14 个工具但语音链路未知」等条目
+> 已被 11-06 的改动改变，当前事实以 `docs/STATUS.md` 为准。
+
 ---
 
 ## 1. MVP 目标（来自 ACCEPTANCE.md）
@@ -47,7 +51,7 @@
 1. **记忆双轨**：修 LTM（把嵌入接到本地 bge-m3 :8903，或换 LangBot Models 嵌入）？还是继续 Graphiti？还是分工（LTM=对话记忆，Graphiti=世界状态/时间线）？
 2. **生图双通道**：AIImagePlugin 与 ComfyUI MCP 工具重叠，近期日志未见 AIImage 被调用——建议明确停用或指定唯一主通道。
 3. **语音送达**：`tts_speak` 有产物，但 QQ 端是否收到语音消息未验证（图片桥接已做，语音是否同样处理未知）。
-4. **双大脑未合并**：LangBot（QQ）与 Core（Console/Web）各有一套上下文/记忆/任务；STATUS 指出的合并开关（LANGBOT-CUTOVER）尚未执行。
+4. **双大脑未合并**：LangBot（QQ）与 Core（Console/Web）各有一套上下文/记忆/任务；STATUS 指出的合并开关（`docs/archive/reports-history/LANGBOT-CUTOVER.md`）尚未执行。
 5. **群聊/多用户**：当前只验证过私聊；群聊触发规则、权限、多用户隔离未做。
 6. **上下文管理**：仍无历史摘要/预算，长时间对话会稀释人设（今晚已踩过）。
 
@@ -61,7 +65,7 @@
 | P1 | 停用/明确 AIImagePlugin 通道 | 避免双通道冲突 |
 | P2 | 上下文管理（历史摘要） | 保护人设与成本 |
 | P2 | 群聊/多用户设计 | 你之前明确说后面要多用户 |
-| P3 | 双大脑合并（LANGBOT-CUTOVER） | 影响记忆/审计归属，建议等记忆方案定了再做 |
+| P3 | 双大脑合并（archive/reports-history/LANGBOT-CUTOVER.md） | 影响记忆/审计归属，建议等记忆方案定了再做 |
 
 ## 6. 需要你（和 bot）回答的问题
 

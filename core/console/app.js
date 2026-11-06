@@ -1,5 +1,5 @@
 /* Möbius Console —— 原生 JS 单页应用（无构建步骤、无 CDN 依赖）
- * 契约：mobius/docs/ARCHITECTURE.md §4
+ * 契约：mobius/docs/ARCHITECTURE-v1.1.md §4
  * 所有请求同源 /api/*；任何失败都在页面内可见（toast + 内联错误）。
  */
 (function () {

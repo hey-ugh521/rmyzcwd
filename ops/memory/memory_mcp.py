@@ -15,19 +15,20 @@ import json
 import logging
 import os
 import socket
+import sys
 from typing import Any
 
 import httpx
 import psycopg
 from mcp.server.mcpserver import MCPServer
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import credentials  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("mobius.memory")
 
-DSN = os.environ.get(
-    "MOBIUS_MEMORY_DSN",
-    "postgresql://postgres:PGPASSWORD-ROTATED-REMOVED@127.0.0.1:55432/mobius",
-)
+DSN = os.environ.get("MOBIUS_MEMORY_DSN") or credentials.pg_dsn("mobius")
 EMBED_URL = os.environ.get("MOBIUS_EMBED_URL", "http://127.0.0.1:8903/v1/embeddings")
 EMBED_MODEL = os.environ.get("MOBIUS_EMBED_MODEL", "bge-m3")
 

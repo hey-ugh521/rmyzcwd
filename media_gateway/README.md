@@ -1,6 +1,6 @@
 # Möbius Media Gateway v2
 
-单进程同时提供三张脸（契约：`mobius/docs/ARCHITECTURE.md` §1 / §5 / §6 / §7）。
+单进程同时提供三张脸（契约：`mobius/docs/ARCHITECTURE-v1.1.md` §1 / §5 / §6 / §7）。
 
 | 面 | 入口 | 用途 |
 |---|---|---|

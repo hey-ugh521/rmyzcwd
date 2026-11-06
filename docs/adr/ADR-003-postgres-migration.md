@@ -30,4 +30,5 @@
 
 ## 相关报告
 
-`docs/STAGE0..STAGE4-*.md`、`docs/ARCHITECTURE-MIGRATION-plan.md`
+`docs/archive/reports-history/STAGE0..STAGE4-*.md`（五份分阶段报告）。
+原 `docs/ARCHITECTURE-MIGRATION-plan.md` 已不在仓库中，迁移设计以本文为准。

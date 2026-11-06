@@ -34,9 +34,12 @@ import sys
 import time
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import credentials  # noqa: E402
+
 NAPCAT_API = "http://127.0.0.1:13000"   # 容器 3000 已挪到宿主机 13000，避开 Open WebUI 的 3000
 LANGBOT_API = "http://127.0.0.1:5300"
-API_KEY = "lbk-ROTATED-REMOVED"
+API_KEY = credentials.langbot_api_key()
 BOT_ID = "f128506b-a8aa-417c-9b55-39bc2fc99894"
 DB = r"C:\Users\lenovo\Desktop\_说明文档\qqbot\langbot\data\langbot.db"
 

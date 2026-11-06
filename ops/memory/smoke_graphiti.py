@@ -27,7 +27,10 @@ class NoopReranker(CrossEncoderClient):
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         return [(p, 1.0) for p in passages]
 
-DS_KEY = os.environ.get("MOBIUS_DEEPSEEK_KEY", "sk-ROTATED-REMOVED")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import credentials  # noqa: E402
+
+DS_KEY = credentials.deepseek_api_key()
 FALKOR = dict(host="127.0.0.1", port=63790, database="mobius_memory")
 EMBED = "http://127.0.0.1:8903/v1"
 

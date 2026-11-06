@@ -18,10 +18,10 @@ import urllib.request
 
 import psycopg
 
-DSN = os.environ.get(
-    "LANGBOT_DSN",
-    "postgresql://postgres:PGPASSWORD-ROTATED-REMOVED@127.0.0.1:55432/langbot",
-)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import credentials  # noqa: E402
+
+DSN = os.environ.get("LANGBOT_DSN") or credentials.pg_dsn("langbot")
 SERVER = os.environ.get("POWERCONTEXT_URL", "http://127.0.0.1:8000")
 PROFILES = r"C:\Users\lenovo\Desktop\_说明文档\mobius\config\account_profiles.json"
 

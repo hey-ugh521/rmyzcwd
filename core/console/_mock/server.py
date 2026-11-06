@@ -2,7 +2,7 @@
 """Möbius Console 本地 mock 服务器（无第三方依赖）。
 
 用途：在真实 Core（127.0.0.1:8900）未就绪时，独立验证 Console 的六个视图、
-加载态、错误态与全部交互；接口字段严格按 mobius/docs/ARCHITECTURE.md §4 构造。
+加载态、错误态与全部交互；接口字段严格按 mobius/docs/ARCHITECTURE-v1.1.md §4 构造。
 
 运行：
     python mobius/core/console/_mock/server.py --port 8911

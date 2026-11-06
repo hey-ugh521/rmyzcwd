@@ -80,11 +80,15 @@ WORKFLOW_MAP = {
     "removebg": "comic-remove-bg.json",
     "qwen": "comic-qwen.json",
     "flux3": "comic-flux3.json",
+    "flux1": "comic-flux1.json",
+    "animagine": "comic-animagine.json",
 }
 # 千问 Image 是新架构（UNETLoader + CLIPLoader type=qwen_image + 专用 VAE +
 # SamplerCustomAdvanced/ManualSigmas），没有 CheckpointLoaderSimple，
 # 因此不能叠加 SDXL 的角色 LoRA，也不接受 character 档案。
 QWEN_WORKFLOWS = {"qwen"}
+# 新架构底模（UNETLoader / GGUF 加载）统一不支持 SDXL 角色卡、LoRA 注入与 checkpoint 覆盖。
+MODEL_WORKFLOWS = {"qwen", "flux3", "flux1", "animagine"}
 # 需要输入参考图 / 额外模型的工作流：MVP 只支持单张参考图注入
 IMAGE_INPUT_WORKFLOWS = {"upscale", "removebg"}
 # MVP 明确不做（§10）：多参考图 FaceID + ControlNet
@@ -418,6 +422,8 @@ def public_models(cfg: Settings) -> list[dict[str, Any]]:
             "size": e.get("size"),
             "supports_character": bool(e.get("supports_character")),
             "supports_lora": bool(e.get("supports_lora")),
+            "available": e.get("available", True),
+            "timeout_sec": e.get("timeout_sec"),
             "notes": e.get("notes", ""),
         })
     return out
@@ -758,6 +764,15 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
         if default_profile is not None:
             profile = default_profile
 
+    # 已登记但本机不可用的底模（如超出显存的视频模型）要明确拒绝，避免触发长时间失败
+    if profile is not None and profile.get("available") is False:
+        raise ApiError(
+            "model_unavailable",
+            f"底模 {profile.get('name') or profile.get('id')} 本机不可用："
+            f"{profile.get('notes') or '显存/依赖不满足'}",
+            400,
+        )
+
     policy = (character or {}).get("media_policy") or {}
     policy_key = "allow_image" if kind == "image" else "allow_voice"
     if character and policy.get(policy_key) is False:
@@ -782,27 +797,27 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
             "workflow_unsupported",
             f"工作流 {workflow} 需要多张参考图 + FaceID/ControlNet，MVP 范围外（契约 §10）",
         )
-    if workflow in QWEN_WORKFLOWS:
-        # 千问没有 CheckpointLoaderSimple，角色档案的 checkpoint/LoRA 都注入不了，
+    if workflow in MODEL_WORKFLOWS:
+        # 新架构底模没有 CheckpointLoaderSimple，角色档案的 checkpoint/LoRA 都注入不了，
         # 与其静默丢弃，不如直接说清楚。
         if character:
             raise ApiError(
                 "workflow_no_character",
-                f"工作流 {workflow}（千问 Image）不支持角色档案：{character.get('name') or character.get('id')} 的 "
+                f"底模 {workflow}（UNETLoader/GGUF 架构）不支持角色档案：{character.get('name') or character.get('id')} 的 "
                 "LoRA 与 checkpoint 是 SDXL 专用的。请去掉 character，直接用 prompt 描述角色；"
-                "要角色一致性请用 workflow=portrait",
+                "要角色一致性请用 workflow=portrait（Illustrious）",
                 400,
             )
         if body.get("loras"):
             raise ApiError(
                 "workflow_no_lora",
-                f"工作流 {workflow}（千问 Image）不支持 LoRA 注入（现有 LoRA 均为 SDXL 训练）",
+                f"底模 {workflow}（UNETLoader/GGUF 架构）不支持 LoRA 注入（现有角色 LoRA 均为 SDXL 训练）",
                 400,
             )
         if body.get("checkpoint"):
             raise ApiError(
                 "workflow_no_checkpoint_param",
-                f"工作流 {workflow}（千问 Image）用 UNETLoader 加载模型，不接受 checkpoint 参数",
+                f"底模 {workflow} 用 UNETLoader/GGUF 加载模型，不接受 checkpoint 参数",
                 400,
             )
 
@@ -856,10 +871,14 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
     if width is None and height is None and isinstance(prof_size, (list, tuple)) and len(prof_size) >= 2:
         width = _as_int(prof_size[0])
         height = _as_int(prof_size[1])
-    if workflow in QWEN_WORKFLOWS:
-        # 千问模板默认 1024x1024；显式写进 spec，结果里能回报真实尺寸，也便于复刻
-        width = width or 1024
-        height = height or 1024
+    if workflow in MODEL_WORKFLOWS:
+        # 新架构模板默认 1024x1024；显式写进 spec，结果里能回报真实尺寸，也便于复刻
+        if isinstance(prof_size, (list, tuple)) and len(prof_size) >= 2:
+            width = width or _as_int(prof_size[0])
+            height = height or _as_int(prof_size[1])
+        else:
+            width = width or 1024
+            height = height or 1024
     for key, value in (("width", width), ("height", height)):
         if value is not None and (value < 64 or value > 4096):
             raise ApiError("invalid_size", f"{key}={value} 超出 64–4096 范围")
@@ -897,6 +916,7 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
         "width": width,
         "height": height,
         "seed": seed,
+        "timeout_sec": (profile or {}).get("timeout_sec"),
         "reference_image": reference_image,
         "warnings": warnings,
         "loras_applied": [],
@@ -1331,7 +1351,8 @@ class TaskStore(DurableTaskStore):
         cancel_view = _CancelView(self, task.id)
         try:
             output = await comfy_wait_output(
-                self.cfg, prompt_id, cancel_view, timeout=self.cfg.task_timeout
+                self.cfg, prompt_id, cancel_view,
+                timeout=float((task.spec or {}).get("timeout_sec") or self.cfg.task_timeout),
             )
             if (self.get(task.id) or task).cancel_requested:
                 self.finish(task.id, status=STATUS_CANCELLED)
@@ -1607,8 +1628,9 @@ class TaskStore(DurableTaskStore):
         self.update_params(task.id, {"prompt_id": prompt_id})
         _check_cancel(cancel_view)
 
+        task_timeout = float(spec.get("timeout_sec") or self.cfg.task_timeout)
         output = await comfy_wait_output(
-            self.cfg, prompt_id, cancel_view, timeout=self.cfg.task_timeout
+            self.cfg, prompt_id, cancel_view, timeout=task_timeout
         )
         seconds = round(time.time() - started, 1)
         return self._build_image_result(task, spec, prompt_id, output, seconds)
@@ -2245,9 +2267,13 @@ server = MCPServer(
         "| 每次用户主动生图都要生成新的 idempotency_key；同一次逻辑请求重试必须复用同一个 key。"
         "| 轮询 60 次仍未结束：停止轮询、告知用户任务仍在后台执行并给出 task_id；"
         "轮询耗尽不等于失败，也不要取消后台任务。"
-        "【默认模型】不指定 model 时默认用 qwen_image_2_1（千问，速度均衡）；"
-        "flux3_klein 最慢（约 2~5 分钟），仅在用户明确要求电影感/摄影质感时使用；"
-        "anime_illustrious 仅在二次元/动漫角色（或需要 character/LoRA）时使用。"
+        "【底模 = 你的画笔】生图前先想清楚用哪支笔，按题材选："
+        "anime_illustrious（Illustrious XL）：二次元/角色一致性专用，唯一支持 character 角色卡与 LoRA；"
+        "qwen_image_2_1（千问 Image 2.1 Turbo）：默认画笔，写实/通用，中文语义好、速度均衡；"
+        "flux3_klein（FLUX 3 Klein）：写实/电影感/文字渲染，实测约 1 分钟/张，适合要电影感或画面文字时用；"
+        "flux1_schnell（FLUX.1 Schnell GGUF）：本机 8GB 显存不可用（实测 >9 分钟且会中断），已禁用，不要尝试；"
+        "animagine_xl_3_1（Animagine XL 3.1）：通用二次元插画，人物外观靠 prompt 描述，没有角色卡时的二次元备选；"
+        "minimax_h3 是视频+音频模型，本机 8GB 显存不可用，不要尝试。"
         "【生图优先用角色档案】character 参数可传角色 id、中文名或别名"
         "（如 幽兰黛尔 / 布洛妮娅 / 符华 / 琪亚娜 / 爱莉希雅 / 德丽莎 …），"
         "系统会自动补齐 checkpoint、LoRA、权重、尺寸与画风提示词——比手工拼 LoRA 更稳。"
@@ -2255,14 +2281,9 @@ server = MCPServer(
         "注意：character 为空时才需要自己传 loras 数组。"
         "【可复现】generate 的返回里带 seed / checkpoint / loras / prompt，"
         "想复刻同一张图就带上同样的 seed 重发。"
-        "【按画风选模型】生图统一入口是 comfyui_generate(model=...)，不要自己猜参数。"
-        "路由规则：二次元/动漫人物/需要角色一致性或 LoRA → model=anime_illustrious；"
-        "写实、摄影感、电影感、强构图 → model=flux3_klein；"
-        "写实但要求更强的中文语义理解、或想更快更省 → model=qwen_image_2_1。"
-        "拿不准或用户描述含糊时，先调 comfyui_list_models（返回每个模型的 style/尺寸/是否支持角色），"
-        "选好再生成；不要默认就用动漫模型。"
-        "限制：只有 anime_illustrious 支持 character 与 LoRA；qwen_image_2_1 与 flux3_klein 都不支持，"
-        "对它们传 character/loras 会直接报错。"
+        "【怎么选】生图统一入口是 comfyui_generate(model=...)，不要自己猜参数；"
+        "拿不准时先调 comfyui_list_models（返回每支画笔的 style/size/notes/是否支持角色），选好再生成；"
+        "限制：只有 anime_illustrious 支持 character 与 LoRA；其他底模传 character/loras/checkpoint 会直接报错。"
         "不传 model 时才会退回旧参数 workflow（portrait/landscape/upscale/removebg）。"
     ),
 )

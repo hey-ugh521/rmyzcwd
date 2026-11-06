@@ -1,0 +1,5 @@
+﻿model,workflow,status,seconds,filename,width,height,bytes,error
+anime_illustrious,portrait,pass,70.5,mobius_portrait_00081_.png,832,1216,1257917,""
+qwen_image_2_1,qwen,pass,70.4,mobius_qwen_00048_.png,1024,1024,1325826,""
+flux3_klein,flux3,pass,90.7,mobius_flux3_00010_.png,1024,1024,1472495,""
+animagine_xl_3_1,animagine,pass,80.9,mobius_animagine_00004_.png,832,1216,1349774,""

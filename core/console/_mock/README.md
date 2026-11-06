@@ -13,7 +13,7 @@ python mobius\core\console\_mock\server.py --port 8911
 http://127.0.0.1:8911/console/
 ```
 
-mock 的接口字段严格按 `mobius/docs/ARCHITECTURE.md` §4 构造，并在此基础上补充了
+mock 的接口字段严格按 `mobius/docs/ARCHITECTURE-v1.1.md` §4 构造，并在此基础上补充了
 错误态/空态需要的场景。状态只保存在内存里，重启即恢复。
 
 可选参数：
