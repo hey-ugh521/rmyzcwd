@@ -1919,10 +1919,32 @@ async def synth_tts(
             502,
         )
     os.makedirs(cfg.tts_dir, exist_ok=True)
-    filename = f"tts_{int(time.time())}_{random.randint(100, 999)}.wav"
+    filename = f"tts_{int(time.time())}_{random.randint(100, 999)}_{uuid.uuid4().hex[:6]}.wav"
     filepath = os.path.join(cfg.tts_dir, filename)
-    with open(filepath, "wb") as f:
-        f.write(audio)
+    # 原子落盘 + 写后校验：避免并发/重启半截文件、以及相对路径写错位置
+    tmp_path = filepath + ".tmp"
+    try:
+        with open(tmp_path, "wb") as f:
+            f.write(audio)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, filepath)
+    except Exception as exc:  # noqa: BLE001
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise ApiError("tts_write_failed", f"语音文件写入失败（{cfg.tts_dir}）: {exc}", 500) from exc
+    try:
+        written = os.path.getsize(filepath)
+    except OSError:
+        written = -1
+    if written != len(audio):
+        raise ApiError(
+            "tts_write_incomplete",
+            f"语音文件写入不完整（期望 {len(audio)} 字节，实际 {written}）: {filepath}",
+            500,
+        )
     seconds = _wav_seconds(audio)
     query = urllib.parse.urlencode({"file": filename})
     return {
@@ -2997,6 +3019,37 @@ _mcp_app = server.streamable_http_app(
 app = _AppWithWorker(_mcp_app)
 
 
+def _acquire_instance_lock(port: int) -> bool:
+    """单实例锁：同一 tts_output 目录只允许一个网关进程写入。"""
+    lock_path = os.path.join(GATEWAY_DIR, ".gateway.lock")
+    try:
+        if os.path.exists(lock_path):
+            try:
+                old_pid = int(open(lock_path, encoding="utf-8").read().strip() or "0")
+            except (OSError, ValueError):
+                old_pid = 0
+            if old_pid > 0 and old_pid != os.getpid():
+                alive = False
+                try:
+                    import psutil  # type: ignore
+
+                    alive = psutil.pid_exists(old_pid)
+                except Exception:  # noqa: BLE001
+                    try:
+                        os.kill(old_pid, 0)
+                        alive = True
+                    except OSError:
+                        alive = False
+                if alive:
+                    log.warning("已有网关实例（pid=%s）持有 %s，本实例退出", old_pid, lock_path)
+                    return False
+        with open(lock_path, "w", encoding="utf-8") as f:
+            f.write(str(os.getpid()))
+        return True
+    except OSError:
+        return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Möbius Media Gateway v2 (MCP + REST + proxy)")
     parser.add_argument("--port", type=int, default=None, help="监听端口（默认取配置，8899）")
@@ -3006,12 +3059,15 @@ def main() -> None:
     if _port_in_use(_host, args.port):
         log.warning("已有网关实例在监听 %s:%s，本实例退出", _host, args.port)
         return 0
+    if not _acquire_instance_lock(args.port or settings.port):
+        return 0
     if args.port:
         settings.apply_port(args.port)
     if args.host:
         settings.host = args.host
     settings.ensure_dirs()
     log.info("Möbius Media Gateway v%s 启动于 http://%s:%s", VERSION, settings.host, settings.port)
+    log.info("tts_output 落盘目录: %s", settings.tts_dir)
     log.info(
         "comfyui=%s kokoro=%s f5=%s core=%s workflows=%s",
         settings.comfy_url,

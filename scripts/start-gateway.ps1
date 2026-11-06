@@ -9,6 +9,14 @@ function Test-Port($port) {
 
 if (Test-Port 8899) { Write-Output "Gateway 已在监听 8899"; exit 0 }
 
+# 清理残留的旧网关进程（防止重复实例写不同目录 / 抢端口）
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object {
+    $_.CommandLine -like '*media_gateway*server.py*'
+} | ForEach-Object {
+    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+}
+Start-Sleep -Seconds 2
+
 $cfg = Get-Content (Join-Path $root 'config.json') -Raw | ConvertFrom-Json
 $gw = $cfg.services.gateway
 foreach ($prop in $gw.env.PSObject.Properties) { [Environment]::SetEnvironmentVariable($prop.Name, [string]$prop.Value) }
