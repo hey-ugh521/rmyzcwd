@@ -548,6 +548,33 @@ def check_gsv_tts(dry_run=False):
 
 
 
+
+# ---------------------------------------------------------------- PowerContext 自动开通新用户（每 5 分钟）
+POWERCONTEXT_PROVISION = r"C:\Users\lenovo\Desktop\_说明文档\mobius\ops\powercontext\provision.py"
+POWERCONTEXT_PROVISION_PY = r"D:\Anaconda3\envs\open-webui\python.exe"
+
+
+def check_powercontext_provision(dry_run=False):
+    """为新出现的 QQ 发送者创建独立 Scope（QQ 号=账号）。"""
+    if not os.path.exists(POWERCONTEXT_PROVISION):
+        return
+    if time.time() - _state["last_start"].get("pc_provision", 0) < 300:
+        return
+    _state["last_start"]["pc_provision"] = time.time()
+    if dry_run:
+        log("PowerContext 自动开通：[dry-run] 跳过")
+        return
+    try:
+        subprocess.Popen(
+            [POWERCONTEXT_PROVISION_PY, POWERCONTEXT_PROVISION],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        log("PowerContext 自动开通：已触发")
+    except Exception as exc:
+        log(f"PowerContext 自动开通失败：{type(exc).__name__}: {exc}")
+
+
 # ---------------------------------------------------------------- PowerContext 服务保活（:8000）
 POWERCONTEXT_EXE = r"C:\Users\lenovo\.local\bin\powercontext.exe"
 POWERCONTEXT_CWD = r"D:\AI\powercontext-config"
@@ -1651,6 +1678,7 @@ def main():
         check_gsv_tts(args.dry_run)
         check_memory_service(args.dry_run)
         check_powercontext(args.dry_run)
+        check_powercontext_provision(args.dry_run)
         check_kokoro(args.dry_run)
         check_napcat_restart_relink(args.dry_run)
         # MCP 工具调用失败签名 → 重建 LangBot 会话（先于会话顺序检查）
