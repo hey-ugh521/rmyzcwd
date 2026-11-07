@@ -101,6 +101,7 @@ def relaunch_as_admin() -> bool:
 def single_instance() -> bool:
     try:
         kernel32 = ctypes.windll.kernel32
+        kernel32.SetLastError(0)
         handle = kernel32.CreateMutexW(None, False, MUTEX_NAME)
         if not handle:
             return True
@@ -387,6 +388,302 @@ def cmd_status() -> int:
     return 0
 
 
+
+# ---------------------------------------------------------------------------
+# 首启向导（P4）
+# ---------------------------------------------------------------------------
+
+def _manifest_path() -> str:
+    return os.path.join(ROOT, "ops", "l3", "packs", "fragments.json")
+
+
+def _versions_path() -> str:
+    return os.path.join(ROOT, "versions.json")
+
+
+def components_state() -> list[dict]:
+    import json as _json
+
+    try:
+        manifest = _json.loads(open(_manifest_path(), encoding="utf-8").read())
+    except OSError:
+        return []
+    try:
+        versions = _json.loads(open(_versions_path(), encoding="utf-8").read()).get("components", {})
+    except (OSError, ValueError):
+        versions = {}
+    rows = []
+    for cid, comp in sorted((manifest.get("components") or {}).items()):
+        rows.append({
+            "id": cid,
+            "version": comp.get("version"),
+            "required": bool(comp.get("required")),
+            "size": int(comp.get("size") or 0),
+            "installed": cid in versions,
+        })
+    return rows
+
+
+def install_components(ids: list[str] | None = None, source_dir: str = "") -> bool:
+    import importlib.util
+    from pathlib import Path
+
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "mobius_downloader", os.path.join(ROOT, "ops", "l3", "downloader.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        dl = mod.Downloader(
+            manifest=Path(_manifest_path()),
+            root=Path(ROOT),
+            source_dir=Path(source_dir) if source_dir else None,
+        )
+        target = ids or [c["id"] for c in components_state() if c["required"]]
+        for cid in dl.resolve(target):
+            log(f"安装组件: {cid}")
+            dl.install(cid)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log(f"组件安装失败: {exc}")
+        return False
+
+
+def _raw_config() -> dict:
+    import json as _json
+
+    try:
+        return _json.loads(open(CONFIG_PATH, encoding="utf-8").read())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_raw_config(cfg: dict) -> None:
+    import json as _json
+
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        _json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+
+def configure_llm(base_url: str, api_key: str, model: str) -> tuple[bool, str]:
+    cfg = _raw_config()
+    llm = cfg.setdefault("llm", {})
+    if base_url:
+        llm["base_url"] = base_url.rstrip("/")
+    if api_key:
+        llm["api_key"] = api_key
+    if model:
+        llm["model"] = model
+    _save_raw_config(cfg)
+    return test_llm()
+
+
+def test_llm() -> tuple[bool, str]:
+    import json as _json
+
+    cfg = _raw_config()
+    llm = cfg.get("llm") or {}
+    base = str(llm.get("base_url") or "").rstrip("/")
+    key = str(llm.get("api_key") or "")
+    model = str(llm.get("model") or "")
+    if not base or not key or not model:
+        return False, "LLM 配置不完整（base_url / api_key / model）"
+    body = _json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 5,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        base + "/chat/completions", data=body, method="POST",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = _json.loads(resp.read().decode("utf-8") or "{}")
+        text = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        return True, text.strip() or "连接成功"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"连接失败: {exc}"
+
+
+def migrate_models(src: str, dst: str) -> bool:
+    if not src or not os.path.isdir(src):
+        log(f"模型源目录不存在: {src}")
+        return False
+    os.makedirs(dst, exist_ok=True)
+    log(f"迁移模型: {src} -> {dst}")
+    try:
+        proc = subprocess.run(
+            ["robocopy", src, dst, "/E", "/XJ", "/NFL", "/NDL", "/NJH", "/NJS", "/R:1", "/W:1"],
+            capture_output=True, text=True,
+        )
+        ok = proc.returncode < 8
+        log(f"迁移完成（robocopy 退出码 {proc.returncode}）")
+        return ok
+    except Exception as exc:  # noqa: BLE001
+        log(f"迁移失败: {exc}")
+        return False
+
+
+def start_napcat_and_open() -> bool:
+    ok = start_napcat()
+    try:
+        os.startfile("http://127.0.0.1:6099/webui")
+    except OSError:
+        pass
+    return ok
+
+
+def mark_first_run_done() -> None:
+    cfg = _raw_config()
+    cfg.setdefault("launcher", {})["first_run_done"] = True
+    _save_raw_config(cfg)
+
+
+def is_first_run() -> bool:
+    cfg = _raw_config()
+    return not bool((cfg.get("launcher") or {}).get("first_run_done"))
+
+
+def cmd_components() -> int:
+    rows = components_state()
+    if not rows:
+        print("找不到组件清单（ops/l3/packs/fragments.json）")
+        return 1
+    for r in rows:
+        mark = "*" if r["required"] else " "
+        state = "已安装" if r["installed"] else "-"
+        print(f" {mark} {r['id']:<16} {str(r['version']):<18} {r['size']/1024/1024:10.1f} MB  {state}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# 向导 GUI
+# ---------------------------------------------------------------------------
+
+def run_wizard() -> None:
+    import threading
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, ttk
+
+    root = tk.Tk()
+    root.title("Möbius 首次运行向导")
+    root.geometry("640x480")
+    frame = ttk.Frame(root, padding=14)
+    frame.pack(fill="both", expand=True)
+    title_var = tk.StringVar(value="")
+    title = ttk.Label(frame, textvariable=title_var, font=("Segoe UI", 14, "bold"))
+    title.pack(anchor="w")
+    body = ttk.Frame(frame)
+    body.pack(fill="both", expand=True, pady=10)
+    nav = ttk.Frame(frame)
+    nav.pack(fill="x")
+    log_var = tk.StringVar(value="")
+
+    steps = []
+    state = {"i": 0}
+
+    f1 = ttk.Frame(body)
+    ttk.Label(f1, text="运行时组件：安装缺失的必需组件").pack(anchor="w")
+    comp_tree = ttk.Treeview(f1, columns=("ver", "state"), show="tree headings", height=9)
+    comp_tree.heading("#0", text="组件")
+    comp_tree.heading("ver", text="版本")
+    comp_tree.heading("state", text="状态")
+    comp_tree.pack(fill="both", expand=True, pady=6)
+
+    def refresh_components() -> None:
+        comp_tree.delete(*comp_tree.get_children())
+        for r in components_state():
+            comp_tree.insert("", "end", text=r["id"], values=(r["version"], "已安装" if r["installed"] else "-"))
+
+    refresh_components()
+    steps.append(("1 / 4 运行时组件", f1))
+
+    f2 = ttk.Frame(body)
+    llm_cfg = _raw_config().get("llm") or {}
+    e_base = ttk.Entry(f2, width=52)
+    e_key = ttk.Entry(f2, width=52, show="*")
+    e_model = ttk.Entry(f2, width=32)
+    e_base.insert(0, str(llm_cfg.get("base_url") or "https://api.deepseek.com/v1"))
+    e_key.insert(0, str(llm_cfg.get("api_key") or ""))
+    e_model.insert(0, str(llm_cfg.get("model") or "deepseek-flash"))
+    for label, entry in (("Base URL", e_base), ("API Key", e_key), ("Model", e_model)):
+        ttk.Label(f2, text=label).pack(anchor="w")
+        entry.pack(anchor="w", pady=2)
+    llm_result = tk.StringVar(value="")
+    ttk.Label(f2, textvariable=llm_result, foreground="#0a7").pack(anchor="w", pady=4)
+    steps.append(("2 / 4 大模型配置", f2))
+
+    f3 = ttk.Frame(body)
+    model_dir = tk.StringVar(value=str(_raw_config().get("paths", {}).get("MODELS") or os.path.join(ROOT, "models")))
+    ttk.Label(f3, text="模型根目录（可指向外接盘）").pack(anchor="w")
+    ttk.Entry(f3, textvariable=model_dir, width=60).pack(anchor="w", pady=2)
+    ttk.Button(f3, text="选择目录…", command=lambda: model_dir.set(filedialog.askdirectory() or model_dir.get())).pack(anchor="w")
+    ttk.Label(f3, text="可从旧机器迁移（robocopy，支持跳过）。模型体积大，可稍后单独处理。").pack(anchor="w", pady=8)
+    steps.append(("3 / 4 模型目录", f3))
+
+    f4 = ttk.Frame(body)
+    ttk.Label(f4, text="QQ 登录：启动 NapCat 并打开 WebUI 扫码；登录后可跳过。").pack(anchor="w")
+    qq_result = tk.StringVar(value="")
+    ttk.Label(f4, textvariable=qq_result).pack(anchor="w", pady=6)
+    steps.append(("4 / 4 QQ 登录", f4))
+
+    def show(i: int) -> None:
+        for w in steps:
+            w[1].pack_forget()
+        steps[i][1].pack(fill="both", expand=True)
+        title_var.set(steps[i][0])
+        back_btn.config(state="normal" if i > 0 else "disabled")
+        next_btn.config(text="完成并启动" if i == len(steps) - 1 else "下一步")
+        state["i"] = i
+
+    def next_step() -> None:
+        i = state["i"]
+        if i == 1:
+            ok, detail = configure_llm(e_base.get().strip(), e_key.get().strip(), e_model.get().strip())
+            llm_result.set(("✓ " if ok else "✗ ") + detail[:80])
+            if not ok and not messagebox.askyesno("LLM 连接失败", "连接测试失败，仍要继续吗？"):
+                return
+        if i < len(steps) - 1:
+            show(i + 1)
+        else:
+            mark_first_run_done()
+            root.destroy()
+
+    def install_async() -> None:
+        def job() -> None:
+            log_var.set("正在安装组件…（详见 logs/launcher.log）")
+            ok = install_components()
+            root.after(0, lambda: (log_var.set("组件安装完成" if ok else "组件安装失败"), refresh_components()))
+        threading.Thread(target=job, daemon=True).start()
+
+    def qq_async() -> None:
+        def job() -> None:
+            ok = start_napcat_and_open()
+            root.after(0, lambda: qq_result.set("NapCat 启动成功，请在 WebUI 扫码登录" if ok else "NapCat 启动失败，可稍后手动启动"))
+        threading.Thread(target=job, daemon=True).start()
+
+    def _migrate_dialog() -> None:
+        src = filedialog.askdirectory(title="选择旧模型目录")
+        if src:
+            ok = migrate_models(src, model_dir.get())
+            messagebox.showinfo("迁移", "完成" if ok else "迁移失败，见日志")
+
+    ttk.Button(f1, text="安装必需组件", command=install_async).pack(anchor="w")
+    ttk.Label(f1, textvariable=log_var, foreground="#666").pack(anchor="w")
+    ttk.Button(f2, text="测试连接", command=lambda: llm_result.set("测试中…") or threading.Thread(
+        target=lambda: llm_result.set(("%s %s" % (("✓" if test_llm()[0] else "✗"), test_llm()[1]))[:100]), daemon=True).start()).pack(anchor="w", pady=2)
+    ttk.Button(f3, text="从旧目录迁移…", command=_migrate_dialog).pack(anchor="w")
+    ttk.Button(f4, text="启动 NapCat 并打开 WebUI", command=qq_async).pack(anchor="w")
+
+    back_btn = ttk.Button(nav, text="上一步", state="disabled", command=lambda: show(max(0, state["i"] - 1)))
+    next_btn = ttk.Button(nav, text="下一步", command=next_step)
+    ttk.Button(nav, text="退出", command=root.destroy).pack(side="right")
+    next_btn.pack(side="right", padx=6)
+    back_btn.pack(side="right")
+
+    show(0)
+    root.mainloop()
+
 # ---------------------------------------------------------------------------
 # GUI
 # ---------------------------------------------------------------------------
@@ -482,7 +779,18 @@ def _attach_console() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Möbius 启动器")
-    parser.add_argument("--headless", choices=["start", "stop", "status"], default=None)
+    parser.add_argument("--headless", choices=[
+        "start", "stop", "status",
+        "components", "install-components",
+        "configure-llm", "test-llm", "migrate-models",
+    ], default=None)
+    parser.add_argument("--wizard", action="store_true", help="强制进入首次运行向导")
+    parser.add_argument("--base-url", default="")
+    parser.add_argument("--api-key", default="")
+    parser.add_argument("--model", default="")
+    parser.add_argument("--from-dir", default="")
+    parser.add_argument("--to-dir", default="")
+    parser.add_argument("--source-dir", default="")
     parser.add_argument("--no-elevate", action="store_true")
     parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -507,6 +815,23 @@ def main() -> int:
         return cmd_stop()
     if args.headless == "status":
         return cmd_status()
+    if args.headless == "components":
+        return cmd_components()
+    if args.headless == "install-components":
+        return 0 if install_components(source_dir=args.source_dir) else 1
+    if args.headless == "configure-llm":
+        ok, detail = configure_llm(args.base_url, args.api_key, args.model)
+        print(("✓ " if ok else "✗ ") + detail)
+        return 0 if ok else 1
+    if args.headless == "test-llm":
+        ok, detail = test_llm()
+        print(("✓ " if ok else "✗ ") + detail)
+        return 0 if ok else 1
+    if args.headless == "migrate-models":
+        return 0 if migrate_models(args.from_dir, args.to_dir) else 1
+    if is_first_run() or args.wizard:
+        run_wizard()
+        return 0
     run_gui()
     return 0
 

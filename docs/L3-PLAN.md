@@ -149,7 +149,7 @@ MobiusRoot\
 | **P1 路径抽象（完成）** | `MOBIUS_ROOT` 契约；`core/paths.py`；配置变量化；示例配置 | 3–5 天 | ✅ 复制/改名目录后不改文件即可启动（见 `ops/l3/P1-PATHS.md`） |
 | **P2 运行时组件化（完成）** | ✅ 三套 Python relocatable（26/56/770 MB）+ LangBot venv（637MB）+ Kokoro venv（904MB）；8 个组件包（合计 12.22GB，含 ComfyUI 3.96GB / GSV 7.93GB，已排除模型与角色权重） | 7–10 天 | ✅ 复制 runtime 可全栈启动；LangBot/Kokoro 已切换验证；见 `ops/l3/P2-RUNTIME.md`、`P2B-RUNTIME.md` |
 | **P3 组件清单与下载器（完成）** | ✅ manifest v1 + `ops/l3/downloader.py`（多源/续传/校验/解压/安装/修复/卸载/更新/本地覆盖/依赖） | 5–7 天 | ✅ 本地 file:// 源全链路验收（5 组件安装、SHA 失败、超长路径、卸载）；见 `ops/l3/P3-DOWNLOADER.md` |
-| P4 首启向导与能力面板 | 组件状态、模型下载/迁移、**LLM 提供方配置与连通测试**、QQ 登录、能力缺口提示 | 5–7 天 | 全程 GUI；极简安装也能完成一次真实对话 |
+| **P4 首启向导（完成）** | ✅ 4 步向导（组件/LLM/模型目录/QQ）+ CLI（components/install-components/test-llm/configure-llm/migrate-models） | 5–7 天 | ✅ LLM 连通、模型迁移、GUI 启动验证；见 `ops/l3/P4-WIZARD.md` |
 | P5 扩展接口与自定义组件 | MCP/插件/角色/画笔/工作流扩展契约；本地 manifest 覆盖；第三方组件信任提示 | 5–7 天 | 自定义扩展放入目录即生效，无需重装 |
 | P6 可分发合规 | 第三方声明（AGPL/GPL/模型许可）、版本策略、签名方案、隐私说明 | 3–5 天 | 分发包通过许可自查清单 |
 | P7 安装器与发布 | Inno 集成下载器/能力面板、卸载、发布脚本、校验 | 3–5 天 | 新机 30 分钟内可聊天（含下载） |
