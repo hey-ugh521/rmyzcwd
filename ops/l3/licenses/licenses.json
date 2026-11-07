@@ -1,0 +1,3056 @@
+{
+  "packages": [
+    {
+      "name": "addict",
+      "version": "2.4.0",
+      "license": "MIT（人工确认）",
+      "home_page": "https://github.com/mewwts/addict",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "aenum",
+      "version": "3.1.16",
+      "license": "BSD License",
+      "home_page": "https://github.com/ethanfurman/aenum",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "aiocqhttp",
+      "version": "1.4.4",
+      "license": "MIT License",
+      "home_page": "https://github.com/nonebot/aiocqhttp",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "aiofiles",
+      "version": "24.1.0",
+      "license": "Apache-2.0",
+      "home_page": "Changelog, https://github.com/Tinche/aiofiles#history",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "aiohappyeyeballs",
+      "version": "2.6.1",
+      "license": "PSF-2.0",
+      "home_page": "Bug Tracker, https://github.com/aio-libs/aiohappyeyeballs/issues",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "aiohttp",
+      "version": "3.14.1",
+      "license": "Apache-2.0 AND MIT",
+      "home_page": "Homepage, https://github.com/aio-libs/aiohttp",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "aiohttp_socks",
+      "version": "0.11.0",
+      "license": "Apache-2.0",
+      "home_page": "homepage, https://github.com/romis2012/aiohttp-socks",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "aioshutil",
+      "version": "1.6",
+      "license": "BSD License",
+      "home_page": "https://github.com/kumaraditya303/aioshutil",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "aiosignal",
+      "version": "1.4.0",
+      "license": "Apache 2.0",
+      "home_page": "https://github.com/aio-libs/aiosignal",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "aiosqlite",
+      "version": "0.22.1",
+      "license": "MIT License",
+      "home_page": "Documentation, https://aiosqlite.omnilib.dev",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "alembic",
+      "version": "1.18.4",
+      "license": "MIT",
+      "home_page": "Homepage, https://alembic.sqlalchemy.org",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "annotated-doc",
+      "version": "0.0.5",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/fastapi/annotated-doc",
+      "envs": [
+        "python-core",
+        "python-kokoro",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/annotated-types/annotated-types",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "0.7.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "anthropic",
+      "version": "0.77.0",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/anthropics/anthropic-sdk-python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "anyio",
+      "version": "4.14.2",
+      "license": "MIT",
+      "home_page": "Documentation, https://anyio.readthedocs.io/en/latest/",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "4.12.1 (python-langbot)",
+        "4.15.1 (python-gateway)",
+        "4.16.0 (python-memory)"
+      ]
+    },
+    {
+      "name": "APScheduler",
+      "version": "3.11.2",
+      "license": "MIT",
+      "home_page": "Documentation, https://apscheduler.readthedocs.io/en/3.x/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "argon2-cffi",
+      "version": "25.1.0",
+      "license": "MIT",
+      "home_page": "Documentation, https://argon2-cffi.readthedocs.io/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "argon2-cffi-bindings",
+      "version": "25.1.0",
+      "license": "MIT",
+      "home_page": "Tidelift, https://tidelift.com/?utm_source=lifter&utm_medium=referral&utm_campaign=hynek",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "async-lru",
+      "version": "2.1.0",
+      "license": "MIT License",
+      "home_page": "https://github.com/aio-libs/async-lru",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "asyncpg",
+      "version": "0.31.0",
+      "license": "Apache-2.0",
+      "home_page": "github, https://github.com/MagicStack/asyncpg",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "attrs",
+      "version": "26.1.0",
+      "license": "MIT",
+      "home_page": "Documentation, https://www.attrs.org/",
+      "envs": [
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "25.4.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "babel",
+      "version": "2.18.0",
+      "license": "BSD-3-Clause",
+      "home_page": "https://babel.pocoo.org/",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "backoff",
+      "version": "2.2.1",
+      "license": "MIT",
+      "home_page": "https://github.com/litl/backoff",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "bcrypt",
+      "version": "5.0.0",
+      "license": "Apache-2.0",
+      "home_page": "homepage, https://github.com/pyca/bcrypt/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "beautifulsoup4",
+      "version": "4.14.3",
+      "license": "MIT License",
+      "home_page": "Download, https://www.crummy.com/software/BeautifulSoup/bs4/download/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "blinker",
+      "version": "1.9.0",
+      "license": "MIT License",
+      "home_page": "Chat, https://discord.gg/pallets",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "blis",
+      "version": "1.3.3",
+      "license": "BSD",
+      "home_page": "https://github.com/explosion/cython-blis",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "boto3",
+      "version": "1.42.39",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/boto/boto3",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "botocore",
+      "version": "1.42.39",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/boto/botocore",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "bracex",
+      "version": "2.6",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/facelessuser/bracex",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "build",
+      "version": "1.4.0",
+      "license": "MIT",
+      "home_page": "changelog, https://build.pypa.io/en/stable/changelog.html",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "cachetools",
+      "version": "6.2.6",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/tkem/cachetools/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "catalogue",
+      "version": "2.0.10",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/catalogue",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "cbor2",
+      "version": "6.1.4",
+      "license": "MIT",
+      "home_page": "Changelog, https://cbor2.readthedocs.io/en/latest/versionhistory.html",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "license": "MPL-2.0",
+      "home_page": "https://github.com/certifi/python-certifi",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "2026.1.4 (python-langbot)",
+        "2026.10.23 (python-gateway)"
+      ]
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.1",
+      "license": "MIT-0",
+      "home_page": "Documentation, https://cffi.readthedocs.io/",
+      "envs": [
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "2.0.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "cfgv",
+      "version": "3.5.0",
+      "license": "MIT",
+      "home_page": "https://github.com/asottile/cfgv",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "chardet",
+      "version": "5.2.0",
+      "license": "LGPL",
+      "home_page": "https://github.com/chardet/chardet",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.1",
+      "license": "MIT",
+      "home_page": "Changelog, https://github.com/jawah/charset_normalizer/blob/master/CHANGELOG.md",
+      "envs": [
+        "python-kokoro",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "3.4.4 (python-langbot)"
+      ]
+    },
+    {
+      "name": "chromadb",
+      "version": "1.4.1",
+      "license": "Apache Software License",
+      "home_page": "Bug Tracker, https://github.com/chroma-core/chroma/issues",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "click",
+      "version": "8.5.0",
+      "license": "BSD-3-Clause",
+      "home_page": "Changes, https://click.palletsprojects.com/page/changes/",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "8.3.1 (python-langbot)"
+      ]
+    },
+    {
+      "name": "cloudpathlib",
+      "version": "0.25.0",
+      "license": "MIT License",
+      "home_page": "Bug Tracker, https://github.com/drivendataorg/cloudpathlib/issues",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "cloudpickle",
+      "version": "3.1.2",
+      "license": "BSD-3-Clause",
+      "home_page": "https://github.com/cloudpipe/cloudpickle",
+      "envs": [
+        "python-memory"
+      ]
+    },
+    {
+      "name": "cn2an",
+      "version": "0.5.24",
+      "license": "MIT License",
+      "home_page": "https://github.com/Ailln/cn2an",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "colorama",
+      "version": "0.4.6",
+      "license": "BSD License",
+      "home_page": "Homepage, https://github.com/tartley/colorama",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "coloredlogs",
+      "version": "15.0.1",
+      "license": "MIT",
+      "home_page": "https://coloredlogs.readthedocs.io",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "colorlog",
+      "version": "6.6.0",
+      "license": "MIT License",
+      "home_page": "https://github.com/borntyping/python-colorlog",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "confection",
+      "version": "1.3.3",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/confection",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "cryptography",
+      "version": "50.0.2",
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "home_page": "changelog, https://cryptography.io/en/latest/changelog/",
+      "envs": [
+        "python-gateway",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "49.0.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "csvw",
+      "version": "4.1.0",
+      "license": "Apache 2.0",
+      "home_page": "https://github.com/cldf/csvw",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "curated-tokenizers",
+      "version": "0.0.10",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/curated-tokenizers",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "curated-transformers",
+      "version": "0.1.1",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/curated-transformers",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "cymem",
+      "version": "2.0.13",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/cymem",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "dashscope",
+      "version": "1.25.10",
+      "license": "Apache 2.0",
+      "home_page": "https://dashscope.aliyun.com/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "Deprecated",
+      "version": "1.3.1",
+      "license": "MIT",
+      "home_page": "https://github.com/laurent-laporte-pro/deprecated",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "dingtalk-stream",
+      "version": "0.24.3",
+      "license": "MIT",
+      "home_page": "https://github.com/open-dingtalk/dingtalk-stream-sdk-python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "discord.py",
+      "version": "2.6.4",
+      "license": "MIT License",
+      "home_page": "Documentation, https://discordpy.readthedocs.io/en/latest/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "distlib",
+      "version": "0.4.0",
+      "license": "PSF-2.0",
+      "home_page": "https://github.com/pypa/distlib",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "distro",
+      "version": "1.9.0",
+      "license": "Apache License, Version 2.0",
+      "home_page": "https://github.com/python-distro/distro",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "dlinfo",
+      "version": "2.0.0",
+      "license": "MIT",
+      "home_page": "https://github.com/fphammerle/python-dlinfo",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "dockerfile-parse",
+      "version": "2.0.1",
+      "license": "BSD",
+      "home_page": "https://github.com/containerbuildsystem/dockerfile-parse",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "docopt",
+      "version": "0.6.2",
+      "license": "MIT",
+      "home_page": "http://docopt.org",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "docstring_parser",
+      "version": "0.17.0",
+      "license": "MIT",
+      "home_page": "homepage, https://github.com/rr-/docstring_parser",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "dotenv",
+      "version": "0.9.9",
+      "license": "MIT（人工确认（pedroburon/dotenv））",
+      "home_page": "https://github.com/pedroburon/dotenv",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "durationpy",
+      "version": "0.10",
+      "license": "MIT",
+      "home_page": "https://github.com/icholy/durationpy",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "e2b",
+      "version": "2.21.1",
+      "license": "MIT",
+      "home_page": "Bug Tracker, https://github.com/e2b-dev/e2b/issues",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "EbookLib",
+      "version": "0.20",
+      "license": "GNU Affero General Public License",
+      "home_page": "https://github.com/aerkalov/ebooklib",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "espeakng-loader",
+      "version": "0.2.4",
+      "license": "待确认（可能包含 espeak-ng GPL 数据）",
+      "home_page": "",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "fastapi",
+      "version": "0.136.3",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/fastapi/fastapi",
+      "envs": [
+        "python-core",
+        "python-kokoro",
+        "python-memory"
+      ],
+      "other_versions": [
+        "0.162.0 (python-memory)"
+      ]
+    },
+    {
+      "name": "fastuuid",
+      "version": "0.14.0",
+      "license": "BSD License",
+      "home_page": "homepage, https://github.com/thedrow/fastuuid/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "filelock",
+      "version": "3.32.4",
+      "license": "MIT License",
+      "home_page": "Documentation, https://py-filelock.readthedocs.io",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "3.20.3 (python-langbot)",
+        "4.2.6 (python-memory)"
+      ]
+    },
+    {
+      "name": "Flask",
+      "version": "3.1.3",
+      "license": "BSD-3-Clause",
+      "home_page": "Changes, https://flask.palletsprojects.com/page/changes/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "flatbuffers",
+      "version": "25.12.19",
+      "license": "Apache 2.0",
+      "home_page": "https://google.github.io/flatbuffers/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "frozenlist",
+      "version": "1.8.0",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/aio-libs/frozenlist",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.6.0",
+      "license": "BSD-3-Clause",
+      "home_page": "Changelog, https://filesystem-spec.readthedocs.io/en/latest/changelog.html",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "2026.1.0 (python-langbot)",
+        "2026.9.0 (python-memory)"
+      ]
+    },
+    {
+      "name": "future",
+      "version": "1.0.0",
+      "license": "MIT",
+      "home_page": "https://python-future.org",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "gewechat-client",
+      "version": "0.2.2",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/hanfangyuan4396/gewechat-python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "googleapis-common-protos",
+      "version": "1.72.0",
+      "license": "Apache 2.0",
+      "home_page": "Repository, https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "greenlet",
+      "version": "3.3.1",
+      "license": "MIT AND Python-2.0",
+      "home_page": "Homepage, https://greenlet.readthedocs.io",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "grpcio",
+      "version": "1.76.0",
+      "license": "Apache License 2.0",
+      "home_page": "https://grpc.io",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "license": "MIT",
+      "home_page": "https://github.com/python-hyper/h11",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "h2",
+      "version": "4.3.0",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/python-hyper/h2/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "hf-xet",
+      "version": "1.6.0",
+      "license": "Apache Software License",
+      "home_page": "Documentation, https://huggingface.co/docs/hub/xet/index",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "1.2.0 (python-langbot)",
+        "1.8.0 (python-memory)"
+      ]
+    },
+    {
+      "name": "hpack",
+      "version": "4.1.0",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/python-hyper/hpack/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "html2text",
+      "version": "2025.4.15",
+      "license": "GPL-3.0-or-later",
+      "home_page": "Homepage, https://github.com/Alir3z4/html2text/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "license": "BSD License",
+      "home_page": "Documentation, https://www.encode.io/httpcore",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "httpcore2",
+      "version": "2.16.0",
+      "license": "BSD License",
+      "home_page": "Changelog, https://github.com/pydantic/httpx2/blob/main/src/httpcore2/CHANGELOG.md",
+      "envs": [
+        "python-gateway",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "httptools",
+      "version": "0.7.1",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/MagicStack/httptools",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "license": "BSD-3-Clause",
+      "home_page": "Changelog, https://github.com/encode/httpx/blob/master/CHANGELOG.md",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "httpx-sse",
+      "version": "0.4.3",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/florimondmanca/httpx-sse",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "httpx2",
+      "version": "2.16.0",
+      "license": "BSD License",
+      "home_page": "Changelog, https://github.com/pydantic/httpx2/blob/main/src/httpx2/CHANGELOG.md",
+      "envs": [
+        "python-gateway",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "huggingface_hub",
+      "version": "1.28.0",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/huggingface/huggingface_hub",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "1.3.5 (python-langbot)",
+        "2.4.0 (python-memory)"
+      ]
+    },
+    {
+      "name": "humanfriendly",
+      "version": "10.0",
+      "license": "MIT",
+      "home_page": "https://humanfriendly.readthedocs.io",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "Hypercorn",
+      "version": "0.18.0",
+      "license": "MIT",
+      "home_page": "",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "hyperframe",
+      "version": "6.1.0",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/python-hyper/hyperframe/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "identify",
+      "version": "2.6.16",
+      "license": "MIT",
+      "home_page": "https://github.com/pre-commit/identify",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "idna",
+      "version": "3.19",
+      "license": "BSD-3-Clause",
+      "home_page": "Changelog, https://github.com/kjd/idna/blob/master/HISTORY.md",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "3.18 (python-langbot)",
+        "3.20 (python-gateway)",
+        "3.20 (python-memory)"
+      ]
+    },
+    {
+      "name": "importlib_metadata",
+      "version": "8.7.1",
+      "license": "Apache-2.0",
+      "home_page": "Source, https://github.com/python/importlib_metadata",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "importlib_resources",
+      "version": "6.5.2",
+      "license": "Apache Software License",
+      "home_page": "Source, https://github.com/python/importlib_resources",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/pytest-dev/iniconfig",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "isodate",
+      "version": "0.7.2",
+      "license": "BSD License",
+      "home_page": "Homepage, https://github.com/gweis/isodate/",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "itsdangerous",
+      "version": "2.2.0",
+      "license": "BSD License",
+      "home_page": "Changes, https://itsdangerous.palletsprojects.com/changes/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "jieba",
+      "version": "0.42.1",
+      "license": "MIT",
+      "home_page": "https://github.com/fxsjy/jieba",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "license": "BSD License",
+      "home_page": "Changes, https://jinja.palletsprojects.com/changes/",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "jiter",
+      "version": "0.12.0",
+      "license": "MIT License",
+      "home_page": "https://github.com/pydantic/jiter/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "jmespath",
+      "version": "1.1.0",
+      "license": "MIT",
+      "home_page": "https://github.com/jmespath/jmespath.py",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "joblib",
+      "version": "1.5.3",
+      "license": "BSD-3-Clause",
+      "home_page": "Homepage, https://joblib.readthedocs.io",
+      "envs": [
+        "python-kokoro",
+        "python-memory"
+      ],
+      "other_versions": [
+        "1.6.0 (python-memory)"
+      ]
+    },
+    {
+      "name": "jsonpatch",
+      "version": "1.33",
+      "license": "Modified BSD License",
+      "home_page": "https://github.com/stefankoegl/python-json-patch",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "jsonpointer",
+      "version": "3.0.0",
+      "license": "Modified BSD License",
+      "home_page": "https://github.com/stefankoegl/python-json-pointer",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "jsonschema",
+      "version": "4.26.0",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/python-jsonschema/jsonschema",
+      "envs": [
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "license": "MIT",
+      "home_page": "Documentation, https://jsonschema-specifications.readthedocs.io/",
+      "envs": [
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "kokoro",
+      "version": "0.9.4",
+      "license": "Apache Software License",
+      "home_page": "Homepage, https://github.com/hexgrad/kokoro",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "kubernetes",
+      "version": "35.0.0",
+      "license": "Apache License Version 2.0",
+      "home_page": "https://github.com/kubernetes-client/python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langbot-plugin",
+      "version": "0.7.16",
+      "license": "AGPL-3.0（人工确认（LangBot 生态））",
+      "home_page": "Homepage, https://langbot.app",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langchain",
+      "version": "1.3.10",
+      "license": "MIT",
+      "home_page": "Homepage, https://docs.langchain.com/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langchain-core",
+      "version": "1.4.8",
+      "license": "MIT",
+      "home_page": "Homepage, https://docs.langchain.com/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langchain-protocol",
+      "version": "0.0.18",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/langchain-ai/agent-protocol/tree/main/streaming",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langchain-text-splitters",
+      "version": "1.1.2",
+      "license": "MIT",
+      "home_page": "Homepage, https://docs.langchain.com/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langgraph",
+      "version": "1.2.6",
+      "license": "MIT",
+      "home_page": "Homepage, https://docs.langchain.com/oss/python/langgraph/overview",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langgraph-checkpoint",
+      "version": "4.1.1",
+      "license": "MIT",
+      "home_page": "Source, https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langgraph-prebuilt",
+      "version": "1.1.0",
+      "license": "MIT",
+      "home_page": "Source, https://github.com/langchain-ai/langgraph/tree/main/libs/prebuilt",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langgraph-sdk",
+      "version": "0.4.2",
+      "license": "MIT",
+      "home_page": "Source, https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-py",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "langsmith",
+      "version": "0.8.18",
+      "license": "MIT",
+      "home_page": "Homepage, https://smith.langchain.com/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "language-tags",
+      "version": "1.3.1",
+      "license": "MIT",
+      "home_page": "History, https://github.com/OnroerendErfgoed/language-tags/blob/master/HISTORY.rst",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "lark-oapi",
+      "version": "1.6.4",
+      "license": "MIT",
+      "home_page": "https://github.com/larksuite/oapi-sdk-python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "librt",
+      "version": "0.7.8",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/mypyc/librt",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "line-bot-sdk",
+      "version": "3.22.0",
+      "license": "Apache License 2.0",
+      "home_page": "https://github.com/line/line-bot-sdk-python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "linkify-it-py",
+      "version": "2.0.3",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/tsutsu3/linkify-it-py",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "litellm",
+      "version": "1.88.1",
+      "license": "MIT",
+      "home_page": "Homepage, https://litellm.ai",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "Logbook",
+      "version": "1.9.2",
+      "license": "BSD-3-Clause",
+      "home_page": "Documentation, https://logbook.readthedocs.io",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "loguru",
+      "version": "0.7.3",
+      "license": "MIT License",
+      "home_page": "Changelog, https://github.com/Delgan/loguru/blob/master/CHANGELOG.rst",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "lxml",
+      "version": "6.1.1",
+      "license": "BSD-3-Clause",
+      "home_page": "https://lxml.de/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "Mako",
+      "version": "1.3.12",
+      "license": "MIT",
+      "home_page": "https://www.makotemplates.org/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "Markdown",
+      "version": "3.10.1",
+      "license": "BSD-3-Clause",
+      "home_page": "Homepage, https://Python-Markdown.github.io/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "markdown-it-py",
+      "version": "4.2.0",
+      "license": "MIT License",
+      "home_page": "Documentation, https://markdown-it-py.readthedocs.io",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "4.0.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.3",
+      "license": "BSD-3-Clause",
+      "home_page": "Donate, https://palletsprojects.com/donate",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "3.0.4 (python-memory)"
+      ]
+    },
+    {
+      "name": "matrix-nio",
+      "version": "0.25.2",
+      "license": "MIT（人工确认）",
+      "home_page": "Source, https://github.com/matrix-nio/matrix-nio",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "mcp",
+      "version": "2.3.0",
+      "license": "MIT",
+      "home_page": "Homepage, https://modelcontextprotocol.io",
+      "envs": [
+        "python-gateway",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "1.26.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "mcp-types",
+      "version": "2.3.0",
+      "license": "MIT",
+      "home_page": "Homepage, https://modelcontextprotocol.io",
+      "envs": [
+        "python-gateway"
+      ]
+    },
+    {
+      "name": "mdit-py-plugins",
+      "version": "0.5.0",
+      "license": "MIT License",
+      "home_page": "Documentation, https://mdit-py-plugins.readthedocs.io",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/executablebooks/mdurl",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "misaki",
+      "version": "0.9.4",
+      "license": "Apache Software License",
+      "home_page": "",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "mistletoe",
+      "version": "1.4.0",
+      "license": "MIT",
+      "home_page": "https://github.com/miyuchina/mistletoe",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "mmh3",
+      "version": "5.2.0",
+      "license": "MIT License",
+      "home_page": "Homepage, https://pypi.org/project/mmh3/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "mpmath",
+      "version": "1.3.0",
+      "license": "BSD",
+      "home_page": "http://mpmath.org/",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "multidict",
+      "version": "6.7.1",
+      "license": "Apache License 2.0",
+      "home_page": "https://github.com/aio-libs/multidict",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "murmurhash",
+      "version": "1.0.15",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/murmurhash",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "mypy",
+      "version": "1.19.1",
+      "license": "MIT",
+      "home_page": "Homepage, https://www.mypy-lang.org/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "mypy_extensions",
+      "version": "1.1.0",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/python/mypy_extensions",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "nakuru-project-idk",
+      "version": "0.0.2.1",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/idoknow/nakuru-project-idk",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "narwhals",
+      "version": "2.28.0",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/narwhals-dev/narwhals",
+      "envs": [
+        "python-memory"
+      ]
+    },
+    {
+      "name": "networkx",
+      "version": "3.6.1",
+      "license": "BSD-3-Clause",
+      "home_page": "Homepage, https://networkx.org/",
+      "envs": [
+        "python-kokoro",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "nodeenv",
+      "version": "1.10.0",
+      "license": "BSD",
+      "home_page": "https://github.com/ekalinin/nodeenv",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "num2words",
+      "version": "0.5.14",
+      "license": "LGPL",
+      "home_page": "https://github.com/savoirfairelinux/num2words",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "numpy",
+      "version": "2.4.6",
+      "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+      "home_page": "homepage, https://numpy.org",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "2.4.2 (python-langbot)"
+      ]
+    },
+    {
+      "name": "oauthlib",
+      "version": "3.3.1",
+      "license": "BSD-3-Clause",
+      "home_page": "https://github.com/oauthlib/oauthlib",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "ollama",
+      "version": "0.6.1",
+      "license": "MIT",
+      "home_page": "homepage, https://ollama.com",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "onnxruntime",
+      "version": "1.23.2",
+      "license": "MIT License",
+      "home_page": "https://onnxruntime.ai",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "openai",
+      "version": "2.41.1",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/openai/openai-python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "opentelemetry-api",
+      "version": "1.45.1",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api",
+      "envs": [
+        "python-gateway",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "1.39.1 (python-langbot)",
+        "1.45.2 (python-memory)"
+      ]
+    },
+    {
+      "name": "opentelemetry-exporter-otlp-proto-common",
+      "version": "1.39.1",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-common",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "opentelemetry-exporter-otlp-proto-grpc",
+      "version": "1.39.1",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-grpc",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "opentelemetry-proto",
+      "version": "1.39.1",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-proto",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "opentelemetry-sdk",
+      "version": "1.39.1",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-sdk",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "opentelemetry-semantic-conventions",
+      "version": "0.60b1",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-semantic-conventions",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "ordered-set",
+      "version": "4.1.0",
+      "license": "MIT License",
+      "home_page": "Home, https://github.com/rspeer/ordered-set",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "orjson",
+      "version": "3.11.6",
+      "license": "Apache Software License",
+      "home_page": "changelog, https://github.com/ijl/orjson/blob/master/CHANGELOG.md",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "ormsgpack",
+      "version": "1.12.2",
+      "license": "Apache Software License",
+      "home_page": "Homepage, https://github.com/ormsgpack/ormsgpack",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "overrides",
+      "version": "7.7.0",
+      "license": "Apache License, Version 2.0",
+      "home_page": "https://github.com/mkorpela/overrides",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "home_page": "Documentation, https://packaging.pypa.io/",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "25.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "pandas",
+      "version": "3.0.0",
+      "license": "BSD License",
+      "home_page": "homepage, https://pandas.pydata.org",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pathspec",
+      "version": "1.0.4",
+      "license": "Mozilla Public License 2.0 (MPL 2.0)",
+      "home_page": "Documentation, https://python-path-specification.readthedocs.io/en/latest/index.html",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pgvector",
+      "version": "0.4.2",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/pgvector/pgvector-python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "phonemizer-fork",
+      "version": "3.3.2",
+      "license": "GNU General Public License v3 or later (GPLv3+)",
+      "home_page": "Documentation, https://bootphon.github.io/phonemizer/",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "pillow",
+      "version": "12.2.0",
+      "license": "MIT-CMU",
+      "home_page": "Release notes, https://pillow.readthedocs.io/en/stable/releasenotes/index.html",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pip",
+      "version": "26.1.2",
+      "license": "MIT",
+      "home_page": "Changelog, https://pip.pypa.io/en/stable/news/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.5.1",
+      "license": "MIT License",
+      "home_page": "Changelog, https://github.com/tox-dev/platformdirs/releases",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pluggy",
+      "version": "1.6.0",
+      "license": "MIT",
+      "home_page": "",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "portalocker",
+      "version": "3.2.0",
+      "license": "BSD-3-Clause",
+      "home_page": "bugs, https://github.com/wolph/portalocker/issues",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "posthog",
+      "version": "5.4.0",
+      "license": "MIT",
+      "home_page": "https://github.com/posthog/posthog-python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pre_commit",
+      "version": "4.5.1",
+      "license": "MIT",
+      "home_page": "https://github.com/pre-commit/pre-commit",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "preshed",
+      "version": "3.0.13",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/preshed",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "priority",
+      "version": "2.0.0",
+      "license": "MIT License",
+      "home_page": "https://github.com/python-hyper/priority/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "proces",
+      "version": "0.1.7",
+      "license": "MIT License",
+      "home_page": "https://github.com/Ailln/proces",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "propcache",
+      "version": "0.4.1",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/aio-libs/propcache",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "protobuf",
+      "version": "6.33.5",
+      "license": "3-Clause BSD License",
+      "home_page": "https://developers.google.com/protocol-buffers/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "psutil",
+      "version": "7.2.2",
+      "license": "BSD-3-Clause",
+      "home_page": "https://github.com/giampaolo/psutil",
+      "envs": [
+        "python-core",
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "psycopg",
+      "version": "3.3.4",
+      "license": "LGPL-3.0-only",
+      "home_page": "Homepage, https://psycopg.org/",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro"
+      ],
+      "other_versions": [
+        "3.3.6 (python-gateway)"
+      ]
+    },
+    {
+      "name": "psycopg-binary",
+      "version": "3.3.4",
+      "license": "LGPL-3.0-only",
+      "home_page": "Homepage, https://psycopg.org/",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro"
+      ],
+      "other_versions": [
+        "3.3.6 (python-gateway)"
+      ]
+    },
+    {
+      "name": "pyasn1",
+      "version": "0.6.4",
+      "license": "BSD-2-Clause",
+      "home_page": "Homepage, https://github.com/pyasn1/pyasn1",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pyasn1_modules",
+      "version": "0.4.2",
+      "license": "BSD",
+      "home_page": "https://github.com/pyasn1/pyasn1-modules",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pybase64",
+      "version": "1.4.3",
+      "license": "BSD-2-Clause",
+      "home_page": "https://github.com/mayeut/pybase64",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pycparser",
+      "version": "3.12",
+      "license": "BSD-3-Clause",
+      "home_page": "Homepage, https://github.com/eliben/pycparser",
+      "envs": [
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "3.0 (python-kokoro)",
+        "3.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "pycryptodome",
+      "version": "3.23.0",
+      "license": "BSD, Public Domain",
+      "home_page": "https://www.pycryptodome.org",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pydantic",
+      "version": "2.13.4",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/pydantic/pydantic",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "2.12.5 (python-langbot)",
+        "2.14.1 (python-gateway)",
+        "2.14.2 (python-memory)"
+      ]
+    },
+    {
+      "name": "pydantic-settings",
+      "version": "2.14.2",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/pydantic/pydantic-settings",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pydantic_core",
+      "version": "2.46.4",
+      "license": "MIT",
+      "home_page": "https://github.com/pydantic/pydantic",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "2.41.5 (python-langbot)",
+        "2.50.1 (python-gateway)",
+        "2.50.2 (python-memory)"
+      ]
+    },
+    {
+      "name": "Pygments",
+      "version": "2.21.0",
+      "license": "BSD-2-Clause",
+      "home_page": "Homepage, https://pygments.org",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "2.20.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "PyJWT",
+      "version": "2.15.1",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/jpadilla/pyjwt",
+      "envs": [
+        "python-gateway",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "2.13.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "pymilvus",
+      "version": "2.6.8",
+      "license": "Apache Software License",
+      "home_page": "repository, https://github.com/milvus-io/pymilvus",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "PyNaCl",
+      "version": "1.6.2",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/pyca/pynacl/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pyOpenSSL",
+      "version": "26.4.0",
+      "license": "Apache License, Version 2.0",
+      "home_page": "https://pyopenssl.org/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pyparsing",
+      "version": "3.3.2",
+      "license": "MIT",
+      "home_page": "Documentation, https://pyparsing-docs.readthedocs.io/en/latest/",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "PyPDF2",
+      "version": "3.0.1",
+      "license": "BSD License",
+      "home_page": "Bug Reports, https://github.com/py-pdf/PyPDF2/issues",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "PyPika",
+      "version": "0.50.0",
+      "license": "Apache License Version 2.0",
+      "home_page": "https://github.com/kayak/pypika",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pypinyin",
+      "version": "0.55.0",
+      "license": "MIT",
+      "home_page": "https://github.com/mozillazg/python-pinyin",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "pypinyin-dict",
+      "version": "0.9.0",
+      "license": "MIT License",
+      "home_page": "https://github.com/mozillazg/pypinyin-dict",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "pypng",
+      "version": "0.20220715.0",
+      "license": "MIT",
+      "home_page": "https://gitlab.com/drj11/pypng",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pyproject_hooks",
+      "version": "1.2.0",
+      "license": "MIT License",
+      "home_page": "Changelog, https://pyproject-hooks.readthedocs.io/en/latest/changelog.html",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pyreadline3",
+      "version": "3.5.4",
+      "license": "BSD",
+      "home_page": "Homepage, https://github.com/pyreadline3/pyreadline3",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pytest",
+      "version": "9.0.3",
+      "license": "MIT",
+      "home_page": "Changelog, https://docs.pytest.org/en/stable/changelog.html",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "license": "Dual License",
+      "home_page": "https://github.com/dateutil/dateutil",
+      "envs": [
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "python-docx",
+      "version": "1.2.0",
+      "license": "MIT",
+      "home_page": "Changelog, https://github.com/python-openxml/python-docx/blob/master/HISTORY.rst",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "python-dotenv",
+      "version": "1.2.2",
+      "license": "BSD-3-Clause",
+      "home_page": "Source, https://github.com/theskumar/python-dotenv",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "python-multipart",
+      "version": "0.0.32",
+      "license": "Apache Software License",
+      "home_page": "Homepage, https://github.com/Kludex/python-multipart",
+      "envs": [
+        "python-gateway",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "python-socks",
+      "version": "2.8.0",
+      "license": "Apache-2.0",
+      "home_page": "homepage, https://github.com/romis2012/python-socks",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "python-telegram-bot",
+      "version": "22.6",
+      "license": "GNU Lesser General Public License v3 (LGPLv3)",
+      "home_page": "Homepage, https://python-telegram-bot.org",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "pywin32",
+      "version": "312",
+      "license": "PSF",
+      "home_page": "Homepage, https://github.com/mhammond/pywin32",
+      "envs": [
+        "python-gateway",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "311 (python-langbot)"
+      ]
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "license": "MIT",
+      "home_page": "https://pyyaml.org/",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "qdrant-client",
+      "version": "1.16.2",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/qdrant/qdrant-client",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "qq-botpy-rc",
+      "version": "1.2.1.6",
+      "license": "Tencent",
+      "home_page": "https://github.com/tencent-connect/botpy",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "qrcode",
+      "version": "7.4.2",
+      "license": "BSD",
+      "home_page": "https://github.com/lincolnloop/python-qrcode",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "Quart",
+      "version": "0.20.0",
+      "license": "MIT License",
+      "home_page": "Changes, https://quart.palletsprojects.com/en/latest/changes.html",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "quart-cors",
+      "version": "0.8.0",
+      "license": "MIT",
+      "home_page": "",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "rdflib",
+      "version": "7.6.0",
+      "license": "BSD-3-Clause",
+      "home_page": "https://github.com/RDFLib/rdflib",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "referencing",
+      "version": "0.37.0",
+      "license": "MIT",
+      "home_page": "Documentation, https://referencing.readthedocs.io/",
+      "envs": [
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "regex",
+      "version": "2026.5.9",
+      "license": "Apache-2.0 AND CNRI-Python",
+      "home_page": "Homepage, https://github.com/mrabarnett/mrab-regex",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "2026.1.15 (python-langbot)",
+        "2026.9.29 (python-memory)"
+      ]
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "license": "Apache-2.0",
+      "home_page": "Documentation, https://requests.readthedocs.io",
+      "envs": [
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "requests-oauthlib",
+      "version": "2.0.0",
+      "license": "ISC",
+      "home_page": "https://github.com/requests/requests-oauthlib",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "requests-toolbelt",
+      "version": "1.0.0",
+      "license": "Apache 2.0",
+      "home_page": "https://toolbelt.readthedocs.io/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "rfc3986",
+      "version": "1.5.0",
+      "license": "Apache 2.0",
+      "home_page": "http://rfc3986.readthedocs.io",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "rich",
+      "version": "13.9.4",
+      "license": "MIT",
+      "home_page": "https://github.com/Textualize/rich",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "14.3.1 (python-langbot)",
+        "15.0.0 (python-memory)"
+      ]
+    },
+    {
+      "name": "rpds-py",
+      "version": "2026.9.1",
+      "license": "MIT",
+      "home_page": "Documentation, https://rpds.readthedocs.io/",
+      "envs": [
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "0.30.0 (python-langbot)",
+        "2026.6.3 (python-kokoro)"
+      ]
+    },
+    {
+      "name": "ruff",
+      "version": "0.14.14",
+      "license": "MIT License",
+      "home_page": "https://docs.astral.sh/ruff",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "s3transfer",
+      "version": "0.16.0",
+      "license": "Apache License 2.0",
+      "home_page": "https://github.com/boto/s3transfer",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "safetensors",
+      "version": "0.8.0",
+      "license": "Apache Software License",
+      "home_page": "Homepage, https://github.com/huggingface/safetensors",
+      "envs": [
+        "python-kokoro",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "scikit-learn",
+      "version": "1.9.1",
+      "license": "BSD-3-Clause",
+      "home_page": "homepage, https://scikit-learn.org",
+      "envs": [
+        "python-memory"
+      ]
+    },
+    {
+      "name": "scipy",
+      "version": "1.17.1",
+      "license": "BSD License",
+      "home_page": "homepage, https://scipy.org/",
+      "envs": [
+        "python-memory"
+      ]
+    },
+    {
+      "name": "segments",
+      "version": "2.4.0",
+      "license": "Apache 2.0",
+      "home_page": "https://github.com/cldf/segments",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "sentence-transformers",
+      "version": "6.2.0",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://www.SBERT.net",
+      "envs": [
+        "python-memory"
+      ]
+    },
+    {
+      "name": "setuptools",
+      "version": "83.0.0",
+      "license": "MIT",
+      "home_page": "Source, https://github.com/pypa/setuptools",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "79.0.1 (python-memory)",
+        "80.10.2 (python-langbot)"
+      ]
+    },
+    {
+      "name": "shellingham",
+      "version": "1.5.4",
+      "license": "ISC License",
+      "home_page": "https://github.com/sarugaku/shellingham",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "license": "MIT",
+      "home_page": "https://github.com/benjaminp/six",
+      "envs": [
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "slack_sdk",
+      "version": "3.39.0",
+      "license": "MIT",
+      "home_page": "https://github.com/slackapi/python-slack-sdk",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "smart_open",
+      "version": "8.0.1",
+      "license": "MIT License",
+      "home_page": "Repository, https://github.com/piskvorky/smart_open",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "sniffio",
+      "version": "1.3.1",
+      "license": "MIT OR Apache-2.0",
+      "home_page": "Homepage, https://github.com/python-trio/sniffio",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "socksio",
+      "version": "1.0.0",
+      "license": "MIT（人工确认）",
+      "home_page": "https://github.com/sethmlarson/socksio",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "soundfile",
+      "version": "0.13.1",
+      "license": "BSD 3-Clause License",
+      "home_page": "https://github.com/bastibe/python-soundfile",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "soupsieve",
+      "version": "2.8.3",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/facelessuser/soupsieve",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "spacy",
+      "version": "3.8.16",
+      "license": "MIT",
+      "home_page": "https://spacy.io",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "spacy-curated-transformers",
+      "version": "0.3.1",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/spacy-curated-transformers",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "spacy-legacy",
+      "version": "3.0.12",
+      "license": "MIT",
+      "home_page": "https://spacy.io",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "spacy-loggers",
+      "version": "1.0.5",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/spacy-loggers",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "SQLAlchemy",
+      "version": "2.0.46",
+      "license": "MIT",
+      "home_page": "https://www.sqlalchemy.org",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "sqlmodel",
+      "version": "0.0.31",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/fastapi/sqlmodel",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "srsly",
+      "version": "2.5.3",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/srsly",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "sse-starlette",
+      "version": "3.6.0",
+      "license": "BSD-3-Clause",
+      "home_page": "Homepage, https://github.com/sysid/sse-starlette",
+      "envs": [
+        "python-gateway",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "3.2.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "sseclient-py",
+      "version": "1.9.0",
+      "license": "Apache Software License v2",
+      "home_page": "",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "starlette",
+      "version": "1.6.0",
+      "license": "BSD-3-Clause",
+      "home_page": "Homepage, https://github.com/Kludex/starlette",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "1.10.0 (python-gateway)",
+        "1.10.0 (python-memory)",
+        "1.3.1 (python-langbot)"
+      ]
+    },
+    {
+      "name": "sympy",
+      "version": "1.14.0",
+      "license": "BSD",
+      "home_page": "https://sympy.org",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "tboxsdk",
+      "version": "0.0.12",
+      "license": "MIT License",
+      "home_page": "https://code.alipay.com/ai_release/tboxsdk-python",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "telegramify-markdown",
+      "version": "0.5.4",
+      "license": "MIT",
+      "home_page": "repository, https://github.com/sudoskys/telegramify-markdown",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "tenacity",
+      "version": "9.1.2",
+      "license": "Apache 2.0",
+      "home_page": "https://github.com/jd/tenacity",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "termcolor",
+      "version": "3.3.0",
+      "license": "MIT",
+      "home_page": "Changelog, https://github.com/termcolor/termcolor/releases",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "textual",
+      "version": "7.5.0",
+      "license": "MIT",
+      "home_page": "Bug Tracker, https://github.com/Textualize/textual/issues",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "thinc",
+      "version": "8.3.13",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/thinc",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "threadpoolctl",
+      "version": "3.7.0",
+      "license": "BSD-3-Clause",
+      "home_page": "homepage, https://github.com/joblib/threadpoolctl",
+      "envs": [
+        "python-memory"
+      ]
+    },
+    {
+      "name": "tiktoken",
+      "version": "0.12.0",
+      "license": "MIT（人工确认）",
+      "home_page": "homepage, https://github.com/openai/tiktoken",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "tokenizers",
+      "version": "0.22.2",
+      "license": "Apache Software License",
+      "home_page": "Homepage, https://github.com/huggingface/tokenizers",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "0.23.3 (python-memory)"
+      ]
+    },
+    {
+      "name": "torch",
+      "version": "2.13.0",
+      "license": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT",
+      "home_page": "Homepage, https://pytorch.org",
+      "envs": [
+        "python-kokoro",
+        "python-memory"
+      ],
+      "other_versions": [
+        "2.15.0 (python-memory)"
+      ]
+    },
+    {
+      "name": "tqdm",
+      "version": "4.70.0",
+      "license": "MPL-2.0 AND MIT",
+      "home_page": "homepage, https://tqdm.github.io",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "4.67.2 (python-langbot)",
+        "4.70.1 (python-memory)"
+      ]
+    },
+    {
+      "name": "transformers",
+      "version": "5.5.4",
+      "license": "Apache 2.0 License",
+      "home_page": "https://github.com/huggingface/transformers",
+      "envs": [
+        "python-kokoro",
+        "python-memory"
+      ],
+      "other_versions": [
+        "5.22.1 (python-memory)"
+      ]
+    },
+    {
+      "name": "truststore",
+      "version": "0.10.5",
+      "license": "MIT",
+      "home_page": "Documentation, https://truststore.readthedocs.io",
+      "envs": [
+        "python-gateway",
+        "python-memory"
+      ]
+    },
+    {
+      "name": "typer",
+      "version": "0.27.1",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/fastapi/typer",
+      "envs": [
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "0.21.1 (python-langbot)",
+        "0.27.3 (python-memory)"
+      ]
+    },
+    {
+      "name": "typer-slim",
+      "version": "0.21.1",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/fastapi/typer",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "types-aiofiles",
+      "version": "25.1.0.20251011",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/python/typeshed",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "types-PyYAML",
+      "version": "6.0.12.20250915",
+      "license": "Apache-2.0",
+      "home_page": "Homepage, https://github.com/python/typeshed",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/pydantic/typing-inspection",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "0.4.2 (python-langbot)"
+      ]
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "license": "PSF-2.0",
+      "home_page": "Bug Tracker, https://github.com/python/typing_extensions/issues",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "4.15.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.3",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/python/tzdata",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "2025.3 (python-langbot)",
+        "2026.6 (python-gateway)"
+      ]
+    },
+    {
+      "name": "tzlocal",
+      "version": "5.3.1",
+      "license": "MIT",
+      "home_page": "Source code, https://github.com/regebro/tzlocal",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "uc-micro-py",
+      "version": "1.0.3",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/tsutsu3/uc.micro-py",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "unpaddedbase64",
+      "version": "2.1.0",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/matrix-org/python-unpaddedbase64",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "uritemplate",
+      "version": "4.2.0",
+      "license": "BSD 3-Clause OR Apache-2.0",
+      "home_page": "https://uritemplate.readthedocs.org",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "urllib3",
+      "version": "2.7.0",
+      "license": "MIT",
+      "home_page": "Changelog, https://github.com/urllib3/urllib3/blob/main/CHANGES.rst",
+      "envs": [
+        "python-kokoro",
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "uuid_utils",
+      "version": "0.14.0",
+      "license": "BSD License",
+      "home_page": "Documentation, https://github.com/aminalaee/uuid-utils",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "uv",
+      "version": "0.11.19",
+      "license": "MIT OR Apache-2.0",
+      "home_page": "https://pypi.org/project/uv/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "uvicorn",
+      "version": "0.51.0",
+      "license": "BSD-3-Clause",
+      "home_page": "Changelog, https://uvicorn.dev/release-notes",
+      "envs": [
+        "python-core",
+        "python-gateway",
+        "python-kokoro",
+        "python-langbot",
+        "python-memory"
+      ],
+      "other_versions": [
+        "0.40.0 (python-langbot)",
+        "0.54.0 (python-gateway)",
+        "0.54.0 (python-memory)"
+      ]
+    },
+    {
+      "name": "virtualenv",
+      "version": "20.36.1",
+      "license": "MIT License",
+      "home_page": "Documentation, https://virtualenv.pypa.io",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "wasabi",
+      "version": "1.1.3",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/wasabi",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "watchdog",
+      "version": "6.0.0",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/gorakhargosh/watchdog",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "watchfiles",
+      "version": "1.1.1",
+      "license": "MIT",
+      "home_page": "https://github.com/samuelcolvin/watchfiles",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "wcmatch",
+      "version": "10.1",
+      "license": "MIT License",
+      "home_page": "Homepage, https://github.com/facelessuser/wcmatch",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "weasel",
+      "version": "1.0.0",
+      "license": "MIT",
+      "home_page": "https://github.com/explosion/weasel/",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "webauthn",
+      "version": "3.0.0",
+      "license": "BSD-3-Clause",
+      "home_page": "Homepage, https://github.com/duo-labs/py_webauthn",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "websocket-client",
+      "version": "1.9.0",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/websocket-client/websocket-client.git",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "websockets",
+      "version": "15.0.1",
+      "license": "BSD-3-Clause",
+      "home_page": "Homepage, https://github.com/python-websockets/websockets",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "Werkzeug",
+      "version": "3.1.6",
+      "license": "BSD-3-Clause",
+      "home_page": "Changes, https://werkzeug.palletsprojects.com/page/changes/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "win32_setctime",
+      "version": "1.2.0",
+      "license": "MIT license",
+      "home_page": "https://github.com/Delgan/win32-setctime",
+      "envs": [
+        "python-kokoro"
+      ]
+    },
+    {
+      "name": "wrapt",
+      "version": "2.3.0",
+      "license": "BSD-2-Clause",
+      "home_page": "Homepage, https://github.com/GrahamDumpleton/wrapt",
+      "envs": [
+        "python-kokoro",
+        "python-langbot"
+      ],
+      "other_versions": [
+        "2.1.0 (python-langbot)"
+      ]
+    },
+    {
+      "name": "wsproto",
+      "version": "1.3.2",
+      "license": "MIT",
+      "home_page": "Homepage, https://github.com/python-hyper/wsproto/",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "xxhash",
+      "version": "3.6.0",
+      "license": "BSD",
+      "home_page": "https://github.com/ifduyue/python-xxhash",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "yarl",
+      "version": "1.22.0",
+      "license": "Apache-2.0",
+      "home_page": "https://github.com/aio-libs/yarl",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "zipp",
+      "version": "3.23.0",
+      "license": "MIT",
+      "home_page": "Source, https://github.com/jaraco/zipp",
+      "envs": [
+        "python-langbot"
+      ]
+    },
+    {
+      "name": "zstandard",
+      "version": "0.25.0",
+      "license": "BSD-3-Clause",
+      "home_page": "Homepage, https://github.com/indygreg/python-zstandard",
+      "envs": [
+        "python-langbot"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{"env": "python-core", "name": "annotated-doc", "version": "0.0.5", "license": "MIT", "home_page": "Homepage, https://github.com/fastapi/annotated-doc"}
+{"env": "python-core", "name": "annotated-types", "version": "0.8.0", "license": "MIT License", "home_page": "Homepage, https://github.com/annotated-types/annotated-types"}
+{"env": "python-core", "name": "anyio", "version": "4.14.2", "license": "MIT", "home_page": "Documentation, https://anyio.readthedocs.io/en/latest/"}
+{"env": "python-core", "name": "certifi", "version": "2026.7.22", "license": "MPL-2.0", "home_page": "https://github.com/certifi/python-certifi"}
+{"env": "python-core", "name": "click", "version": "8.5.0", "license": "BSD-3-Clause", "home_page": "Changes, https://click.palletsprojects.com/page/changes/"}
+{"env": "python-core", "name": "fastapi", "version": "0.136.3", "license": "MIT", "home_page": "Homepage, https://github.com/fastapi/fastapi"}
+{"env": "python-core", "name": "h11", "version": "0.16.0", "license": "MIT", "home_page": "https://github.com/python-hyper/h11"}
+{"env": "python-core", "name": "httpcore", "version": "1.0.9", "license": "BSD License", "home_page": "Documentation, https://www.encode.io/httpcore"}
+{"env": "python-core", "name": "httpx", "version": "0.28.1", "license": "BSD-3-Clause", "home_page": "Changelog, https://github.com/encode/httpx/blob/master/CHANGELOG.md"}
+{"env": "python-core", "name": "idna", "version": "3.19", "license": "BSD-3-Clause", "home_page": "Changelog, https://github.com/kjd/idna/blob/master/HISTORY.md"}
+{"env": "python-core", "name": "psutil", "version": "7.2.2", "license": "BSD-3-Clause", "home_page": "https://github.com/giampaolo/psutil"}
+{"env": "python-core", "name": "psycopg", "version": "3.3.4", "license": "LGPL-3.0-only", "home_page": "Homepage, https://psycopg.org/"}
+{"env": "python-core", "name": "psycopg-binary", "version": "3.3.4", "license": "LGPL-3.0-only", "home_page": "Homepage, https://psycopg.org/"}
+{"env": "python-core", "name": "pydantic", "version": "2.13.4", "license": "MIT", "home_page": "Homepage, https://github.com/pydantic/pydantic"}
+{"env": "python-core", "name": "pydantic_core", "version": "2.46.4", "license": "MIT", "home_page": "https://github.com/pydantic/pydantic"}
+{"env": "python-core", "name": "starlette", "version": "1.6.0", "license": "BSD-3-Clause", "home_page": "Homepage, https://github.com/Kludex/starlette"}
+{"env": "python-core", "name": "typing-inspection", "version": "0.4.4", "license": "MIT", "home_page": "Homepage, https://github.com/pydantic/typing-inspection"}
+{"env": "python-core", "name": "typing_extensions", "version": "4.16.0", "license": "PSF-2.0", "home_page": "Bug Tracker, https://github.com/python/typing_extensions/issues"}
+{"env": "python-core", "name": "tzdata", "version": "2026.3", "license": "Apache-2.0", "home_page": "https://github.com/python/tzdata"}
+{"env": "python-core", "name": "uvicorn", "version": "0.51.0", "license": "BSD-3-Clause", "home_page": "Changelog, https://uvicorn.dev/release-notes"}

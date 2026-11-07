@@ -1,0 +1,105 @@
+{"env": "python-kokoro", "name": "addict", "version": "2.4.0", "license": "UNKNOWN", "home_page": "https://github.com/mewwts/addict"}
+{"env": "python-kokoro", "name": "annotated-doc", "version": "0.0.5", "license": "MIT", "home_page": "Homepage, https://github.com/fastapi/annotated-doc"}
+{"env": "python-kokoro", "name": "annotated-types", "version": "0.8.0", "license": "MIT License", "home_page": "Homepage, https://github.com/annotated-types/annotated-types"}
+{"env": "python-kokoro", "name": "anyio", "version": "4.14.2", "license": "MIT", "home_page": "Documentation, https://anyio.readthedocs.io/en/latest/"}
+{"env": "python-kokoro", "name": "attrs", "version": "26.1.0", "license": "MIT", "home_page": "Documentation, https://www.attrs.org/"}
+{"env": "python-kokoro", "name": "babel", "version": "2.18.0", "license": "BSD-3-Clause", "home_page": "https://babel.pocoo.org/"}
+{"env": "python-kokoro", "name": "blis", "version": "1.3.3", "license": "BSD", "home_page": "https://github.com/explosion/cython-blis"}
+{"env": "python-kokoro", "name": "catalogue", "version": "2.0.10", "license": "MIT", "home_page": "https://github.com/explosion/catalogue"}
+{"env": "python-kokoro", "name": "certifi", "version": "2026.7.22", "license": "MPL-2.0", "home_page": "https://github.com/certifi/python-certifi"}
+{"env": "python-kokoro", "name": "cffi", "version": "2.1.1", "license": "MIT-0", "home_page": "Documentation, https://cffi.readthedocs.io/"}
+{"env": "python-kokoro", "name": "charset-normalizer", "version": "3.5.1", "license": "MIT", "home_page": "Changelog, https://github.com/jawah/charset_normalizer/blob/master/CHANGELOG.md"}
+{"env": "python-kokoro", "name": "click", "version": "8.5.0", "license": "BSD-3-Clause", "home_page": "Changes, https://click.palletsprojects.com/page/changes/"}
+{"env": "python-kokoro", "name": "cloudpathlib", "version": "0.25.0", "license": "MIT License", "home_page": "Bug Tracker, https://github.com/drivendataorg/cloudpathlib/issues"}
+{"env": "python-kokoro", "name": "cn2an", "version": "0.5.24", "license": "MIT License", "home_page": "https://github.com/Ailln/cn2an"}
+{"env": "python-kokoro", "name": "colorama", "version": "0.4.6", "license": "BSD License", "home_page": "Homepage, https://github.com/tartley/colorama"}
+{"env": "python-kokoro", "name": "confection", "version": "1.3.3", "license": "MIT", "home_page": "https://github.com/explosion/confection"}
+{"env": "python-kokoro", "name": "csvw", "version": "4.1.0", "license": "Apache 2.0", "home_page": "https://github.com/cldf/csvw"}
+{"env": "python-kokoro", "name": "curated-tokenizers", "version": "0.0.10", "license": "MIT", "home_page": "https://github.com/explosion/curated-tokenizers"}
+{"env": "python-kokoro", "name": "curated-transformers", "version": "0.1.1", "license": "MIT", "home_page": "https://github.com/explosion/curated-transformers"}
+{"env": "python-kokoro", "name": "cymem", "version": "2.0.13", "license": "MIT", "home_page": "https://github.com/explosion/cymem"}
+{"env": "python-kokoro", "name": "dlinfo", "version": "2.0.0", "license": "MIT", "home_page": "https://github.com/fphammerle/python-dlinfo"}
+{"env": "python-kokoro", "name": "docopt", "version": "0.6.2", "license": "MIT", "home_page": "http://docopt.org"}
+{"env": "python-kokoro", "name": "espeakng-loader", "version": "0.2.4", "license": "UNKNOWN", "home_page": ""}
+{"env": "python-kokoro", "name": "fastapi", "version": "0.136.3", "license": "MIT", "home_page": "Homepage, https://github.com/fastapi/fastapi"}
+{"env": "python-kokoro", "name": "filelock", "version": "3.32.4", "license": "MIT License", "home_page": "Documentation, https://py-filelock.readthedocs.io"}
+{"env": "python-kokoro", "name": "fsspec", "version": "2026.6.0", "license": "BSD-3-Clause", "home_page": "Changelog, https://filesystem-spec.readthedocs.io/en/latest/changelog.html"}
+{"env": "python-kokoro", "name": "h11", "version": "0.16.0", "license": "MIT", "home_page": "https://github.com/python-hyper/h11"}
+{"env": "python-kokoro", "name": "hf-xet", "version": "1.6.0", "license": "Apache Software License", "home_page": "Documentation, https://huggingface.co/docs/hub/xet/index"}
+{"env": "python-kokoro", "name": "httpcore", "version": "1.0.9", "license": "BSD License", "home_page": "Documentation, https://www.encode.io/httpcore"}
+{"env": "python-kokoro", "name": "httpx", "version": "0.28.1", "license": "BSD-3-Clause", "home_page": "Changelog, https://github.com/encode/httpx/blob/master/CHANGELOG.md"}
+{"env": "python-kokoro", "name": "huggingface_hub", "version": "1.28.0", "license": "Apache-2.0", "home_page": "https://github.com/huggingface/huggingface_hub"}
+{"env": "python-kokoro", "name": "idna", "version": "3.19", "license": "BSD-3-Clause", "home_page": "Changelog, https://github.com/kjd/idna/blob/master/HISTORY.md"}
+{"env": "python-kokoro", "name": "isodate", "version": "0.7.2", "license": "BSD License", "home_page": "Homepage, https://github.com/gweis/isodate/"}
+{"env": "python-kokoro", "name": "jieba", "version": "0.42.1", "license": "MIT", "home_page": "https://github.com/fxsjy/jieba"}
+{"env": "python-kokoro", "name": "Jinja2", "version": "3.1.6", "license": "BSD License", "home_page": "Changes, https://jinja.palletsprojects.com/changes/"}
+{"env": "python-kokoro", "name": "joblib", "version": "1.5.3", "license": "BSD-3-Clause", "home_page": "Homepage, https://joblib.readthedocs.io"}
+{"env": "python-kokoro", "name": "jsonschema", "version": "4.26.0", "license": "MIT", "home_page": "Homepage, https://github.com/python-jsonschema/jsonschema"}
+{"env": "python-kokoro", "name": "jsonschema-specifications", "version": "2025.9.1", "license": "MIT", "home_page": "Documentation, https://jsonschema-specifications.readthedocs.io/"}
+{"env": "python-kokoro", "name": "kokoro", "version": "0.9.4", "license": "Apache Software License", "home_page": "Homepage, https://github.com/hexgrad/kokoro"}
+{"env": "python-kokoro", "name": "language-tags", "version": "1.3.1", "license": "MIT", "home_page": "History, https://github.com/OnroerendErfgoed/language-tags/blob/master/HISTORY.rst"}
+{"env": "python-kokoro", "name": "loguru", "version": "0.7.3", "license": "MIT License", "home_page": "Changelog, https://github.com/Delgan/loguru/blob/master/CHANGELOG.rst"}
+{"env": "python-kokoro", "name": "markdown-it-py", "version": "4.2.0", "license": "MIT License", "home_page": "Documentation, https://markdown-it-py.readthedocs.io"}
+{"env": "python-kokoro", "name": "MarkupSafe", "version": "3.0.3", "license": "BSD-3-Clause", "home_page": "Donate, https://palletsprojects.com/donate"}
+{"env": "python-kokoro", "name": "mdurl", "version": "0.1.2", "license": "MIT License", "home_page": "Homepage, https://github.com/executablebooks/mdurl"}
+{"env": "python-kokoro", "name": "misaki", "version": "0.9.4", "license": "Apache Software License", "home_page": ""}
+{"env": "python-kokoro", "name": "mpmath", "version": "1.3.0", "license": "BSD", "home_page": "http://mpmath.org/"}
+{"env": "python-kokoro", "name": "murmurhash", "version": "1.0.15", "license": "MIT", "home_page": "https://github.com/explosion/murmurhash"}
+{"env": "python-kokoro", "name": "networkx", "version": "3.6.1", "license": "BSD-3-Clause", "home_page": "Homepage, https://networkx.org/"}
+{"env": "python-kokoro", "name": "num2words", "version": "0.5.14", "license": "LGPL", "home_page": "https://github.com/savoirfairelinux/num2words"}
+{"env": "python-kokoro", "name": "numpy", "version": "2.4.6", "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0", "home_page": "homepage, https://numpy.org"}
+{"env": "python-kokoro", "name": "ordered-set", "version": "4.1.0", "license": "MIT License", "home_page": "Home, https://github.com/rspeer/ordered-set"}
+{"env": "python-kokoro", "name": "packaging", "version": "26.3", "license": "Apache-2.0 OR BSD-2-Clause", "home_page": "Documentation, https://packaging.pypa.io/"}
+{"env": "python-kokoro", "name": "phonemizer-fork", "version": "3.3.2", "license": "GNU General Public License v3 or later (GPLv3+)", "home_page": "Documentation, https://bootphon.github.io/phonemizer/"}
+{"env": "python-kokoro", "name": "preshed", "version": "3.0.13", "license": "MIT", "home_page": "https://github.com/explosion/preshed"}
+{"env": "python-kokoro", "name": "proces", "version": "0.1.7", "license": "MIT License", "home_page": "https://github.com/Ailln/proces"}
+{"env": "python-kokoro", "name": "psutil", "version": "7.2.2", "license": "BSD-3-Clause", "home_page": "https://github.com/giampaolo/psutil"}
+{"env": "python-kokoro", "name": "psycopg", "version": "3.3.4", "license": "LGPL-3.0-only", "home_page": "Homepage, https://psycopg.org/"}
+{"env": "python-kokoro", "name": "psycopg-binary", "version": "3.3.4", "license": "LGPL-3.0-only", "home_page": "Homepage, https://psycopg.org/"}
+{"env": "python-kokoro", "name": "pycparser", "version": "3.0", "license": "BSD-3-Clause", "home_page": "Homepage, https://github.com/eliben/pycparser"}
+{"env": "python-kokoro", "name": "pydantic", "version": "2.13.4", "license": "MIT", "home_page": "Homepage, https://github.com/pydantic/pydantic"}
+{"env": "python-kokoro", "name": "pydantic_core", "version": "2.46.4", "license": "MIT", "home_page": "https://github.com/pydantic/pydantic"}
+{"env": "python-kokoro", "name": "Pygments", "version": "2.21.0", "license": "BSD-2-Clause", "home_page": "Homepage, https://pygments.org"}
+{"env": "python-kokoro", "name": "pyparsing", "version": "3.3.2", "license": "MIT", "home_page": "Documentation, https://pyparsing-docs.readthedocs.io/en/latest/"}
+{"env": "python-kokoro", "name": "pypinyin", "version": "0.55.0", "license": "MIT", "home_page": "https://github.com/mozillazg/python-pinyin"}
+{"env": "python-kokoro", "name": "pypinyin-dict", "version": "0.9.0", "license": "MIT License", "home_page": "https://github.com/mozillazg/pypinyin-dict"}
+{"env": "python-kokoro", "name": "python-dateutil", "version": "2.9.0.post0", "license": "Dual License", "home_page": "https://github.com/dateutil/dateutil"}
+{"env": "python-kokoro", "name": "PyYAML", "version": "6.0.3", "license": "MIT", "home_page": "https://pyyaml.org/"}
+{"env": "python-kokoro", "name": "rdflib", "version": "7.6.0", "license": "BSD-3-Clause", "home_page": "https://github.com/RDFLib/rdflib"}
+{"env": "python-kokoro", "name": "referencing", "version": "0.37.0", "license": "MIT", "home_page": "Documentation, https://referencing.readthedocs.io/"}
+{"env": "python-kokoro", "name": "regex", "version": "2026.5.9", "license": "Apache-2.0 AND CNRI-Python", "home_page": "Homepage, https://github.com/mrabarnett/mrab-regex"}
+{"env": "python-kokoro", "name": "requests", "version": "2.34.2", "license": "Apache-2.0", "home_page": "Documentation, https://requests.readthedocs.io"}
+{"env": "python-kokoro", "name": "rfc3986", "version": "1.5.0", "license": "Apache 2.0", "home_page": "http://rfc3986.readthedocs.io"}
+{"env": "python-kokoro", "name": "rich", "version": "13.9.4", "license": "MIT", "home_page": "https://github.com/Textualize/rich"}
+{"env": "python-kokoro", "name": "rpds-py", "version": "2026.6.3", "license": "MIT", "home_page": "Documentation, https://rpds.readthedocs.io/"}
+{"env": "python-kokoro", "name": "safetensors", "version": "0.8.0", "license": "Apache Software License", "home_page": "Homepage, https://github.com/huggingface/safetensors"}
+{"env": "python-kokoro", "name": "segments", "version": "2.4.0", "license": "Apache 2.0", "home_page": "https://github.com/cldf/segments"}
+{"env": "python-kokoro", "name": "setuptools", "version": "83.0.0", "license": "MIT", "home_page": "Source, https://github.com/pypa/setuptools"}
+{"env": "python-kokoro", "name": "shellingham", "version": "1.5.4", "license": "ISC License", "home_page": "https://github.com/sarugaku/shellingham"}
+{"env": "python-kokoro", "name": "six", "version": "1.17.0", "license": "MIT", "home_page": "https://github.com/benjaminp/six"}
+{"env": "python-kokoro", "name": "smart_open", "version": "8.0.1", "license": "MIT License", "home_page": "Repository, https://github.com/piskvorky/smart_open"}
+{"env": "python-kokoro", "name": "soundfile", "version": "0.13.1", "license": "BSD 3-Clause License", "home_page": "https://github.com/bastibe/python-soundfile"}
+{"env": "python-kokoro", "name": "spacy", "version": "3.8.16", "license": "MIT", "home_page": "https://spacy.io"}
+{"env": "python-kokoro", "name": "spacy-curated-transformers", "version": "0.3.1", "license": "MIT", "home_page": "https://github.com/explosion/spacy-curated-transformers"}
+{"env": "python-kokoro", "name": "spacy-legacy", "version": "3.0.12", "license": "MIT", "home_page": "https://spacy.io"}
+{"env": "python-kokoro", "name": "spacy-loggers", "version": "1.0.5", "license": "MIT", "home_page": "https://github.com/explosion/spacy-loggers"}
+{"env": "python-kokoro", "name": "srsly", "version": "2.5.3", "license": "MIT", "home_page": "https://github.com/explosion/srsly"}
+{"env": "python-kokoro", "name": "starlette", "version": "1.6.0", "license": "BSD-3-Clause", "home_page": "Homepage, https://github.com/Kludex/starlette"}
+{"env": "python-kokoro", "name": "sympy", "version": "1.14.0", "license": "BSD", "home_page": "https://sympy.org"}
+{"env": "python-kokoro", "name": "termcolor", "version": "3.3.0", "license": "MIT", "home_page": "Changelog, https://github.com/termcolor/termcolor/releases"}
+{"env": "python-kokoro", "name": "thinc", "version": "8.3.13", "license": "MIT", "home_page": "https://github.com/explosion/thinc"}
+{"env": "python-kokoro", "name": "tokenizers", "version": "0.22.2", "license": "Apache Software License", "home_page": "Homepage, https://github.com/huggingface/tokenizers"}
+{"env": "python-kokoro", "name": "torch", "version": "2.13.0", "license": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT", "home_page": "Homepage, https://pytorch.org"}
+{"env": "python-kokoro", "name": "tqdm", "version": "4.70.0", "license": "MPL-2.0 AND MIT", "home_page": "homepage, https://tqdm.github.io"}
+{"env": "python-kokoro", "name": "transformers", "version": "5.5.4", "license": "Apache 2.0 License", "home_page": "https://github.com/huggingface/transformers"}
+{"env": "python-kokoro", "name": "typer", "version": "0.27.1", "license": "MIT", "home_page": "Homepage, https://github.com/fastapi/typer"}
+{"env": "python-kokoro", "name": "typing-inspection", "version": "0.4.4", "license": "MIT", "home_page": "Homepage, https://github.com/pydantic/typing-inspection"}
+{"env": "python-kokoro", "name": "typing_extensions", "version": "4.16.0", "license": "PSF-2.0", "home_page": "Bug Tracker, https://github.com/python/typing_extensions/issues"}
+{"env": "python-kokoro", "name": "tzdata", "version": "2026.3", "license": "Apache-2.0", "home_page": "https://github.com/python/tzdata"}
+{"env": "python-kokoro", "name": "uritemplate", "version": "4.2.0", "license": "BSD 3-Clause OR Apache-2.0", "home_page": "https://uritemplate.readthedocs.org"}
+{"env": "python-kokoro", "name": "urllib3", "version": "2.7.0", "license": "MIT", "home_page": "Changelog, https://github.com/urllib3/urllib3/blob/main/CHANGES.rst"}
+{"env": "python-kokoro", "name": "uvicorn", "version": "0.51.0", "license": "BSD-3-Clause", "home_page": "Changelog, https://uvicorn.dev/release-notes"}
+{"env": "python-kokoro", "name": "wasabi", "version": "1.1.3", "license": "MIT", "home_page": "https://github.com/explosion/wasabi"}
+{"env": "python-kokoro", "name": "weasel", "version": "1.0.0", "license": "MIT", "home_page": "https://github.com/explosion/weasel/"}
+{"env": "python-kokoro", "name": "win32_setctime", "version": "1.2.0", "license": "MIT license", "home_page": "https://github.com/Delgan/win32-setctime"}
+{"env": "python-kokoro", "name": "wrapt", "version": "2.3.0", "license": "BSD-2-Clause", "home_page": "Homepage, https://github.com/GrahamDumpleton/wrapt"}

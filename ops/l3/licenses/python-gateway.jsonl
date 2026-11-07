@@ -1,0 +1,35 @@
+{"env": "python-gateway", "name": "annotated-types", "version": "0.8.0", "license": "MIT License", "home_page": "Homepage, https://github.com/annotated-types/annotated-types"}
+{"env": "python-gateway", "name": "anyio", "version": "4.15.1", "license": "MIT", "home_page": "Documentation, https://anyio.readthedocs.io/en/latest/"}
+{"env": "python-gateway", "name": "attrs", "version": "26.1.0", "license": "MIT", "home_page": "Documentation, https://www.attrs.org/"}
+{"env": "python-gateway", "name": "certifi", "version": "2026.10.23", "license": "MPL-2.0", "home_page": "https://github.com/certifi/python-certifi"}
+{"env": "python-gateway", "name": "cffi", "version": "2.1.1", "license": "MIT-0", "home_page": "Documentation, https://cffi.readthedocs.io/"}
+{"env": "python-gateway", "name": "click", "version": "8.5.0", "license": "BSD-3-Clause", "home_page": "Changes, https://click.palletsprojects.com/page/changes/"}
+{"env": "python-gateway", "name": "cryptography", "version": "50.0.2", "license": "Apache-2.0 OR BSD-3-Clause", "home_page": "changelog, https://cryptography.io/en/latest/changelog/"}
+{"env": "python-gateway", "name": "h11", "version": "0.16.0", "license": "MIT", "home_page": "https://github.com/python-hyper/h11"}
+{"env": "python-gateway", "name": "httpcore", "version": "1.0.9", "license": "BSD License", "home_page": "Documentation, https://www.encode.io/httpcore"}
+{"env": "python-gateway", "name": "httpcore2", "version": "2.16.0", "license": "BSD License", "home_page": "Changelog, https://github.com/pydantic/httpx2/blob/main/src/httpcore2/CHANGELOG.md"}
+{"env": "python-gateway", "name": "httpx", "version": "0.28.1", "license": "BSD-3-Clause", "home_page": "Changelog, https://github.com/encode/httpx/blob/master/CHANGELOG.md"}
+{"env": "python-gateway", "name": "httpx2", "version": "2.16.0", "license": "BSD License", "home_page": "Changelog, https://github.com/pydantic/httpx2/blob/main/src/httpx2/CHANGELOG.md"}
+{"env": "python-gateway", "name": "idna", "version": "3.20", "license": "BSD-3-Clause", "home_page": "Changelog, https://github.com/kjd/idna/blob/master/HISTORY.md"}
+{"env": "python-gateway", "name": "jsonschema", "version": "4.26.0", "license": "MIT", "home_page": "Homepage, https://github.com/python-jsonschema/jsonschema"}
+{"env": "python-gateway", "name": "jsonschema-specifications", "version": "2025.9.1", "license": "MIT", "home_page": "Documentation, https://jsonschema-specifications.readthedocs.io/"}
+{"env": "python-gateway", "name": "mcp", "version": "2.3.0", "license": "MIT", "home_page": "Homepage, https://modelcontextprotocol.io"}
+{"env": "python-gateway", "name": "mcp-types", "version": "2.3.0", "license": "MIT", "home_page": "Homepage, https://modelcontextprotocol.io"}
+{"env": "python-gateway", "name": "opentelemetry-api", "version": "1.45.1", "license": "Apache-2.0", "home_page": "Homepage, https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api"}
+{"env": "python-gateway", "name": "psycopg", "version": "3.3.6", "license": "LGPL-3.0-only", "home_page": "Homepage, https://psycopg.org/"}
+{"env": "python-gateway", "name": "psycopg-binary", "version": "3.3.6", "license": "LGPL-3.0-only", "home_page": "Homepage, https://psycopg.org/"}
+{"env": "python-gateway", "name": "pycparser", "version": "3.12", "license": "BSD-3-Clause", "home_page": "Homepage, https://github.com/eliben/pycparser"}
+{"env": "python-gateway", "name": "pydantic", "version": "2.14.1", "license": "MIT", "home_page": "Homepage, https://github.com/pydantic/pydantic"}
+{"env": "python-gateway", "name": "pydantic_core", "version": "2.50.1", "license": "MIT", "home_page": "https://github.com/pydantic/pydantic"}
+{"env": "python-gateway", "name": "PyJWT", "version": "2.15.1", "license": "MIT", "home_page": "Homepage, https://github.com/jpadilla/pyjwt"}
+{"env": "python-gateway", "name": "python-multipart", "version": "0.0.32", "license": "Apache Software License", "home_page": "Homepage, https://github.com/Kludex/python-multipart"}
+{"env": "python-gateway", "name": "pywin32", "version": "312", "license": "PSF", "home_page": "Homepage, https://github.com/mhammond/pywin32"}
+{"env": "python-gateway", "name": "referencing", "version": "0.37.0", "license": "MIT", "home_page": "Documentation, https://referencing.readthedocs.io/"}
+{"env": "python-gateway", "name": "rpds-py", "version": "2026.9.1", "license": "MIT", "home_page": "Documentation, https://rpds.readthedocs.io/"}
+{"env": "python-gateway", "name": "sse-starlette", "version": "3.6.0", "license": "BSD-3-Clause", "home_page": "Homepage, https://github.com/sysid/sse-starlette"}
+{"env": "python-gateway", "name": "starlette", "version": "1.10.0", "license": "BSD-3-Clause", "home_page": "Homepage, https://github.com/Kludex/starlette"}
+{"env": "python-gateway", "name": "truststore", "version": "0.10.5", "license": "MIT", "home_page": "Documentation, https://truststore.readthedocs.io"}
+{"env": "python-gateway", "name": "typing-inspection", "version": "0.4.4", "license": "MIT", "home_page": "Homepage, https://github.com/pydantic/typing-inspection"}
+{"env": "python-gateway", "name": "typing_extensions", "version": "4.16.0", "license": "PSF-2.0", "home_page": "Bug Tracker, https://github.com/python/typing_extensions/issues"}
+{"env": "python-gateway", "name": "tzdata", "version": "2026.6", "license": "Apache-2.0", "home_page": "https://github.com/python/tzdata"}
+{"env": "python-gateway", "name": "uvicorn", "version": "0.54.0", "license": "BSD-3-Clause", "home_page": "Changelog, https://uvicorn.dev/release-notes"}

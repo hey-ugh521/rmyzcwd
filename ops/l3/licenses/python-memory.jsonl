@@ -1,0 +1,50 @@
+{"env": "python-memory", "name": "annotated-doc", "version": "0.0.5", "license": "MIT", "home_page": "Homepage, https://github.com/fastapi/annotated-doc"}
+{"env": "python-memory", "name": "annotated-types", "version": "0.8.0", "license": "MIT License", "home_page": "Homepage, https://github.com/annotated-types/annotated-types"}
+{"env": "python-memory", "name": "anyio", "version": "4.16.0", "license": "MIT", "home_page": "Documentation, https://anyio.readthedocs.io/en/latest/"}
+{"env": "python-memory", "name": "click", "version": "8.5.0", "license": "BSD-3-Clause", "home_page": "Changes, https://click.palletsprojects.com/page/changes/"}
+{"env": "python-memory", "name": "cloudpickle", "version": "3.1.2", "license": "BSD-3-Clause", "home_page": "https://github.com/cloudpipe/cloudpickle"}
+{"env": "python-memory", "name": "colorama", "version": "0.4.6", "license": "BSD License", "home_page": "Homepage, https://github.com/tartley/colorama"}
+{"env": "python-memory", "name": "fastapi", "version": "0.162.0", "license": "MIT", "home_page": "Homepage, https://github.com/fastapi/fastapi"}
+{"env": "python-memory", "name": "filelock", "version": "4.2.6", "license": "MIT", "home_page": "Changelog, https://py-filelock.readthedocs.io/en/latest/changelog.html"}
+{"env": "python-memory", "name": "fsspec", "version": "2026.9.0", "license": "BSD-3-Clause", "home_page": "Changelog, https://filesystem-spec.readthedocs.io/en/latest/changelog.html"}
+{"env": "python-memory", "name": "h11", "version": "0.16.0", "license": "MIT", "home_page": "https://github.com/python-hyper/h11"}
+{"env": "python-memory", "name": "hf-xet", "version": "1.8.0", "license": "Apache Software License", "home_page": "Documentation, https://huggingface.co/docs/hub/xet/index"}
+{"env": "python-memory", "name": "httpcore2", "version": "2.16.0", "license": "BSD License", "home_page": "Changelog, https://github.com/pydantic/httpx2/blob/main/src/httpcore2/CHANGELOG.md"}
+{"env": "python-memory", "name": "httpx2", "version": "2.16.0", "license": "BSD License", "home_page": "Changelog, https://github.com/pydantic/httpx2/blob/main/src/httpx2/CHANGELOG.md"}
+{"env": "python-memory", "name": "huggingface_hub", "version": "2.4.0", "license": "Apache-2.0", "home_page": "https://github.com/huggingface/huggingface_hub"}
+{"env": "python-memory", "name": "idna", "version": "3.20", "license": "BSD-3-Clause", "home_page": "Changelog, https://github.com/kjd/idna/blob/master/HISTORY.md"}
+{"env": "python-memory", "name": "Jinja2", "version": "3.1.6", "license": "BSD License", "home_page": "Changes, https://jinja.palletsprojects.com/changes/"}
+{"env": "python-memory", "name": "joblib", "version": "1.6.0", "license": "BSD-3-Clause", "home_page": "Homepage, https://joblib.readthedocs.io"}
+{"env": "python-memory", "name": "markdown-it-py", "version": "4.2.0", "license": "MIT License", "home_page": "Documentation, https://markdown-it-py.readthedocs.io"}
+{"env": "python-memory", "name": "MarkupSafe", "version": "3.0.4", "license": "BSD-3-Clause", "home_page": "Donate, https://palletsprojects.com/donate"}
+{"env": "python-memory", "name": "mdurl", "version": "0.1.2", "license": "MIT License", "home_page": "Homepage, https://github.com/executablebooks/mdurl"}
+{"env": "python-memory", "name": "mpmath", "version": "1.3.0", "license": "BSD", "home_page": "http://mpmath.org/"}
+{"env": "python-memory", "name": "narwhals", "version": "2.28.0", "license": "MIT", "home_page": "Homepage, https://github.com/narwhals-dev/narwhals"}
+{"env": "python-memory", "name": "networkx", "version": "3.6.1", "license": "BSD-3-Clause", "home_page": "Homepage, https://networkx.org/"}
+{"env": "python-memory", "name": "numpy", "version": "2.4.6", "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0", "home_page": "homepage, https://numpy.org"}
+{"env": "python-memory", "name": "opentelemetry-api", "version": "1.45.2", "license": "Apache-2.0", "home_page": "Homepage, https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api"}
+{"env": "python-memory", "name": "packaging", "version": "26.3", "license": "Apache-2.0 OR BSD-2-Clause", "home_page": "Documentation, https://packaging.pypa.io/"}
+{"env": "python-memory", "name": "pydantic", "version": "2.14.2", "license": "MIT", "home_page": "Homepage, https://github.com/pydantic/pydantic"}
+{"env": "python-memory", "name": "pydantic_core", "version": "2.50.2", "license": "MIT", "home_page": "https://github.com/pydantic/pydantic"}
+{"env": "python-memory", "name": "Pygments", "version": "2.21.0", "license": "BSD-2-Clause", "home_page": "Homepage, https://pygments.org"}
+{"env": "python-memory", "name": "PyYAML", "version": "6.0.3", "license": "MIT", "home_page": "https://pyyaml.org/"}
+{"env": "python-memory", "name": "regex", "version": "2026.9.29", "license": "Apache-2.0 AND CNRI-Python", "home_page": "Homepage, https://github.com/mrabarnett/mrab-regex"}
+{"env": "python-memory", "name": "rich", "version": "15.0.0", "license": "MIT", "home_page": "Documentation, https://rich.readthedocs.io/en/latest/"}
+{"env": "python-memory", "name": "safetensors", "version": "0.8.0", "license": "Apache Software License", "home_page": "Homepage, https://github.com/huggingface/safetensors"}
+{"env": "python-memory", "name": "scikit-learn", "version": "1.9.1", "license": "BSD-3-Clause", "home_page": "homepage, https://scikit-learn.org"}
+{"env": "python-memory", "name": "scipy", "version": "1.17.1", "license": "BSD License", "home_page": "homepage, https://scipy.org/"}
+{"env": "python-memory", "name": "sentence-transformers", "version": "6.2.0", "license": "Apache-2.0", "home_page": "Homepage, https://www.SBERT.net"}
+{"env": "python-memory", "name": "setuptools", "version": "79.0.1", "license": "UNKNOWN", "home_page": "Source, https://github.com/pypa/setuptools"}
+{"env": "python-memory", "name": "shellingham", "version": "1.5.4", "license": "ISC License", "home_page": "https://github.com/sarugaku/shellingham"}
+{"env": "python-memory", "name": "starlette", "version": "1.10.0", "license": "BSD-3-Clause", "home_page": "Homepage, https://github.com/Kludex/starlette"}
+{"env": "python-memory", "name": "sympy", "version": "1.14.0", "license": "BSD", "home_page": "https://sympy.org"}
+{"env": "python-memory", "name": "threadpoolctl", "version": "3.7.0", "license": "BSD-3-Clause", "home_page": "homepage, https://github.com/joblib/threadpoolctl"}
+{"env": "python-memory", "name": "tokenizers", "version": "0.23.3", "license": "Apache Software License", "home_page": "Homepage, https://github.com/huggingface/tokenizers"}
+{"env": "python-memory", "name": "torch", "version": "2.15.0", "license": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND ISC AND MIT AND Zlib", "home_page": "Homepage, https://pytorch.org"}
+{"env": "python-memory", "name": "tqdm", "version": "4.70.1", "license": "MPL-2.0 AND MIT", "home_page": "homepage, https://tqdm.github.io"}
+{"env": "python-memory", "name": "transformers", "version": "5.22.1", "license": "Apache 2.0 License", "home_page": "https://github.com/huggingface/transformers"}
+{"env": "python-memory", "name": "truststore", "version": "0.10.5", "license": "MIT", "home_page": "Documentation, https://truststore.readthedocs.io"}
+{"env": "python-memory", "name": "typer", "version": "0.27.3", "license": "MIT", "home_page": "Homepage, https://github.com/fastapi/typer"}
+{"env": "python-memory", "name": "typing-inspection", "version": "0.4.4", "license": "MIT", "home_page": "Homepage, https://github.com/pydantic/typing-inspection"}
+{"env": "python-memory", "name": "typing_extensions", "version": "4.16.0", "license": "PSF-2.0", "home_page": "Bug Tracker, https://github.com/python/typing_extensions/issues"}
+{"env": "python-memory", "name": "uvicorn", "version": "0.54.0", "license": "BSD-3-Clause", "home_page": "Changelog, https://uvicorn.dev/release-notes"}
