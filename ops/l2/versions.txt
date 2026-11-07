@@ -1,0 +1,9 @@
+L2 基线版本（2026-11-07）
+- Möbius 仓库 commit: 7dbf0856521b433626a51f2972c468a91e7bc316
+- LangBot: 4.11.2（镜像 rockchin/langbot:latest sha256:69ad47a1dc9b894ddd80e42eae9cdd6495f168d8fa33a9b54a8552067511871a）
+- NapCat: 镜像 mlikiowa/napcat-docker:latest sha256:b101b8968cc31ae428ec0f8e117386e4ced7773b2d8226ed9f7ddfcec55f1b7e
+- ComfyUI: 0.43.1（portable，D:\AI\comic\ComfyUI_windows_portable）
+- GPT-SoVITS: v4 portable 20250529（D:\AI\GPT-SoVITS-v4\GPT-SoVITS-v4-20250529-nvidia50）
+- PostgreSQL: mobius-pg (pgvector/pgvector:pg18)
+- Python: Core/console 用 open-webui env；Gateway 用 qqbot-mcp env；记忆用 mobius-memory env；ComfyUI 自带 python_embeded
+- 数据备份: D:\AI\backups\l2-baseline-20261107（pg/*.sql + volumes/langbot-data + volumes/napcat）
