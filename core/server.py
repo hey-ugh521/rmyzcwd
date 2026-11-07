@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 import re
 import sqlite3
 import time
@@ -40,6 +41,9 @@ agent = Agent(sup, gw)
 CONSOLE_DIR = Path(__file__).resolve().parent / "console"
 
 app = FastAPI(title="Möbius Core", version="1.0.0")
+
+# 后台任务引用集合（防止 asyncio 任务被 GC；不等待完成）
+_BACKGROUND: set = set()
 
 
 # ---------------------------------------------------------------- 鉴权
@@ -74,6 +78,9 @@ async def lifespan(_: FastAPI):
         task.cancel()
         with contextlib.suppress(Exception):
             await task
+        # L2 P1：Core 退出时优雅停掉自己拉起的全部服务（外部实例会被跳过）
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(sup.stop_all(), timeout=30)
         store.audit("core", "core.stop", {})
 
 
@@ -82,6 +89,11 @@ async def _boot():
         await sup.ensure_gateway()
     except Exception as e:
         store.audit("supervisor", "gateway.boot.fail", {"error": str(e)}, result="fail")
+    # L2 P1：Core 启动即拉起 autostart 服务（可由 core.autostart_services 关闭）
+    if bool(CORE.get("autostart_services", True)):
+        task = asyncio.create_task(sup.start_all())
+        _BACKGROUND.add(task)
+        task.add_done_callback(_BACKGROUND.discard)
     if CORE.get("prewarm_on_start"):
         await _prewarm()
 
@@ -272,6 +284,93 @@ async def api_status():
         "counters": store.tasks_today_counts(),
         "langbot": {"reachable": langbot},
     }
+
+
+# ---------------------------------------------------------------- 服务管理（L2 P1）
+
+
+@app.post("/api/shutdown")
+async def api_shutdown():
+    """优雅退出：先停掉由 Core 拉起的全部服务，再退出进程（启动器用）。"""
+    async def _do() -> None:
+        with contextlib.suppress(Exception):
+            await sup.stop_all()
+        store.audit("core", "core.shutdown_requested", {})
+        await asyncio.sleep(0.5)
+        os._exit(0)
+
+    task = asyncio.create_task(_do())
+    _BACKGROUND.add(task)
+    return {"ok": True, "shutting_down": True}
+
+
+@app.get("/api/services")
+async def api_services():
+    """全栈服务状态（含 autostart 列表）。"""
+    await sup.probe_all()
+    return {
+        "ok": True,
+        "autostart": [s.name for s in sup.services.values() if s.enabled and s.autostart],
+        "services": sup.list_services(),
+    }
+
+
+@app.get("/api/services/{name}")
+async def api_service_get(name: str):
+    try:
+        return {"ok": True, "service": await sup.probe(name)}
+    except ServiceError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/api/services/{name}/start")
+async def api_service_start(name: str, wait: int = 0):
+    if name not in sup.services:
+        raise HTTPException(404, f"未知服务 {name}")
+    if wait:
+        return {"ok": True, "service": await sup.start(name, wait=True)}
+    asyncio.create_task(sup.start(name, wait=True))
+    return {"ok": True, "started": True, "background": True, "service": sup.services[name].public()}
+
+
+@app.post("/api/services/{name}/stop")
+async def api_service_stop(name: str):
+    if name not in sup.services:
+        raise HTTPException(404, f"未知服务 {name}")
+    return {"ok": True, "service": await sup.stop(name)}
+
+
+@app.post("/api/services/{name}/restart")
+async def api_service_restart(name: str):
+    if name not in sup.services:
+        raise HTTPException(404, f"未知服务 {name}")
+    asyncio.create_task(sup.restart(name, wait=True))
+    return {"ok": True, "restarting": True, "background": True}
+
+
+@app.post("/api/services/start-all")
+async def api_services_start_all():
+    task = asyncio.create_task(sup.start_all())
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
+    return {"ok": True, "starting": True, "background": True,
+            "autostart": [s.name for s in sup.services.values() if s.enabled and s.autostart]}
+
+
+@app.post("/api/services/stop-all")
+async def api_services_stop_all():
+    return {"ok": True, "services": await sup.stop_all()}
+
+
+@app.get("/api/services/{name}/logs")
+async def api_service_logs(name: str, lines: int = 100):
+    try:
+        return {"ok": True, **sup.logs(name, lines)}
+    except ServiceError as e:
+        raise HTTPException(404, str(e))
+
+
+# ---------------------------------------------------------------- 媒体
 
 
 @app.put("/api/media/mode")

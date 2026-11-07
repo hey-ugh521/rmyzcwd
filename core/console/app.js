@@ -17,6 +17,7 @@
   var VIEW_META = {
     overview: { title: '概览', crumb: '概览' },
     tasks: { title: '任务', crumb: '任务' },
+    services: { title: '服务', crumb: '服务' },
     characters: { title: '角色', crumb: '角色' },
     memory: { title: '记忆', crumb: '记忆' },
     context: { title: '对话', crumb: '对话' },
@@ -28,7 +29,14 @@
     comfyui: { name: 'ComfyUI', port: 8188, short: 'GPU' },
     gateway: { name: 'Media Gateway', port: 8899, short: '网关' },
     kokoro: { name: 'Kokoro TTS', port: 7870, short: '语音' },
-    f5: { name: 'F5 克隆', port: 7871, short: '克隆' }
+    f5: { name: 'F5 克隆', port: 7871, short: '克隆' },
+    gsv: { name: 'GPT-SoVITS', port: 7873, short: '语音' },
+    embed: { name: '记忆嵌入', port: 8903, short: '嵌入' },
+    memory: { name: '记忆 MCP', port: 8902, short: '记忆' },
+    powercontext: { name: 'PowerContext', port: 8000, short: '上下文' },
+    langbot: { name: 'LangBot', port: 5300, short: '机器人' },
+    napcat: { name: 'NapCat', port: 3000, short: 'QQ' },
+    postgres: { name: 'PostgreSQL', port: 55432, short: '数据库' }
   };
 
   var MODE_META = {
@@ -2454,12 +2462,135 @@
   }
 
   /* ============================================================
+   * 服务（L2 P1：Core 全栈 Supervisor）
+   * ============================================================ */
+
+  var SERVICES_POLL_MS = 5000;
+
+  function renderServices(root) {
+    root.innerHTML = servicesShell();
+    bindServices();
+    return tickServices().then(function () {
+      addTimer(tickServices, SERVICES_POLL_MS);
+    });
+  }
+
+  function servicesShell() {
+    return '<div class="view">' +
+      '<div class="view-head"><div class="vh-main">' +
+      '<h2>全栈服务 <span class="hint">GET /api/services</span></h2>' +
+      '<p class="view-sub" id="svc-sub">Core 统管：启动 / 停止 / 重启 / 日志</p></div>' +
+      '<div class="view-actions"><span class="hint" id="svc-updated"></span>' +
+      '<button class="btn sm" id="svc-refresh" type="button"><span class="refresh-glyph">↻</span> 刷新</button>' +
+      '<button class="btn primary sm" id="svc-start-all" type="button">启动全部</button>' +
+      '<button class="btn sm" id="svc-stop-all" type="button">停止全部</button></div></div>' +
+      '<div id="svc-error"></div>' +
+      '<div class="service-grid" id="svc-list">' + serviceSkeletons() + '</div>' +
+      '</div>';
+  }
+
+  function bindServices() {
+    var refresh = $('#svc-refresh');
+    if (refresh) refresh.addEventListener('click', function () { tickServices(true); });
+    var startAll = $('#svc-start-all');
+    if (startAll) startAll.addEventListener('click', function () {
+      startAll.disabled = true;
+      api('/api/services/start-all', { method: 'POST' }).then(function () {
+        toast('已开始拉起 autostart 服务（后台执行）', 'success');
+        return tickServices(true);
+      }).catch(function (err) {
+        toast('启动全部失败：' + errorText(err), 'error');
+      }).then(function () { startAll.disabled = false; });
+    });
+    var stopAll = $('#svc-stop-all');
+    if (stopAll) stopAll.addEventListener('click', function () {
+      stopAll.disabled = true;
+      if (!window.confirm('停止全部由 Core 拉起的服务？')) { stopAll.disabled = false; return; }
+      api('/api/services/stop-all', { method: 'POST' }).then(function () {
+        toast('已停止全部服务', 'success');
+        return tickServices(true);
+      }).catch(function (err) {
+        toast('停止全部失败：' + errorText(err), 'error');
+      }).then(function () { stopAll.disabled = false; });
+    });
+    var list = $('#svc-list');
+    if (list) list.addEventListener('click', function (e) {
+      var btn = e.target.closest ? e.target.closest('button[data-act]') : null;
+      if (!btn) return;
+      var name = btn.getAttribute('data-svc');
+      var act = btn.getAttribute('data-act');
+      if (act === 'logs') {
+        api('/api/services/' + encodeURIComponent(name) + '/logs?lines=80').then(function (d) {
+          var pre = list.querySelector('pre[data-log="' + name + '"]');
+          if (!pre) return;
+          pre.hidden = false;
+          pre.textContent = (d.lines || []).join('\n') || '(暂无日志)';
+        }).catch(function (err) { toast('读取日志失败：' + errorText(err), 'error'); });
+        return;
+      }
+      btn.disabled = true;
+      api('/api/services/' + encodeURIComponent(name) + '/' + act, { method: 'POST' }).then(function () {
+        toast(name + ' → ' + act, 'success');
+        return tickServices(true);
+      }).catch(function (err) {
+        toast(name + ' ' + act + ' 失败：' + errorText(err), 'error');
+      }).then(function () { btn.disabled = false; });
+    });
+  }
+
+  function tickServices(force) {
+    return api('/api/services').then(function (data) {
+      paintServices(data);
+      var updated = $('#svc-updated');
+      if (updated) updated.textContent = '更新于 ' + new Date().toLocaleTimeString();
+      var sub = $('#svc-sub');
+      if (sub && data) {
+        var total = (data.services || []).length;
+        var ready = (data.services || []).filter(function (s) { return s.state === 'ready' || s.state === 'busy'; }).length;
+        sub.textContent = 'Core 统管 · 就绪 ' + ready + '/' + total + ' · autostart: ' + ((data.autostart || []).join(', ') || '无');
+      }
+      return data;
+    }, function (err) {
+      var box = $('#svc-error');
+      if (box) box.innerHTML = '<div class="card"><div class="card-body">服务状态获取失败：' + esc(errorText(err)) + '</div></div>';
+      return null;
+    });
+  }
+
+  function paintServices(data) {
+    var box = $('#svc-list');
+    if (!box || !data) return;
+    var html = '';
+    (data.services || []).forEach(function (s) {
+      var meta = SERVICE_META[s.name] || { name: s.name, port: s.port };
+      html += '<div class="svc" data-svc="' + esc(s.name) + '">' +
+        '<div class="svc-head"><span class="led ' + ledClass(s.state) + '"></span>' +
+        '<span class="svc-name">' + esc(meta.name || s.name) + '</span>' +
+        '<span class="svc-port">:' + esc(String(s.port || '')) + (s.autostart ? ' · auto' : '') + '</span></div>' +
+        '<div class="svc-state state-' + esc(s.state) + '">' + esc(STATE_TEXT[s.state] || s.state) + '</div>' +
+        (s.pid ? '<div class="svc-check">pid ' + esc(String(s.pid)) + ' · 运行 ' + esc(fmtUptime(s.uptime_sec || 0)) + '</div>' : '') +
+        (s.error ? '<div class="svc-check" style="color:#ff8a8a">' + esc(s.error) + '</div>' : '') +
+        (s.note ? '<div class="svc-check dim">' + esc(s.note) + '</div>' : '') +
+        '<div class="svc-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">' +
+        '<button class="btn sm" data-act="start" data-svc="' + esc(s.name) + '" ' + (s.enabled ? '' : 'disabled') + '>启动</button>' +
+        '<button class="btn sm" data-act="stop" data-svc="' + esc(s.name) + '">停止</button>' +
+        '<button class="btn sm" data-act="restart" data-svc="' + esc(s.name) + '" ' + (s.enabled ? '' : 'disabled') + '>重启</button>' +
+        '<button class="btn sm ghost" data-act="logs" data-svc="' + esc(s.name) + '">日志</button>' +
+        '</div>' +
+        '<pre data-log="' + esc(s.name) + '" hidden style="white-space:pre-wrap;max-height:180px;overflow:auto;font-size:11px;margin:8px 0 0;padding:8px;background:rgba(0,0,0,.25);border-radius:6px"></pre>' +
+        '</div>';
+    });
+    box.innerHTML = html || '<div class="hint">没有服务定义</div>';
+  }
+
+  /* ============================================================
    * 路由
    * ============================================================ */
 
   var RENDERERS = {
     overview: renderOverview,
     tasks: renderTasks,
+    services: renderServices,
     characters: renderCharacters,
     memory: renderMemory,
     context: renderContext,

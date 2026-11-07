@@ -75,12 +75,23 @@ P1 需引入统一配置（`config.json` + 环境变量），逐项替换；ops/
 - [x] 硬编码路径清单
 - 交付：`docs/L2-PLAN.md`、`ops/l2/*`
 
-### P1 Core 全栈 Supervisor
+### P1 Core 全栈 Supervisor（完成）
 - 服务定义：id/cmd/cwd/env/health/端口/启动超时/重启退避
 - API：`GET /api/services`、`POST /api/services/{id}/start|stop|restart`、`POST /api/services/start-all|stop-all`
 - `/console` 增加服务面板（状态、操作、日志尾部）
 - 失败可见：连续失败 N 次标记 `failed`，不无限重启
 - **验收**：Core 单进程 start-all 起 8–10 个服务；stop-all 全部退出；任一服务挂掉可单独重启；页面上能看到状态与错误
+
+- [x] 服务定义表（python/exe、cwd、env、health_url/ports、start_timeout、autostart、kill_pattern）
+- [x] API：`GET /api/services`、`POST /api/services/{name}/start|stop|restart`、`start-all`、`stop-all`、`GET .../logs`、`POST /api/shutdown`
+- [x] 控制台新增「服务」面板（状态/启动/停止/重启/日志）
+- [x] Core 启动即拉起 autostart（`core.autostart_services`，默认 true）
+- [x] 退出优雅收尾：`/api/shutdown` 先 stop_all 再退出；进程树用 taskkill /T + kill_pattern 清理游离子进程
+- **验收证据（2026-11-07）**：
+  - start-all：6/6 autostart 就绪用时 **18s**（kokoro/gateway/gsv/embed/memory/powercontext）
+  - stop-all：端口全部关闭、残留进程 **0**
+  - 单服务 restart、日志接口、`/console` 与新「服务」面板均通过
+  - `/api/shutdown`：HTTP 200，退出后端口全关、残留 0
 
 ### P2 LangBot 原生化（高风险）
 - 固定 LangBot 4.11.2 源码 + `uv venv`（Windows）

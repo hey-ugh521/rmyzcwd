@@ -61,14 +61,30 @@ class _Service:
     def enabled(self) -> bool:
         return bool(self.cfg.get("enabled", True))
 
+    @property
+    def autostart(self) -> bool:
+        return bool(self.cfg.get("autostart", False))
+
+    @property
+    def health_url(self) -> str:
+        return str(self.cfg.get("health_url") or "")
+
+    @property
+    def extra_ports(self) -> list[int]:
+        return [int(p) for p in (self.cfg.get("ports") or []) if str(p).isdigit()]
+
     def public(self) -> dict:
         return {
+            "name": self.name,
             "state": self.state if self.enabled else "disabled",
+            "enabled": self.enabled,
+            "autostart": self.autostart,
             "port": self.port,
             "last_check": round(self.last_check, 1),
             "pid": self.pid,
             "error": self.last_error,
             "uptime_sec": round(now() - self.started_at, 1) if self.started_at else 0,
+            "note": str(self.cfg.get("note") or ""),
         }
 
 
@@ -95,6 +111,65 @@ async def _http_ok(url: str, timeout: float = 3.0) -> bool:
             return r.status_code < 500
     except Exception:
         return False
+
+
+def _kill_tree(pid: int) -> None:
+    """清理整棵进程树（Windows 用 taskkill /T，其他平台忽略）。"""
+    if os.name != "nt" or not pid:
+        return
+    try:
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            capture_output=True, timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception:
+        pass
+
+
+def _kill_matched(pattern: str) -> list[int]:
+    """按命令行正则清理游离子进程（有人用 DETACHED_PROCESS 启动时会脱离进程树）。"""
+    killed: list[int] = []
+    if not pattern:
+        return killed
+    try:
+        import re as _re
+        try:
+            import psutil  # type: ignore
+
+            for p in psutil.process_iter(["pid", "cmdline"]):
+                try:
+                    cmd = " ".join(p.info.get("cmdline") or [])
+                except Exception:
+                    continue
+                if cmd and _re.search(pattern, cmd) and p.pid != os.getpid():
+                    try:
+                        p.kill()
+                        killed.append(p.pid)
+                    except Exception:
+                        pass
+        except ImportError:
+            # 无 psutil 时退回 wmic
+            out = subprocess.run(
+                ["wmic", "process", "where", "name='python.exe'", "get", "ProcessId,CommandLine", "/format:csv"],
+                capture_output=True, text=True, timeout=15,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            ).stdout
+            for line in out.splitlines():
+                if _re.search(pattern, line):
+                    parts = [x.strip() for x in line.split(",")]
+                    for token in parts[::-1]:
+                        if token.isdigit():
+                            subprocess.run(
+                                ["taskkill", "/PID", token, "/T", "/F"],
+                                capture_output=True, timeout=10,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                            )
+                            killed.append(int(token))
+                            break
+    except Exception:
+        pass
+    return killed
 
 
 class Supervisor:
@@ -152,15 +227,25 @@ class Supervisor:
         results = await asyncio.gather(*[self._probe_one(s) for s in self.services.values()])
         return {s.name: s.public() for s in self.services.values()}
 
+    async def _is_up(self, s: _Service) -> bool:
+        """探测服务是否就绪（供 start/probe/start_all 共用）。"""
+        if not s.enabled:
+            return False
+        if s.health_url:
+            return await _http_ok(s.health_url)
+        if s.extra_ports:
+            for p in s.extra_ports:
+                if await _port_open(p):
+                    return True
+            return False
+        return await _port_open(s.port)
+
     async def _probe_one(self, s: _Service) -> None:
         s.last_check = now()
         if not s.enabled:
             s.state = "disabled"
             return
-        if s.name == "comfyui":
-            ok = await _http_ok(s.cfg.get("health_url", "http://127.0.0.1:8188/system_stats"))
-        else:
-            ok = await _port_open(s.port)
+        ok = await self._is_up(s)
         if ok:
             if s.state in ("down", "unknown", "error"):
                 s.state = "ready"
@@ -246,7 +331,10 @@ class Supervisor:
 
     def _popen(self, s: _Service) -> subprocess.Popen:
         cfg = s.cfg
-        python = cfg.get("python")
+        exe = str(cfg.get("exe") or "").strip()
+        python = str(cfg.get("python") or "").strip()
+        if not exe and not python:
+            raise ServiceError(f"服务 {s.name} 未配置 python/exe")
         cwd = cfg.get("cwd") or "."
         if cwd == ".":
             cwd = str(BASE)
@@ -262,8 +350,9 @@ class Supervisor:
         logf.write(f"\n\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} supervisor 启动 {s.name} =====\n")
         logf.flush()
         flags = 0x08000000 if os.name == "nt" else 0   # CREATE_NO_WINDOW
+        cmd = [exe, *args] if exe else [python, *args]
         proc = subprocess.Popen(
-            [python, *args], cwd=cwd, env=env,
+            cmd, cwd=cwd, env=env,
             stdout=logf, stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL, creationflags=flags,
         )
@@ -325,8 +414,10 @@ class Supervisor:
                 cnt, _ = self._fail.get(name, (0, 0.0))
                 self._fail[name] = (cnt + 1, now() + FAIL_BACKOFF if cnt + 1 >= 3 else 0.0)
                 return s.public()
-            if s.name == "comfyui":
-                ok = await _http_ok(s.cfg.get("health_url", "http://127.0.0.1:8188/system_stats"))
+            if s.name == "comfyui" or s.health_url:
+                ok = await _http_ok(s.health_url or "http://127.0.0.1:8188/system_stats")
+            elif s.extra_ports:
+                ok = any([await _port_open(p) for p in s.extra_ports])
             else:
                 ok = await _port_open(s.port)
             if ok:
@@ -361,6 +452,7 @@ class Supervisor:
                 return s.public()
             proc = s.proc
             if proc and proc.poll() is None:
+                pid = proc.pid
                 try:
                     proc.terminate()
                     for _ in range(20):
@@ -371,12 +463,105 @@ class Supervisor:
                         proc.kill()
                 except Exception as e:
                     s.last_error = f"停止失败: {e}"
+                # 父进程退出后子进程可能还在（如 GSV supervisor 拉起的 api_v2/adapter），
+                # Windows 下用 taskkill /T 清整棵进程树，避免端口仍被占用。
+                _kill_tree(pid)
+                pattern = str(s.cfg.get("kill_pattern") or "").strip()
+                if pattern:
+                    killed = _kill_matched(pattern)
+                    if killed:
+                        log.info("[supervisor] %s 清理游离子进程: %s", name, killed)
             s.proc = None
             s.pid = None
             s.state = "down"
             s.started_at = 0.0
         store.audit("supervisor", f"service.stop.{name}", {}, source="supervisor")
         return s.public()
+
+    async def restart(self, name: str, wait: bool = True) -> dict:
+        await self.stop(name)
+        return await self.start(name, wait=wait)
+
+    # -------------------------------------------------- 全栈启停（P1）
+
+    def list_services(self) -> list[dict]:
+        return [s.public() for s in self.services.values()]
+
+    async def start_all(self) -> dict:
+        """按 autostart 拉起全部服务，并发等待就绪。"""
+        targets = [s for s in self.services.values() if s.enabled and s.autostart]
+        started: dict[str, dict] = {}
+        for s in targets:
+            try:
+                started[s.name] = await self.start(s.name, wait=False)
+            except Exception as e:  # noqa: BLE001
+                s.state = "error"
+                s.last_error = f"启动失败: {e}"
+                started[s.name] = s.public()
+
+        async def _wait_one(s: _Service) -> dict:
+            timeout = float(s.cfg.get("start_timeout_sec", 120))
+            deadline = now() + timeout
+            while now() < deadline:
+                if s.proc is not None and s.proc.poll() is not None:
+                    s.state = "error"
+                    s.last_error = f"进程退出 code={s.proc.returncode}，详见 logs/{s.name}.log"
+                    return s.public()
+                if await self._is_up(s):
+                    s.state = "ready"
+                    s.last_error = None
+                    if not s.started_at:
+                        s.started_at = now()
+                    self.touch_activity()
+                    self._fail.pop(s.name, None)
+                    return s.public()
+                await asyncio.sleep(1.5)
+            if s.proc is not None and s.proc.poll() is None:
+                s.state = "starting"
+                s.last_error = f"启动中（已等 {timeout:.0f}s 仍未就绪，进程仍在运行）"
+            else:
+                s.state = "error"
+                s.last_error = f"启动超时（{timeout:.0f}s）且进程已退出"
+            return s.public()
+
+        results = await asyncio.gather(*[_wait_one(s) for s in targets])
+        out = {r["name"]: r for r in results}
+        store.audit("supervisor", "services.start_all",
+                    {"targets": [s.name for s in targets],
+                     "ready": [k for k, v in out.items() if v.get("state") in ("ready", "busy")]},
+                    source="supervisor")
+        return out
+
+    async def stop_all(self) -> dict:
+        """停止全部由 Core 拉起的服务（逆序），外部实例跳过。"""
+        out: dict[str, dict] = {}
+        for s in reversed(list(self.services.values())):
+            if not s.enabled:
+                out[s.name] = s.public()
+                continue
+            try:
+                out[s.name] = await self.stop(s.name)
+            except Exception as e:  # noqa: BLE001
+                out[s.name] = {"name": s.name, "state": "error", "error": str(e)}
+        await self.probe_all()
+        store.audit("supervisor", "services.stop_all",
+                    {"stopped": list(out.keys())}, source="supervisor")
+        return out
+
+    def logs(self, name: str, lines: int = 100) -> dict:
+        s = self.services.get(name)
+        if not s:
+            raise ServiceError(f"未知服务 {name}")
+        lines = max(1, min(int(lines or 100), 2000))
+        path = LOG_DIR / f"{name}.log"
+        if not path.is_file():
+            return {"name": name, "path": str(path), "lines": [], "exists": False}
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:  # noqa: BLE001
+            raise ServiceError(f"读取日志失败: {e}")
+        tail = text.splitlines()[-lines:]
+        return {"name": name, "path": str(path), "lines": tail, "exists": True}
 
     # -------------------------------------------------- ensure（Core 调用入口）
 
@@ -547,6 +732,7 @@ class Supervisor:
             "active_tasks": len(store.tasks_active()),
             "seconds_since_activity": round(self.seconds_since_activity(), 1),
             "comfy_models_unloaded": bool(self._comfy_freed),
+            "autostart": [s.name for s in self.services.values() if s.enabled and s.autostart],
             "services": svc,
         }
 
