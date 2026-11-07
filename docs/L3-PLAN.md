@@ -12,25 +12,33 @@
 
 ## 0. 体积盘点（实测）
 
-| 组件 | 体积 | 交付方式 |
+| 组件 | 体积（实测/审计） | 交付方式 |
 |---|---|---|
-| Core Python 环境（open-webui，可瘦身） | 3.44 GB | 组件下载 |
-| Gateway Python 环境 | 0.09 GB | 组件下载 |
-| 记忆 Python 环境 | 1.07 GB | 组件下载 |
-| LangBot 源码 + venv | 1.14 GB | 组件下载 |
-| 便携 PostgreSQL | 1.09 GB | 组件下载 |
-| 原生 NapCat（含 QQ） | 1.50 GB | 组件下载 |
-| ComfyUI 运行时（不含模型） | 6.98 GB | 组件下载（可选组件） |
-| GPT-SoVITS 运行时（不含权重，估） | ~7 GB | 组件下载（可选组件） |
-| 嵌入模型 bge-m3 | 2.6 GB | 模型下载 |
-| ComfyUI 模型 | 19.31 GB | 模型下载（可选） |
-| GPT-SoVITS 权重 | ~14 GB | 模型下载（可选） |
-| 其他模型/语音包 | ~10 GB | 模型下载（可选） |
+| Core Python 环境（当前 open-webui 全量） | 3.44 GB → **0.09 GB 基础 / 1.23 GB 含 Kokoro** | 组件下载（必需） |
+| Gateway Python 环境 | 0.09 GB → **0.13 GB** | 组件下载（必需） |
+| 记忆 Python 环境 | 1.07 GB → **1.08 GB**（torch 瓶颈） | 组件下载（记忆可选） |
+| LangBot 源码 + venv | 1.14 GB | 组件下载（必需） |
+| 便携 PostgreSQL | 1.09 GB | 组件下载（必需） |
+| 原生 NapCat（含 QQ） | 1.50 GB | 组件下载（必需） |
+| ComfyUI 运行时（不含模型） | 6.98 GB | 组件下载（可选） |
+| GPT-SoVITS 运行时（不含权重，估） | ~7 GB | 组件下载（可选） |
+| **模型合计（实测审计）** | **≈127.6 GiB** | 模型下载（可选，见下） |
+| ├ 嵌入 bge-m3（文本记忆必需） | 2.14 GiB | 模型下载 |
+| ├ 生图 | 104.54 GiB（ComfyUI 物理 79.27 = D 盘 19.31 + **E 盘 junction 59.97**；另 `D:\AI\ai-models` 25.27） | 模型下载/迁移 |
+| ├ 语音 | 20.96 GiB（GSV 13.19 + 社区 0.53 + TTS/ASR/评测 7.25） | 模型下载/迁移 |
 | **安装器本体** | **< 100 MB** | 随包 |
-| **必需运行时组件** | **~8.5 GB** | 首次下载 |
-| **全部组件 + 模型** | **~60–86 GB** | 首次下载 |
+| **最小可跑通集** | **≈15.6 GiB**（组件 + bge-m3） | 首次下载 |
+| **默认能力档** | **≈25.7 GiB**（+Illustrious/qwen/角色 LoRA/Rosmontis/kokoro） | 首次下载 |
 
-结论：安装器本体很小；体积转移到"组件 + 模型下载器"。核心难点从打包变成**组件托管、校验、断点续传、许可合规**。
+> 修正（来自子智能体审计）：
+> 1. **ComfyUI 模型不是 19.31GB**：15 个子目录是指向 `E:\comfy-models` 的 junction，物理合计 **79.27GB**；迁移/下载器必须先解引用（`robocopy /XJ` 或按目标拷贝），不能复制 junction 本身。
+> 2. **`D:\AI\ai-models`（25.27GB，Qwen-Image 2.1 / FLUX3 Klein）是默认画笔底座**，不在 ComfyUI 目录内；L3 需纳入模型清单（建议作为「生图底座包」可选组件，仅从原始来源下载/迁移，不镜像分发）。
+> 3. **不可再分发**（只能迁移）：13 个 Hi3 角色 LoRA、社区 Rosmontis/Theresa 权重、自训 GSV 73 个 epoch、FLUX3（FLUX Kommunity 非商用）、F5-TTS（CC-BY-NC）、MiniMax H3（许可待确认）。
+> 4. Python 环境合计 **4.59GB → 2.43GB（-47%）**；极简核心（不含 Kokoro）Python 环境仅 **0.22GB**。
+> 5. **三套 venv 基底不可分发**（Gateway 指向 DSH 自带 Python、Memory 指向 open-webui conda）→ P2 必须 `uv venv --relocatable` 重建；4 份 requirements 与重建命令见 `ops/l3/dep-audit.md` §4.3/§4.4。
+> 6. Kokoro 中文 G2P 需显式 `misaki[zh]`（pypinyin-dict 107.6MB），建议 Kokoro 作为可选组件。
+
+结论：安装器本体很小；体积转移到「组件 + 模型下载器」。核心难点是**组件托管、校验、断点续传、模型许可与 junction 处理**。
 
 ---
 
@@ -139,7 +147,7 @@ MobiusRoot\
 | 阶段 | 内容 | 工期 | 验收 |
 |---|---|---|---|
 | **P1 路径抽象（完成）** | `MOBIUS_ROOT` 契约；`core/paths.py`；配置变量化；示例配置 | 3–5 天 | ✅ 复制/改名目录后不改文件即可启动（见 `ops/l3/P1-PATHS.md`） |
-| P2 运行时组件化 | 四套 Python relocatable；ComfyUI/GSV 便携化；组件包与分卷规范 | 7–10 天 | 组件解压到任意目录可运行 |
+| **P2 运行时组件化** | `uv venv --relocatable` 重建（含 4 份 requirements）；Kokoro 拆为可选组件；ComfyUI/GSV 便携化；组件包/分卷规范 | 7–10 天 | 组件解压到任意目录可运行；极简核心 Python 环境 ≤0.3GB |
 | P3 组件清单与下载器 | manifest 规范、下载/校验/断点续传/镜像/修复 | 5–7 天 | 断网缓存可复用；坏包可检测 |
 | P4 首启向导与能力面板 | 组件状态、模型下载/迁移、**LLM 提供方配置与连通测试**、QQ 登录、能力缺口提示 | 5–7 天 | 全程 GUI；极简安装也能完成一次真实对话 |
 | P5 扩展接口与自定义组件 | MCP/插件/角色/画笔/工作流扩展契约；本地 manifest 覆盖；第三方组件信任提示 | 5–7 天 | 自定义扩展放入目录即生效，无需重装 |
@@ -172,6 +180,8 @@ MobiusRoot\
 
 | 风险 | 影响 | 对策 |
 |---|---|---|
+| ComfyUI 模型 junction（E 盘 60GB） | 迁移漏拷 | 迁移脚本用 `robocopy /XJ` 解引用或按 manifest 逐文件拷贝 |
+| 模型许可（Civitai/HF 不可再分发） | 侵权/违规 | 仅迁移或链接原始来源；下载前展示许可 |
 | 22GB 组件下载体验 | 首装慢 | 分卷、断点续传、国内镜像、可选只装必需组件 |
 | 分卷托管成本/带宽 | 分发成本高 | 对象存储 + CDN；或仅发布必需组件 |
 | 模型许可（Civitai/HF） | 不能分发 | 只链接原始来源；下载前展示许可；不镜像受限模型 |
