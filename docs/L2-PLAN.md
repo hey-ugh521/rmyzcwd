@@ -105,10 +105,15 @@ P1 需引入统一配置（`config.json` + 环境变量），逐项替换；ops/
 > 详见 `ops/l2/LANGBOT-NATIVE.md`。
 > 待办：按"全新配置"重建空库与流水线（P3 后执行）；插件运行时孤儿清理；LangRAG 已禁用。
 
-### P3 NapCat 原生化
+### P3 NapCat 原生化（阻塞：需要管理员权限）
 - NapCatQQ Windows 版，OneBot HTTP 3000 / WS 3001 + token
 - 扫码登录，登录态落盘
 - **验收**：私聊/群聊消息进入 LangBot；图片/语音发送成功；重启后免扫码
+
+> **2026-11-08 状态**：原生包已安装到 `D:\AI\napcat-native\NapCat.52230.Shell`
+> （QQ 9.9.33-52230 + NapCat 4.18.42），配置已复制；直接启动 worker 崩溃（error v2:-8），
+> `launcher.bat` 检测到非管理员后要求提权。当前容器 NapCat 作为回退保持在线。
+> 解锁条件：一次管理员权限启动（UAC）或使用带权限处理的 NapCat Desktop。
 
 ### P4 数据库去容器
 - 便携 PostgreSQL（zenith/EDB zip）由 Core 托管，初始化 + pgvector
