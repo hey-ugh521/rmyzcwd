@@ -93,12 +93,17 @@ P1 需引入统一配置（`config.json` + 环境变量），逐项替换；ops/
   - 单服务 restart、日志接口、`/console` 与新「服务」面板均通过
   - `/api/shutdown`：HTTP 200，退出后端口全关、残留 0
 
-### P2 LangBot 原生化（高风险）
+### P2 LangBot 原生化（高风险，功能验证通过）
 - 固定 LangBot 4.11.2 源码 + `uv venv`（Windows）
 - 数据库：优先 LangBot SQLite；若插件/监控需要 PG 则用便携 PG
 - **全新配置**：重跑流水线（模型/提示词/插件/mcp_servers/事件绑定），可参照现有配置值（`langbot` 库备份可查）
 - 插件运行时：先尝试内置运行；不行再决定保留容器
 - **验收**：原生 LangBot 收发私聊/群聊；`memory`、`comfyui` MCP 加载；PowerContext 插件加载；语音/生图工具可用
+
+> **2026-11-07 验收**：原生 LangBot（uv + venv + Python 3.12）由 Core 托管，5300 健康；
+> OneBot WS 已连 NapCat（127.0.0.1:13001），私聊消息进 → 回复出（monitoring_messages 有记录）。
+> 详见 `ops/l2/LANGBOT-NATIVE.md`。
+> 待办：按"全新配置"重建空库与流水线（P3 后执行）；插件运行时孤儿清理；LangRAG 已禁用。
 
 ### P3 NapCat 原生化
 - NapCatQQ Windows 版，OneBot HTTP 3000 / WS 3001 + token
