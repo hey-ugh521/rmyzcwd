@@ -115,11 +115,16 @@ P1 需引入统一配置（`config.json` + 环境变量），逐项替换；ops/
 > 容器 NapCat 已停；`services.napcat` 登记为 enabled + autostart=false（启动需 UAC）。
 > 详见 `ops/l2/NAPCAT-NATIVE.md`。P5 启动器需提权拉起。
 
-### P4 数据库去容器
+### P4 数据库去容器（完成）
 - 便携 PostgreSQL（zenith/EDB zip）由 Core 托管，初始化 + pgvector
 - 导入 `langbot`（可选，若用 SQLite 则跳过）、`mobius`、`mobius_core`
 - 去掉 Redis（网关已有进程内回退）
 - **验收**：记忆写入/召回、任务持久化、Core 审计正常；重启数据不丢
+
+> **2026-11-08 验收**：便携 PostgreSQL 18.6（pgvector 0.8.7）接管三库；
+> Redis 移除（回退进程内节流）。记忆 MCP facts=4、任务快照 192 行、LangBot 在便携 PG 上正常启动，
+> OneBot 已连接。容器 PG/Redis 已停。启动顺序：先 PG 后 Core（`ops/l2/start-postgres.ps1`）。
+> 详见 `ops/l2/POSTGRES-PORTABLE.md`。
 
 ### P5 启动器 exe
 - PyInstaller（onefile 或 onedir）启动器：托盘 + 控制台入口 + 日志
