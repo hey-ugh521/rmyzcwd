@@ -27,6 +27,7 @@ param(
     [switch]$SkipLauncher,
     [switch]$SkipComponents,
     [switch]$SkipInstaller,
+    [switch]$SelfSign,
     [switch]$ExecuteUpload,
     [string]$Tag = ""
 )
@@ -54,6 +55,21 @@ if (-not $SkipLauncher) {
     Step "构建启动器 exe"
     & (Join-Path $repo 'launcher\build.ps1')
     if ($LASTEXITCODE -ne 0) { Fail "启动器构建失败" }
+}
+
+# ---------------------------------------------------------------- 先签启动器（安装器会内嵌签名后的 exe）
+if ($SelfSign -or $SignThumbprint) {
+    Step "签名启动器（先于安装器打包）"
+    $launcherTargets = @(
+        (Join-Path $repo "launcher\dist\Mobius.exe"),
+        (Join-Path $repo "launcher\dist\MobiusCLI.exe")
+    )
+    if ($SelfSign) {
+        & (Join-Path $repo "ops\l3\sign.ps1") -SelfSigned -Trust -Path $launcherTargets
+    } else {
+        & (Join-Path $repo "ops\l3\sign.ps1") -Thumbprint $SignThumbprint -Path $launcherTargets
+    }
+    if ($LASTEXITCODE -ne 0) { Fail "启动器签名失败" }
 }
 
 # ---------------------------------------------------------------- 组件规格
@@ -132,6 +148,20 @@ if (-not $SkipInstaller) {
     $iss | Set-Content 'installer\mobius.iss' -Encoding UTF8
     & $iscc 'installer\mobius.iss'
     if ($LASTEXITCODE -ne 0) { Fail "安装包构建失败" }
+}
+
+# ---------------------------------------------------------------- 签名（先签后哈希）
+if ($SelfSign -or $SignThumbprint) {
+    Step "签名（自签=$([bool]$SelfSign) 指纹=$SignThumbprint）"
+    $signTargets = @(
+        (Join-Path $repo "installer\dist\MobiusSetup-$Version.exe")
+    )
+    if ($SelfSign) {
+        & (Join-Path $repo 'ops\l3\sign.ps1') -SelfSigned -Trust -Path $signTargets
+    } else {
+        & (Join-Path $repo 'ops\l3\sign.ps1') -Thumbprint $SignThumbprint -Path $signTargets
+    }
+    if ($LASTEXITCODE -ne 0) { Fail "签名失败" }
 }
 
 # ---------------------------------------------------------------- 收集产物

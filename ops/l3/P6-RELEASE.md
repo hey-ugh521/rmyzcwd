@@ -37,7 +37,7 @@ ops/l3/build_release.ps1 -Version 0.2.0
 | 重建 launcher + installer（`-SkipComponents`） | ✅ 全流程通过；新安装包 SHA256 `beea43ee…6661de` |
 | 组件哈希 | ✅ 10 个组件（12.45GB）逐一记录 |
 | 上传命令 | ✅ `upload-commands.txt`（gh release / ossutil 模板） |
-| 签名 | ✅ `ops/l3/sign.ps1` 已接入（本次演练未提供证书） |
+| 签名 | ✅ 自签跑通（见 `P6-SIGNING.md`）：launcher 先签→安装器后签→签名后哈希；内嵌 exe Valid |
 
 ## 3. 产物布局
 
