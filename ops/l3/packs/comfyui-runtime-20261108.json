@@ -1,0 +1,20 @@
+{
+  "id": "comfyui-runtime",
+  "name": "comfyui-runtime",
+  "kind": "ComfyUI_windows_portable\\cache\\*",
+  "version": "20261108",
+  "required": false,
+  "depends_on": [],
+  "size": 4157263366,
+  "sha256": "833c3ccd74cecc467b614eb80659298844f43f8870b9eaaa25a8ecf73a3cd0fa",
+  "urls": "https://example.invalid/mobius/components/comfyui-runtime-20261108.7z",
+  "install": {
+    "format": "7z",
+    "target": "runtime/comfyui",
+    "type": "archive"
+  },
+  "license": {
+    "type": "mixed",
+    "note": ""
+  }
+}

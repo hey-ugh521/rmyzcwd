@@ -66,14 +66,14 @@
 | `python-core` | runtime | ✅ | — | **26 MB** | Core 运行环境（20 包） |
 | `python-gateway` | runtime | ✅ | — | **56 MB** | 网关 + 记忆 MCP（35 包） |
 | `python-memory` | runtime | ✅* | — | **770 MB** | 嵌入服务（torch CPU） |
-| `langbot` | runtime | ✅ | — | 1.14 GB | 源码 + uv venv（P2 后 relocatable） |
+| `langbot` | runtime | ✅ | — | 源码 174.2 MB 包 + `python-langbot` 137.3 MB 包 | 已 relocatable（P2b） |
 | `postgres` | runtime | ✅ | — | 1.09 GB | 便携 PG + 模板数据 |
 | `napcat` | runtime | ✅ | — | 1.50 GB | NapCat + QQ 便携包 |
 | `powercontext` | service | 可选 | — | ~50 MB | 上下文服务 |
-| `kokoro` | runtime | 可选 | python-core | ~1.2 GB | TTS（含 misaki[zh]） |
-| `comfyui-runtime` | runtime | 可选 | — | 6.98 GB | 生图运行时 |
+| `python-kokoro` | runtime | 可选 | python-core | 145.1 MB（安装 904 MB） | TTS（含 misaki[zh]，中文已验证） |
+| `comfyui-runtime` | runtime | 可选 | — | 3.96 GB（安装 ~7 GB） | 生图运行时，已排除 models |
 | `comfyui-models` | model | 可选 | comfyui-runtime | 物理 79.27 GB（含 E 盘 junction 解引用） | 画笔底模/LoRA |
-| `gsv-runtime` | runtime | 可选 | — | ~7 GB | 语音运行时 |
+| `gsv-runtime` | runtime | 可选 | — | 7.93 GB（安装 ~13.2 GB） | 语音运行时，已排除角色权重 |
 | `gsv-weights` | model | 可选 | gsv-runtime | 20.96 GB | 角色语音权重 |
 | `embed-model-bge-m3` | model | ✅* | python-memory | 2.14 GB | 文本记忆必需 |
 | `image-base-ai-models` | model | 可选 | — | 25.27 GB | Qwen-Image 2.1 / FLUX3 Klein（默认画笔底座） |

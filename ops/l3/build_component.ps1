@@ -11,7 +11,8 @@ param(
     [string]$SevenZip = 'D:\AI\napcat-native\7z.exe',
     [string]$Target = '',
     [string]$License = 'mixed',
-    [string]$Urls = ''
+    [string]$Urls = '',
+    [string]$ExcludePatterns = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,7 +35,13 @@ $archive = Join-Path $OutDir ("{0}-{1}.7z" -f $Name, $Version)
 if (Test-Path $archive) { Remove-Item $archive -Force }
 
 Write-Host "压缩中: $archive"
-& $SevenZip a -t7z -mx=5 -y $archive $link | Out-Null
+$exArgs = @()
+if ($ExcludePatterns) {
+    foreach ($pat in $ExcludePatterns.Split(';')) {
+        if ($pat.Trim()) { $exArgs += "-x!$($pat.Trim())" }
+    }
+}
+& $SevenZip a -t7z -mx=5 -y @exArgs $archive $link | Out-Null
 if (-not (Test-Path $archive)) { throw "7z 压缩失败" }
 
 Remove-Item $link -Force -ErrorAction SilentlyContinue

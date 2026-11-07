@@ -1,0 +1,20 @@
+{
+  "id": "python-kokoro",
+  "name": "python-kokoro",
+  "kind": "runtime",
+  "version": "3.12-20261108",
+  "required": false,
+  "depends_on": [],
+  "size": 152123526,
+  "sha256": "2ca9383f0567ccdf679d86ee91c46067196acf31997afa6504f432caabe1d1f1",
+  "urls": "https://example.invalid/mobius/components/python-kokoro-3.12-20261108.7z",
+  "install": {
+    "target": "runtime/python-kokoro",
+    "format": "7z",
+    "type": "archive"
+  },
+  "license": {
+    "note": "",
+    "type": "mixed"
+  }
+}

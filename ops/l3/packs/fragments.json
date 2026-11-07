@@ -3,6 +3,66 @@
   "api_version": 1,
   "launcher_min_version": "0.1.0",
   "components": {
+    "comfyui-runtime": {
+      "id": "comfyui-runtime",
+      "name": "comfyui-runtime",
+      "kind": "ComfyUI_windows_portable\\cache\\*",
+      "version": "20261108",
+      "required": false,
+      "depends_on": [],
+      "size": 4157263366,
+      "sha256": "833c3ccd74cecc467b614eb80659298844f43f8870b9eaaa25a8ecf73a3cd0fa",
+      "urls": "https://example.invalid/mobius/components/comfyui-runtime-20261108.7z",
+      "install": {
+        "format": "7z",
+        "target": "runtime/comfyui",
+        "type": "archive"
+      },
+      "license": {
+        "type": "mixed",
+        "note": ""
+      }
+    },
+    "gsv-runtime": {
+      "id": "gsv-runtime",
+      "name": "gsv-runtime",
+      "kind": "runtime",
+      "version": "20261108",
+      "required": false,
+      "depends_on": [],
+      "size": 8312481693,
+      "sha256": "c897b6744e5c53556c1a57106fc4789538a22459c536e75a63dfcc8d01b7b79b",
+      "urls": "https://example.invalid/mobius/components/gsv-runtime-20261108.7z",
+      "install": {
+        "format": "7z",
+        "type": "archive",
+        "target": "runtime/gsv"
+      },
+      "license": {
+        "type": "mixed",
+        "note": ""
+      }
+    },
+    "langbot": {
+      "id": "langbot",
+      "name": "langbot",
+      "kind": "langbot-native\\data\\logs\\*",
+      "version": "20261108",
+      "required": false,
+      "depends_on": [],
+      "size": 182712960,
+      "sha256": "45b8521c1002f07792ab3cedc657e499dc4c9e2d55e9ddead34c72c9646c9a58",
+      "urls": "https://example.invalid/mobius/components/langbot-20261108.7z",
+      "install": {
+        "format": "7z",
+        "type": "archive",
+        "target": "runtime/langbot"
+      },
+      "license": {
+        "note": "",
+        "type": "mixed"
+      }
+    },
     "python-core": {
       "id": "python-core",
       "name": "python-core",
@@ -37,6 +97,46 @@
         "type": "archive",
         "format": "7z",
         "target": "runtime/python-gateway"
+      },
+      "license": {
+        "type": "mixed",
+        "note": ""
+      }
+    },
+    "python-kokoro": {
+      "id": "python-kokoro",
+      "name": "python-kokoro",
+      "kind": "runtime",
+      "version": "3.12-20261108",
+      "required": false,
+      "depends_on": [],
+      "size": 152123526,
+      "sha256": "2ca9383f0567ccdf679d86ee91c46067196acf31997afa6504f432caabe1d1f1",
+      "urls": "https://example.invalid/mobius/components/python-kokoro-3.12-20261108.7z",
+      "install": {
+        "target": "runtime/python-kokoro",
+        "format": "7z",
+        "type": "archive"
+      },
+      "license": {
+        "note": "",
+        "type": "mixed"
+      }
+    },
+    "python-langbot": {
+      "id": "python-langbot",
+      "name": "python-langbot",
+      "kind": "runtime",
+      "version": "3.12-20261108",
+      "required": false,
+      "depends_on": [],
+      "size": 143961502,
+      "sha256": "831f3b238284886fd2326c751fe0c59f67c65c599a088735562f09df9a5f61f3",
+      "urls": "https://example.invalid/mobius/components/python-langbot-3.12-20261108.7z",
+      "install": {
+        "target": "runtime/python-langbot",
+        "format": "7z",
+        "type": "archive"
       },
       "license": {
         "type": "mixed",

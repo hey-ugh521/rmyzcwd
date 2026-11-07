@@ -1,0 +1,20 @@
+{
+  "id": "gsv-runtime",
+  "name": "gsv-runtime",
+  "kind": "runtime",
+  "version": "20261108",
+  "required": false,
+  "depends_on": [],
+  "size": 8312481693,
+  "sha256": "c897b6744e5c53556c1a57106fc4789538a22459c536e75a63dfcc8d01b7b79b",
+  "urls": "https://example.invalid/mobius/components/gsv-runtime-20261108.7z",
+  "install": {
+    "format": "7z",
+    "type": "archive",
+    "target": "runtime/gsv"
+  },
+  "license": {
+    "type": "mixed",
+    "note": ""
+  }
+}

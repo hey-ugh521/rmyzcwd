@@ -47,16 +47,19 @@
     },
     "kokoro": {
       "enabled": true,
-      "python": "${CONDA}\\open-webui\\python.exe",
-      "cwd": "${TTS_WS}",
+      "python": "${RUNTIME}/python-kokoro/Scripts/python.exe",
+      "cwd": "${ROOT}",
       "args": [
-        "kokoro_openai_api.py",
+        "ops/tts/kokoro_openai_api.py",
         "--port",
         "7870"
       ],
       "port": 7870,
       "start_timeout_sec": 180,
-      "autostart": true
+      "autostart": true,
+      "env": {
+        "MOBIUS_KOKORO_DIR": "${MODELS}/kokoro"
+      }
     },
     "gateway": {
       "enabled": true,
@@ -103,8 +106,8 @@
       "start_timeout_sec": 300,
       "env": {
         "PYTHONIOENCODING": "utf-8",
-        "MOBIUS_GSV_ROOT": "${AI}\\GPT-SoVITS-v4\\GPT-SoVITS-v4-20250529-nvidia50",
-        "MOBIUS_GSV_ADAPTER": "${AI}\\gsv_openai_adapter.py"
+        "MOBIUS_GSV_ROOT": "${AI}/GPT-SoVITS-v4/GPT-SoVITS-v4-20250529-nvidia50",
+        "MOBIUS_GSV_ADAPTER": "${AI}/gsv_openai_adapter.py"
       },
       "autostart": true,
       "kill_pattern": "api_v2\\.py|gsv_openai_adapter\\.py|gsv_supervisor\\.py",
@@ -172,14 +175,13 @@
       "port": 5300,
       "health_url": "http://127.0.0.1:5300/healthz",
       "start_timeout_sec": 240,
-      "exe": "${HOME}\\.local\\bin\\uv.exe",
+      "exe": "${RUNTIME}/python-langbot/Scripts/python.exe",
       "args": [
-        "run",
-        "--no-sync",
         "main.py"
       ],
       "env": {
-        "PYTHONUTF8": "1"
+        "PYTHONUTF8": "1",
+        "VIRTUAL_ENV": "${RUNTIME}/python-langbot"
       },
       "kill_pattern": "langbot_plugin\\.cli|langbot-native\\\\.venv|langbot-native\\\\main\\.py|langbot-native.*main\\.py"
     },

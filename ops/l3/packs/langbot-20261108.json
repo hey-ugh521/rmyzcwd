@@ -1,0 +1,20 @@
+{
+  "id": "langbot",
+  "name": "langbot",
+  "kind": "langbot-native\\data\\logs\\*",
+  "version": "20261108",
+  "required": false,
+  "depends_on": [],
+  "size": 182712960,
+  "sha256": "45b8521c1002f07792ab3cedc657e499dc4c9e2d55e9ddead34c72c9646c9a58",
+  "urls": "https://example.invalid/mobius/components/langbot-20261108.7z",
+  "install": {
+    "format": "7z",
+    "type": "archive",
+    "target": "runtime/langbot"
+  },
+  "license": {
+    "note": "",
+    "type": "mixed"
+  }
+}
