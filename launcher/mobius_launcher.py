@@ -20,6 +20,7 @@ import argparse
 import ctypes
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -190,7 +191,18 @@ def _expand_cfg(cfg: dict, mapping: dict[str, str]) -> dict:
     return walk(cfg)
 
 
+def _ensure_config_file() -> None:
+    """首次运行：没有 config.json 时用示例配置初始化（向导随后补全）。"""
+    if os.path.isfile(CONFIG_PATH):
+        return
+    example = os.path.join(ROOT, "config.example.json")
+    if os.path.isfile(example):
+        shutil.copyfile(example, CONFIG_PATH)
+        log("已从 config.example.json 初始化 config.json")
+
+
 def load_config() -> dict:
+    _ensure_config_file()
     with open(CONFIG_PATH, encoding="utf-8") as f:
         cfg = json.load(f)
     return _expand_cfg(cfg, _path_map(cfg))
@@ -451,6 +463,7 @@ def install_components(ids: list[str] | None = None, source_dir: str = "") -> bo
 def _raw_config() -> dict:
     import json as _json
 
+    _ensure_config_file()
     try:
         return _json.loads(open(CONFIG_PATH, encoding="utf-8").read())
     except (OSError, ValueError):

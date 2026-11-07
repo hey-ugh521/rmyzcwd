@@ -3,7 +3,7 @@
 ; 产物：installer\dist\MobiusSetup-0.1.0.exe
 
 #define AppName "Mobius"
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.0"
 #define AppPublisher "Mobius"
 #define SourceRoot ".."
 
@@ -49,6 +49,15 @@ Source: "{#SourceRoot}\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversio
 Source: "{#SourceRoot}\data\characters\*"; DestDir: "{app}\data\characters"; Flags: ignoreversion
 Source: "{#SourceRoot}\config.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}\docs\L2-PLAN.md"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "{#SourceRoot}\docs\L3-PLAN.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#SourceRoot}\docs\L3-LICENSES.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#SourceRoot}\docs\L3-COMPONENTS.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#SourceRoot}\ops\l3\downloader.py"; DestDir: "{app}\ops\l3"; Flags: ignoreversion
+Source: "{#SourceRoot}\ops\l3\packs\*.json"; DestDir: "{app}\ops\l3\packs"; Flags: ignoreversion
+Source: "{#SourceRoot}\ops\l3\licenses\THIRD-PARTY.md"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "{#SourceRoot}\ops\l3\licenses\licenses.json"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "{#SourceRoot}\ops\l3\licenses\texts\*"; DestDir: "{app}\licenses\texts"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceRoot}\config.example.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}\docs\STATUS.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#SourceRoot}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 ; 环境检查脚本
@@ -58,6 +67,7 @@ Source: "preflight.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{group}\Möbius 启动器"; Filename: "{app}\Mobius.exe"; WorkingDir: "{app}"; IconFilename: "{app}\launcher\mobius.ico"
 Name: "{group}\Möbius 控制台"; Filename: "http://127.0.0.1:8900/console"; IconFilename: "{app}\launcher\mobius.ico"
 Name: "{group}\环境检查"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\preflight.ps1"""; WorkingDir: "{app}"
+Name: "{group}\许可与第三方声明"; Filename: "notepad.exe"; Parameters: """{app}\licenses\THIRD-PARTY.md"""; WorkingDir: "{app}"
 Name: "{group}\卸载 Möbius"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Möbius"; Filename: "{app}\Mobius.exe"; WorkingDir: "{app}"; IconFilename: "{app}\launcher\mobius.ico"; Tasks: desktopicon
 

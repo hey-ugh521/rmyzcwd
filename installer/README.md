@@ -11,16 +11,16 @@ cd mobius
 D:\AI\InnoSetup\ISCC.exe installer\mobius.iss
 ```
 
-产物：`installer\dist\MobiusSetup-0.1.0.exe`（约 27MB）
+产物：`installer\dist\MobiusSetup-0.2.0.exe`（约 27MB）
 
 ## 安装
 
 ```powershell
 # 图形安装
-installer\dist\MobiusSetup-0.1.0.exe
+installer\dist\MobiusSetup-0.2.0.exe
 
 # 静默安装（默认目录 D:\AI\Mobius）
-installer\dist\MobiusSetup-0.1.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+installer\dist\MobiusSetup-0.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
 安装内容：

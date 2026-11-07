@@ -67,8 +67,8 @@
 | `python-gateway` | runtime | ✅ | — | **56 MB** | 网关 + 记忆 MCP（35 包） |
 | `python-memory` | runtime | ✅* | — | **770 MB** | 嵌入服务（torch CPU） |
 | `langbot` | runtime | ✅ | — | 源码 174.2 MB 包 + `python-langbot` 137.3 MB 包 | 已 relocatable（P2b） |
-| `postgres` | runtime | ✅ | — | 1.09 GB | 便携 PG + 模板数据 |
-| `napcat` | runtime | ✅ | — | 1.50 GB | NapCat + QQ 便携包 |
+| `postgres` | runtime | ✅ | — | 214.2 MB | 便携 PG 二进制（数据首次 initdb） |
+| `napcat-code` | runtime | ✅ | — | 20.1 MB | NapCat 代码（**不含 QQ**；QQ 需官方安装） |
 | `powercontext` | service | 可选 | — | ~50 MB | 上下文服务 |
 | `python-kokoro` | runtime | 可选 | python-core | 145.1 MB（安装 904 MB） | TTS（含 misaki[zh]，中文已验证） |
 | `comfyui-runtime` | runtime | 可选 | — | 3.96 GB（安装 ~7 GB） | 生图运行时，已排除 models |
