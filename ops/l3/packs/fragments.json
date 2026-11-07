@@ -13,9 +13,9 @@
       "size": 4157263366,
       "sha256": "833c3ccd74cecc467b614eb80659298844f43f8870b9eaaa25a8ecf73a3cd0fa",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721882848",
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721882842",
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721882841"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.001",
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.003"
       ],
       "install": {
         "format": "7z",
@@ -29,21 +29,24 @@
       },
       "parts": [
         {
-          "url": "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721882848",
+          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.001",
           "size": 1992294400,
           "sha256": "406b5ef17ca6f13b08fdc692989532aacf673f1f5c1451d9f8bd51abe6b1ce1f",
+          "index": 0,
           "name": "comfyui-runtime-20261108.7z.001"
         },
         {
-          "url": "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721882842",
+          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
           "size": 1992294400,
           "sha256": "78dbb2fbae40ac0fb511eaded5669b80d6795414b95122372ca01b03c6c57280",
+          "index": 1,
           "name": "comfyui-runtime-20261108.7z.002"
         },
         {
-          "url": "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721882841",
+          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.003",
           "size": 172674566,
           "sha256": "6e0a95c9395af6b67a455518d2a23e250ad123ab8d1ea065143aea504a101465",
+          "index": 2,
           "name": "comfyui-runtime-20261108.7z.003"
         }
       ]
@@ -58,11 +61,11 @@
       "size": 8312481693,
       "sha256": "c897b6744e5c53556c1a57106fc4789538a22459c536e75a63dfcc8d01b7b79b",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900448",
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900437",
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900446",
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900438",
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900440"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.001",
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.002",
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.003",
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.004",
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.005"
       ],
       "install": {
         "format": "7z",
@@ -76,33 +79,38 @@
       },
       "parts": [
         {
-          "url": "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900448",
+          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.001",
           "size": 1992294400,
           "sha256": "5a9827abee407a151a8a947d61439b0838532397aeec24d7ddee75ec591c0552",
+          "index": 0,
           "name": "gsv-runtime-20261108.7z.001"
         },
         {
-          "url": "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900437",
+          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.002",
           "size": 1992294400,
           "sha256": "11527bc7681e571a1a6591289ab594e7d30b541fdcf8e87f543b7884566b2c36",
+          "index": 1,
           "name": "gsv-runtime-20261108.7z.002"
         },
         {
-          "url": "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900446",
+          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.003",
           "size": 1992294400,
           "sha256": "2a647b43ca110219dd960917d3af8cdcebacd79eabda09c2350c52973c4a6355",
+          "index": 2,
           "name": "gsv-runtime-20261108.7z.003"
         },
         {
-          "url": "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900438",
+          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.004",
           "size": 1992294400,
           "sha256": "ffed46f697f8045f11c9049c57f1531d59a506c6813727ffb04862849a01a79f",
+          "index": 3,
           "name": "gsv-runtime-20261108.7z.004"
         },
         {
-          "url": "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721900440",
+          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.005",
           "size": 343304093,
           "sha256": "9b8c81ef3104bbbb1b8fb8264ac1beb38f1b44fa16ecf4d82003e4c037f3e941",
+          "index": 4,
           "name": "gsv-runtime-20261108.7z.005"
         }
       ]
@@ -117,7 +125,7 @@
       "size": 182712960,
       "sha256": "45b8521c1002f07792ab3cedc657e499dc4c9e2d55e9ddead34c72c9646c9a58",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721876567"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/langbot-20261108.7z"
       ],
       "install": {
         "format": "7z",
@@ -139,7 +147,7 @@
       "size": 21052833,
       "sha256": "e2cdb828b329f217a1085af1fe9e1abca3f2e9936d068193c86696bd5572aed0",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721880519"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/napcat-code-4.18.42-20261108.7z"
       ],
       "install": {
         "format": "7z",
@@ -161,7 +169,7 @@
       "size": 224588177,
       "sha256": "2830c9925d49134dde4ee2f0e4cda41e7e70258b283220f4c16e499e6c3a017e",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721876756"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/postgres-18.6-20261108.7z"
       ],
       "install": {
         "target": "runtime/postgres",
@@ -183,7 +191,7 @@
       "size": 6523656,
       "sha256": "39e135d3d0b735c41817f44c0671ac28acafe95ec8cc77de0873dc9866cffcbc",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721876368"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-core-3.12-20261108.7z"
       ],
       "install": {
         "target": "runtime/python-core",
@@ -205,7 +213,7 @@
       "size": 15464581,
       "sha256": "5b0427ea25760aecbfe81305778d7b43307627f4ec8e3bdaec9186e45d354ece",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721876357"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-gateway-3.12-20261108.7z"
       ],
       "install": {
         "type": "archive",
@@ -227,7 +235,7 @@
       "size": 152123526,
       "sha256": "2ca9383f0567ccdf679d86ee91c46067196acf31997afa6504f432caabe1d1f1",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721876363"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-kokoro-3.12-20261108.7z"
       ],
       "install": {
         "target": "runtime/python-kokoro",
@@ -249,7 +257,7 @@
       "size": 143961502,
       "sha256": "831f3b238284886fd2326c751fe0c59f67c65c599a088735562f09df9a5f61f3",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721876360"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-langbot-3.12-20261108.7z"
       ],
       "install": {
         "target": "runtime/python-langbot",
@@ -271,7 +279,7 @@
       "size": 147997837,
       "sha256": "4994565114bf9e6ccda523bbef4cb533e52888f350554cac4b3fdc6a7a214b73",
       "urls": [
-        "https://api.github.com/repos/hey-ugh521/mobius/releases/assets/721876355"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-memory-3.12-20261108.7z"
       ],
       "install": {
         "format": "7z",

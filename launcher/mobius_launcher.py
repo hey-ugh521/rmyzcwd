@@ -565,7 +565,7 @@ def is_first_run() -> bool:
 # GitHub Token（私有仓库组件下载）
 # ---------------------------------------------------------------------------
 
-GH_API_RELEASE = "https://api.github.com/repos/hey-ugh521/mobius/releases/tags/l3-20261108"
+GH_API_RELEASE = "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/tags/l3-20261108"
 
 
 def _mask(token: str) -> str:

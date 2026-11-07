@@ -7,7 +7,9 @@
   "depends_on": [],
   "size": 224588177,
   "sha256": "2830c9925d49134dde4ee2f0e4cda41e7e70258b283220f4c16e499e6c3a017e",
-  "urls": "https://example.invalid/mobius/components/postgres-18.6-20261108.7z",
+  "urls": [
+    "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/postgres-18.6-20261108.7z"
+  ],
   "install": {
     "target": "runtime/postgres",
     "format": "7z",

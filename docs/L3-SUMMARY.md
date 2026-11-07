@@ -58,7 +58,7 @@ mobius/
 
 | 项 | 阻塞条件 |
 |---|---|
-| ~~组件真实托管~~ | ✅ 已上传 GitHub Release `l3-20261108`（私有仓库，需 token） |
+| ~~组件真实托管~~ | ✅ GitHub Release `l3-20261108`（`hey-ugh521/rmyzcwd`，PUBLIC，免 token） |
 | 正式代码签名 | 自签已跑通；对外分发需 OV/EV 证书 |
 | 真实 HTTP 断点续传实测 | 需组件公网 URL |
 | QQ 官方安装引导 | 分发时需做成安装器步骤（当前文档说明） |

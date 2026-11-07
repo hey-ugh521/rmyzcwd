@@ -1,7 +1,7 @@
 """把 GitHub Release 资产写回组件 manifest（私有仓库用 API 资产 URL），并生成发布清单。
 
 用法：
-  python ops/l3/finalize_release.py --repo hey-ugh521/mobius --tag l3-20261108 --version 0.2.0
+  python ops/l3/finalize_release.py --repo hey-ugh521/rmyzcwd --tag l3-20261108 --version 0.2.0
 
 依赖：gh CLI 已登录；仓库私有 → 下载器需设置 MOBIUS_GH_TOKEN。
 """
@@ -55,7 +55,7 @@ def main() -> int:
                 if not asset:
                     missing.append(name)
                     continue
-                part["url"] = asset.get("apiUrl") or asset.get("url")
+                part["url"] = asset.get("url") or asset.get("apiUrl")
                 part.setdefault("name", name)
             comp["urls"] = [p["url"] for p in comp["parts"]]
         else:
@@ -64,7 +64,7 @@ def main() -> int:
             if not asset:
                 missing.append(name)
                 continue
-            comp["urls"] = [asset.get("apiUrl") or asset.get("url")]
+            comp["urls"] = [asset.get("url") or asset.get("apiUrl")]
 
     if missing:
         print("缺失资产（可重跑上传后再次 finalize）：")

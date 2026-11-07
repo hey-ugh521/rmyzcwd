@@ -7,7 +7,9 @@
   "depends_on": [],
   "size": 182712960,
   "sha256": "45b8521c1002f07792ab3cedc657e499dc4c9e2d55e9ddead34c72c9646c9a58",
-  "urls": "https://example.invalid/mobius/components/langbot-20261108.7z",
+  "urls": [
+    "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/langbot-20261108.7z"
+  ],
   "install": {
     "format": "7z",
     "type": "archive",

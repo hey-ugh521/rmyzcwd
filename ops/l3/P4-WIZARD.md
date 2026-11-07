@@ -53,7 +53,7 @@ Mobius.exe --wizard                                 # 强制进入向导
 
 ## 5. GitHub Token（私有仓库）
 
-- 向导第 1 步输入，保存到 `config.json → launcher.github_token`（明文，文件已 gitignore）
+- 仓库已公开：**Token 可选**（仅私有 Fork/限流时需要）；输入后保存到 `config.json → launcher.github_token`（明文，已 gitignore）
 - 启动时注入 `MOBIUS_GH_TOKEN`，下载器自动用于 `api.github.com` 资产
 - CLI 验证：`--headless configure-github --github-token <TOKEN>`，输出 Release 资产数
 - 校验证据：`✓ Release l3-20261108 可访问（23 个资产）`

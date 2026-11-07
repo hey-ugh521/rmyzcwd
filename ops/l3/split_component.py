@@ -69,7 +69,7 @@ def main() -> int:
             parts.append({
                 "index": idx - 1,
                 "name": part_path.name,
-                "url": f"https://github.com/hey-ugh521/mobius/releases/download/l3-{version}/" + part_path.name,
+                "url": f"https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-{version}/" + part_path.name,
                 "size": size,
                 "sha256": h.hexdigest(),
             })

@@ -7,7 +7,9 @@
   "depends_on": [],
   "size": 143961502,
   "sha256": "831f3b238284886fd2326c751fe0c59f67c65c599a088735562f09df9a5f61f3",
-  "urls": "https://example.invalid/mobius/components/python-langbot-3.12-20261108.7z",
+  "urls": [
+    "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-langbot-3.12-20261108.7z"
+  ],
   "install": {
     "target": "runtime/python-langbot",
     "format": "7z",
