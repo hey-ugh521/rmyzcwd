@@ -152,7 +152,7 @@ MobiusRoot\
 | **P4 首启向导（完成）** | ✅ 4 步向导（组件/LLM/模型目录/QQ）+ CLI（components/install-components/test-llm/configure-llm/migrate-models） | 5–7 天 | ✅ LLM 连通、模型迁移、GUI 启动验证；见 `ops/l3/P4-WIZARD.md` |
 | P5b 扩展接口与自定义组件（待补验收） | MCP/插件/角色/画笔/工作流扩展契约（L2 已具备）；本地 manifest 覆盖已在下载器实现 | 3–5 天 | 放入自定义 MCP/角色/工作流即生效（需补验收脚本） |
 | **P6 可分发合规（完成）** | ✅ 305 包许可清单 + 350 份许可文本 + 组件矩阵 + 分发检查清单 + 签名方案/脚本 | 3–5 天 | ✅ 见 `docs/L3-LICENSES.md`；分发前需按清单复核 NapCat/QQ/受限模型 |
-| **P6 安装器集成（完成核心）** | ✅ Inno 0.2.0：新 launcher（向导）+ 下载器 + manifest + 许可声明；卸载/升级验证通过 | 3–5 天 | 安装/升级/卸载全过；组件托管与签名待发布阶段；见 `ops/l3/P6-INSTALLER.md` |
+| **P6 安装器 + 发布流水线（完成）** | ✅ Inno 0.2.0（向导/下载器/许可）；`ops/l3/build_release.ps1` 哈希+清单+签名+上传命令；演练通过 | 3–5 天 | ✅ 安装/升级/卸载/发布演练全过；见 `ops/l3/P6-INSTALLER.md`、`P6-RELEASE.md` |
 
 **合计约 6–8 周**（比自用版多「能力面板 / 扩展契约 / 合规签名」三块）。
 

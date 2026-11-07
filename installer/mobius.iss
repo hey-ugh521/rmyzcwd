@@ -76,3 +76,4 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\logs"
+

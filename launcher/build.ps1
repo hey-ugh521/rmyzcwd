@@ -12,11 +12,11 @@ Set-Location $root
 foreach ($mode in @(@("--windowed", "Mobius"), @("--console", "MobiusCLI"))) {
     & $py -m PyInstaller --noconfirm --onefile $mode[0] `
         --name $mode[1] `
-        --icon "launcher\mobius.ico" `
-        --distpath "launcher\dist" `
-        --workpath "launcher\build" `
-        --specpath "launcher" `
-        "launcher\mobius_launcher.py"
+        --icon "$root\launcher\mobius.ico" `
+        --distpath "$root\launcher\dist" `
+        --workpath "$root\launcher\build" `
+        --specpath "$root\launcher" `
+        "$root\launcher\mobius_launcher.py"
 }
 
 if (Test-Path "launcher\dist\Mobius.exe") {

@@ -63,3 +63,6 @@ launcher/*.spec
 # 安装包构建产物
 installer/dist/
 installer/*.log
+
+# L3 发布产物
+release/

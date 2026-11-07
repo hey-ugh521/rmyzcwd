@@ -80,11 +80,8 @@
       },
       "license": {
         "type": "custom-noncommercial",
-        "note": "QQ 客户端不随包，需用户从官方安装"
-      },
-      "requires_external": [
-        "QQ 9.9.33（腾讯官方安装包）"
-      ]
+        "note": ""
+      }
     },
     "postgres": {
       "id": "postgres",
