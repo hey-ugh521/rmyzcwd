@@ -59,3 +59,7 @@ media_gateway/.gateway.lock
 launcher/dist/
 launcher/build/
 launcher/*.spec
+
+# 安装包构建产物
+installer/dist/
+installer/*.log

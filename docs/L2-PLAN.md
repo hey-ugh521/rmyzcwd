@@ -139,7 +139,7 @@ P1 需引入统一配置（`config.json` + 环境变量），逐项替换；ops/
 > - 构建：`launcher/build.ps1`（纯 pyinstaller，无需额外依赖）
 > 剩余：P6 安装包与模型目录引导。
 
-### P6 安装包
+### P6 安装包（完成）
 - Inno Setup：安装目录、快捷方式、卸载
 - 模型 50GB 不打包：首次启动检测 + 下载/迁移引导
 - **验收**：干净机器安装后按向导完成配置，三条消息内可聊天
@@ -159,3 +159,28 @@ P1 需引入统一配置（`config.json` + 环境变量），逐项替换；ops/
 - 所有项目进程/容器已停止（按用户要求释放内存）
 - 备份期间临时启动过 `mobius-pg`，完成后已停止
 - 下一步：P1（Core Supervisor 扩展）
+
+
+---
+
+## L2 完成总结（2026-11-08）
+
+| 阶段 | 交付 | 验收 |
+|---|---|---|
+| P0 | 备份/依赖/版本/路径清单 | 三库 dump + 数据卷 + 依赖清单 |
+| P1 | Core 全栈 Supervisor | start-all 6/6 就绪 18s；stop-all 无残留；优雅退出 |
+| P2 | LangBot 原生化 | 消息进→回复出；插件/MCP 加载 |
+| P3 | NapCat 原生化 | 4.18.42 提权运行；OneBot 3001 直连 |
+| P4 | 便携 PostgreSQL + 去 Redis | 三库迁移 0 错误；服务全 ready |
+| P5 | 启动器 exe | GUI+CLI；冷启动 57s；停止优雅 |
+| P6 | 安装包 | 安装/卸载/快捷方式/环境检查通过；27MB |
+
+产物：
+- `launcher\dist\Mobius.exe` / `MobiusCLI.exe`
+- `installer\dist\MobiusSetup-0.1.0.exe`
+- 安装默认目录 `D:\AI\Mobius`（已实测安装）
+
+剩余差距：
+1. 运行时依赖（Python/uv/LangBot/PostgreSQL/NapCat/ComfyUI/GSV）与模型未打包，仍是本机绝对路径
+2. 对外分发受 AGPL/GPL 与模型许可限制
+3. 开机自启未接入（旧 `Mobius Boot` 计划任务已禁用，需时再加启动目录快捷方式）

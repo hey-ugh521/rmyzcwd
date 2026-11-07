@@ -1,0 +1,17 @@
+Möbius 安装说明
+================
+
+1. 安装完成后，先运行「环境检查」（开始菜单或安装向导里的选项）。
+2. 双击桌面 / 开始菜单的「Möbius 启动器」，点击「启动全部」。
+   - 需要管理员权限（用于 NapCat 注入 QQ），会弹一次 UAC。
+3. 启动完成后点击「打开控制台」进入 http://127.0.0.1:8900/console 。
+4. 首次使用 QQ 机器人：确认 NapCat 已登录（WebUI http://127.0.0.1:6099 ，token 见安装目录下原生 NapCat 配置）。
+
+依赖说明（本安装包不含，需机器上已有）：
+- Python 环境：Core（open-webui）、网关（qqbot-mcp）、记忆（mobius-memory）
+- uv + 原生 LangBot 源码（D:\AI\langbot-native）
+- 便携 PostgreSQL（D:\AI\pgsql-portable）
+- 原生 NapCat（D:\AI\napcat-native）
+- 可选：ComfyUI（生图）、GPT-SoVITS（语音）及模型（约 50GB）
+
+卸载：开始菜单「卸载 Möbius」，或设置 → 应用。
