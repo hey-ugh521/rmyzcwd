@@ -126,11 +126,18 @@ P1 需引入统一配置（`config.json` + 环境变量），逐项替换；ops/
 > OneBot 已连接。容器 PG/Redis 已停。启动顺序：先 PG 后 Core（`ops/l2/start-postgres.ps1`）。
 > 详见 `ops/l2/POSTGRES-PORTABLE.md`。
 
-### P5 启动器 exe
+### P5 启动器 exe（完成）
 - PyInstaller（onefile 或 onedir）启动器：托盘 + 控制台入口 + 日志
 - 首次向导：数据目录、模型目录、QQ 登录、可选 Docker 模式
 - 开机自启、退出时优雅停止全部子进程
 - **验收**：双击 → 全链路可用；关闭 → 端口全部释放
+
+> **2026-11-08 验收**：`launcher/dist/Mobius.exe`（GUI）与 `MobiusCLI.exe`（命令行）构建成功（各 11.5MB，PyInstaller 6.22.3）。
+> - 冷启动：PG 已在运行 → Core 3s → 服务全部 ready 57s；`--headless start/stop/status` 均验证
+> - 停止：Core 服务 → Core → PostgreSQL 优雅停止（pg_ctl stop -m fast）
+> - GUI 进程冒烟通过；单实例互斥、UAC 自动提权、日志 `logs/launcher.log`
+> - 构建：`launcher/build.ps1`（纯 pyinstaller，无需额外依赖）
+> 剩余：P6 安装包与模型目录引导。
 
 ### P6 安装包
 - Inno Setup：安装目录、快捷方式、卸载

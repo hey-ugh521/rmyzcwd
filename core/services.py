@@ -451,6 +451,17 @@ class Supervisor:
                 await self._probe_one(s)
                 return s.public()
             proc = s.proc
+            # 支持优雅停止命令（如 PostgreSQL 的 pg_ctl stop -m fast）
+            stop_exe = str(s.cfg.get("stop_exe") or "").strip()
+            if stop_exe and os.path.isfile(stop_exe):
+                stop_args = [str(a) for a in (s.cfg.get("stop_args") or [])]
+                try:
+                    subprocess.run(
+                        [stop_exe, *stop_args], capture_output=True, timeout=60,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    )
+                except Exception as e:  # noqa: BLE001
+                    s.last_error = f"优雅停止失败: {e}"
             if proc and proc.poll() is None:
                 pid = proc.pid
                 try:

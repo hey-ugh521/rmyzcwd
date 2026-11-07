@@ -54,3 +54,8 @@ pgbackup/
 
 # 网关运行时锁文件
 media_gateway/.gateway.lock
+
+# 启动器构建产物
+launcher/dist/
+launcher/build/
+launcher/*.spec
