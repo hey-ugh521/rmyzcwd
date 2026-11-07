@@ -85,3 +85,10 @@ gh release upload l3-20261108 --repo hey-ugh521/mobius release\0.2.0\* --clobber
 - [ ] 向导/安装器集成 token 输入（Private 分发时）
 - [ ] 公开分发时切换 browser URL 并复核许可
 - [ ] Release 保留策略（旧组件清理，避免无限增长）
+
+## 7. 分发安全修复（2026-11-08）
+
+- 安装器曾把真实 `config.json`（含 API Key/PG 口令/GitHub Token）打进包 → **已移除**，只保留 `config.example.json`
+- 首次运行自动复制 example 生成 config.json（向导随后补全）
+- 修复 `_find_root`：没有 config.json 时把 `config.example.json` 作为根标记，避免回退到 PyInstaller 临时目录
+- 干净安装复测：安装后无 config.json → 首次运行自动生成 → RUNTIME/LLM 正确

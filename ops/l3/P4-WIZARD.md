@@ -6,7 +6,7 @@
 
 | 步骤 | 内容 | 动作 |
 |---|---|---|
-| 1 / 4 运行时组件 | 读取 manifest，列出必需/可选组件与安装状态 | 「安装必需组件」→ 调用下载器安装（后台线程） |
+| 1 / 4 运行时组件 | 读取 manifest，列出组件/状态；**GitHub Token 输入**（私有仓库） | 「安装必需组件」→ 下载器安装（后台线程） |
 | 2 / 4 大模型配置 | Base URL / API Key / Model | 「测试连接」→ 真实 `/chat/completions`；保存到 `config.json → llm` |
 | 3 / 4 模型目录 | 模型根目录（可外接盘） | 「选择目录」「从旧目录迁移」→ robocopy `/E /XJ` |
 | 4 / 4 QQ 登录 | 启动 NapCat + 打开 WebUI | 「启动 NapCat 并打开 WebUI」→ Core 服务接口 |
@@ -17,6 +17,8 @@
 
 ```powershell
 MobiusCLI.exe --headless components                 # 组件清单 + 安装状态
+MobiusCLI.exe --headless configure-github --github-token <TOKEN>   # 私有仓库 Token
+MobiusCLI.exe --headless check-github               # 校验 Token 与 Release 可访问
 MobiusCLI.exe --headless install-components --source-dir D:\AI\components
 MobiusCLI.exe --headless test-llm                   # 读 config.llm 测试连通
 MobiusCLI.exe --headless configure-llm --base-url ... --api-key ... --model ...
@@ -48,3 +50,10 @@ Mobius.exe --wizard                                 # 强制进入向导
 | 模型下载 | 向导当前提供「迁移/指定目录」；模型下载清单在 P3 的 model 组件里（byo/migration 优先） |
 | QQ WebUI 地址 | 固定 `http://127.0.0.1:6099/webui`，若改了 NapCat 配置需同步 |
 | 交互点击 | GUI 已验证可启动与代码路径；未做自动化点击回放（人工验收项） |
+
+## 5. GitHub Token（私有仓库）
+
+- 向导第 1 步输入，保存到 `config.json → launcher.github_token`（明文，文件已 gitignore）
+- 启动时注入 `MOBIUS_GH_TOKEN`，下载器自动用于 `api.github.com` 资产
+- CLI 验证：`--headless configure-github --github-token <TOKEN>`，输出 Release 资产数
+- 校验证据：`✓ Release l3-20261108 可访问（23 个资产）`

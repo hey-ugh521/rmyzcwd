@@ -34,12 +34,15 @@ def _find_root(start: str) -> str:
         return env_root
     cur = os.path.abspath(start)
     for _ in range(5):
-        if os.path.isfile(os.path.join(cur, "config.json")):
+        if (os.path.isfile(os.path.join(cur, "config.json"))
+                or os.path.isfile(os.path.join(cur, "config.example.json"))):
             return cur
         parent = os.path.dirname(cur)
         if parent == cur:
             break
         cur = parent
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -557,6 +560,56 @@ def is_first_run() -> bool:
     return not bool((cfg.get("launcher") or {}).get("first_run_done"))
 
 
+
+# ---------------------------------------------------------------------------
+# GitHub Token（私有仓库组件下载）
+# ---------------------------------------------------------------------------
+
+GH_API_RELEASE = "https://api.github.com/repos/hey-ugh521/mobius/releases/tags/l3-20261108"
+
+
+def _mask(token: str) -> str:
+    if not token:
+        return ""
+    return token[:8] + "…" + token[-4:] if len(token) > 14 else "***"
+
+
+def _apply_github_token(token: str | None = None, persist: bool = False) -> None:
+    """把 token 注入环境变量；persist=True 时写入 config.json（launcher.github_token）。"""
+    cfg = _raw_config()
+    saved = str((cfg.get("launcher") or {}).get("github_token") or "")
+    value = (token or "").strip() or saved
+    if not value:
+        return
+    os.environ["MOBIUS_GH_TOKEN"] = value
+    if persist:
+        cfg.setdefault("launcher", {})["github_token"] = value
+        _save_raw_config(cfg)
+        log(f"已保存 GitHub Token（{_mask(value)}）")
+
+
+def check_github() -> tuple[bool, str]:
+    import json as _json
+
+    token = os.environ.get("MOBIUS_GH_TOKEN") or os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
+    if not token:
+        return False, "未配置 GitHub Token（私有仓库组件需要）"
+    req = urllib.request.Request(
+        GH_API_RELEASE,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "MobiusLauncher/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = _json.loads(resp.read().decode("utf-8") or "{}")
+        return True, f"Release {data.get('tag_name')} 可访问（{len(data.get('assets') or [])} 个资产）"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"GitHub 校验失败: {exc}"
+
+
 def cmd_components() -> int:
     rows = components_state()
     if not rows:
@@ -609,6 +662,10 @@ def run_wizard() -> None:
             comp_tree.insert("", "end", text=r["id"], values=(r["version"], "已安装" if r["installed"] else "-"))
 
     refresh_components()
+    ttk.Label(f1, text="GitHub Token（私有仓库下载组件需要，公开仓库可留空）").pack(anchor="w", pady=(6, 0))
+    e_token = ttk.Entry(f1, width=60, show="*")
+    e_token.insert(0, str((_raw_config().get("launcher") or {}).get("github_token") or ""))
+    e_token.pack(anchor="w", pady=2)
     steps.append(("1 / 4 运行时组件", f1))
 
     f2 = ttk.Frame(body)
@@ -651,6 +708,8 @@ def run_wizard() -> None:
 
     def next_step() -> None:
         i = state["i"]
+        if i == 0:
+            _apply_github_token(e_token.get(), persist=bool(e_token.get().strip()))
         if i == 1:
             ok, detail = configure_llm(e_base.get().strip(), e_key.get().strip(), e_model.get().strip())
             llm_result.set(("✓ " if ok else "✗ ") + detail[:80])
@@ -664,6 +723,7 @@ def run_wizard() -> None:
 
     def install_async() -> None:
         def job() -> None:
+            _apply_github_token(e_token.get(), persist=True)
             log_var.set("正在安装组件…（详见 logs/launcher.log）")
             ok = install_components()
             root.after(0, lambda: (log_var.set("组件安装完成" if ok else "组件安装失败"), refresh_components()))
@@ -796,6 +856,7 @@ def main() -> int:
         "start", "stop", "status",
         "components", "install-components",
         "configure-llm", "test-llm", "migrate-models",
+        "configure-github", "check-github",
     ], default=None)
     parser.add_argument("--wizard", action="store_true", help="强制进入首次运行向导")
     parser.add_argument("--base-url", default="")
@@ -804,6 +865,7 @@ def main() -> int:
     parser.add_argument("--from-dir", default="")
     parser.add_argument("--to-dir", default="")
     parser.add_argument("--source-dir", default="")
+    parser.add_argument("--github-token", default="")
     parser.add_argument("--no-elevate", action="store_true")
     parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -815,6 +877,7 @@ def main() -> int:
         return 0
 
     cfg = load_config()
+    _apply_github_token()
     lc = launcher_cfg(cfg)
     if lc.get("elevate") and not args.no_elevate and not is_admin():
         log("需要管理员权限（NapCat 注入），正在请求提权…")
@@ -842,6 +905,15 @@ def main() -> int:
         return 0 if ok else 1
     if args.headless == "migrate-models":
         return 0 if migrate_models(args.from_dir, args.to_dir) else 1
+    if args.headless == "configure-github":
+        _apply_github_token(args.github_token, persist=True)
+        ok, detail = check_github()
+        print(("✓ " if ok else "✗ ") + detail)
+        return 0 if ok else 1
+    if args.headless == "check-github":
+        ok, detail = check_github()
+        print(("✓ " if ok else "✗ ") + detail)
+        return 0 if ok else 1
     if is_first_run() or args.wizard:
         run_wizard()
         return 0

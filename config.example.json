@@ -260,7 +260,8 @@
     "CONDA": "${RUNTIME}/conda",
     "HOME": "${USERPROFILE}",
     "TTS_WS": "${RUNTIME}",
-    "LEGACY_LB": "${ROOT}/data/legacy-langbot"
+    "LEGACY_LB": "${ROOT}/data/legacy-langbot",
+    "RUNTIME": "${ROOT}/runtime"
   },
   "_comment": "示例配置：${VAR} 由启动器/Core 展开。paths 为外部运行时根目录，安装器会按实际布局写入。"
 }

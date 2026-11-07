@@ -47,7 +47,6 @@ Source: "{#SourceRoot}\media_gateway\*"; DestDir: "{app}\media_gateway"; Flags: 
 Source: "{#SourceRoot}\ops\*"; DestDir: "{app}\ops"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,l2\requirements\*.txt,voice_eval,*.wav,*.mp3"
 Source: "{#SourceRoot}\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\data\characters\*"; DestDir: "{app}\data\characters"; Flags: ignoreversion
-Source: "{#SourceRoot}\config.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}\docs\L2-PLAN.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "{#SourceRoot}\docs\L3-PLAN.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#SourceRoot}\docs\L3-LICENSES.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
@@ -76,6 +75,10 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\logs"
+
+
+
+
 
 
 
