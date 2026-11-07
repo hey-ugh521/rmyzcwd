@@ -1,27 +1,28 @@
 {
   "core": {
-    "host": "0.0.0.0",
+    "host": "127.0.0.1",
     "port": 8900,
-    "api_key": "CHANGE_ME_LOCAL_TOKEN",
+    "api_key": "",
     "idle_sleep_sec": 600,
     "prewarm_on_start": false
   },
   "llm": {
     "base_url": "https://api.deepseek.com/v1",
-    "api_key": "sk-REPLACE_WITH_YOUR_DEEPSEEK_KEY",
+    "api_key": "",
     "model": "deepseek-flash",
     "timeout_sec": 120,
     "max_tool_rounds": 4
   },
   "gateway": {
     "url": "http://127.0.0.1:8899",
-    "timeout_sec": 30
+    "timeout_sec": 30,
+    "host": "127.0.0.1"
   },
   "services": {
     "comfyui": {
       "enabled": true,
-      "python": "D:\\AI\\comic\\ComfyUI_windows_portable\\python_embeded\\python.exe",
-      "cwd": "D:\\AI\\comic\\ComfyUI_windows_portable",
+      "python": "${AI}\\comic\\ComfyUI_windows_portable\\python_embeded\\python.exe",
+      "cwd": "${AI}\\comic\\ComfyUI_windows_portable",
       "args": [
         "-s",
         "ComfyUI\\main.py",
@@ -30,33 +31,36 @@
         "--preview-method",
         "taesd",
         "--port",
-        "8188"
+        "8188",
+        "--disable-comfy-compiler"
       ],
       "health_url": "http://127.0.0.1:8188/system_stats",
       "port": 8188,
       "start_timeout_sec": 420,
       "env": {
-        "SSL_CERT_FILE": "D:\\AI\\comic\\ComfyUI_windows_portable\\python_embeded\\Lib\\site-packages\\certifi\\cacert.pem",
-        "REQUESTS_CA_BUNDLE": "D:\\AI\\comic\\ComfyUI_windows_portable\\python_embeded\\Lib\\site-packages\\certifi\\cacert.pem",
+        "SSL_CERT_FILE": "${AI}\\comic\\ComfyUI_windows_portable\\python_embeded\\Lib\\site-packages\\certifi\\cacert.pem",
+        "REQUESTS_CA_BUNDLE": "${AI}\\comic\\ComfyUI_windows_portable\\python_embeded\\Lib\\site-packages\\certifi\\cacert.pem",
         "HF_ENDPOINT": "https://hf-mirror.com",
         "PYTHONUTF8": "1"
-      }
+      },
+      "autostart": false
     },
     "kokoro": {
       "enabled": true,
-      "python": "D:\\Anaconda3\\envs\\open-webui\\python.exe",
-      "cwd": "D:\\TTS_Workspace",
+      "python": "${CONDA}\\open-webui\\python.exe",
+      "cwd": "${TTS_WS}",
       "args": [
         "kokoro_openai_api.py",
         "--port",
         "7870"
       ],
       "port": 7870,
-      "start_timeout_sec": 180
+      "start_timeout_sec": 180,
+      "autostart": true
     },
     "gateway": {
       "enabled": true,
-      "python": "D:\\AI\\qqbot-mcp\\Scripts\\python.exe",
+      "python": "${AI}\\qqbot-mcp\\Scripts\\python.exe",
       "cwd": ".",
       "args": [
         "media_gateway\\server.py",
@@ -66,18 +70,159 @@
       "port": 8899,
       "start_timeout_sec": 60,
       "env": {
-        "MOBIUS_COMFY_START_TIMEOUT": "420"
-      }
+        "MOBIUS_COMFY_START_TIMEOUT": "420",
+        "MOBIUS_VIEW_TIMEOUT": "480",
+        "MOBIUS_TASK_STORE": "pg",
+        "MOBIUS_TASK_DSN": "postgresql://postgres:${PG_PASSWORD}@127.0.0.1:55432/mobius",
+        "MOBIUS_CORE_TASK_EVENT_URL": "http://127.0.0.1:8900/v1/tasks/events",
+        "MOBIUS_WORKFLOWS_DIR": "${AI}\\comic\\workflows",
+        "MOBIUS_COMFY_OUTPUT_DIR": "${AI}\\comic\\ComfyUI_windows_portable\\ComfyUI\\output"
+      },
+      "autostart": true
     },
     "f5": {
       "enabled": false,
       "port": 7871,
-      "python": "D:\\Anaconda3\\envs\\open-webui\\python.exe",
-      "cwd": "D:\\TTS_Workspace",
+      "python": "${CONDA}\\open-webui\\python.exe",
+      "cwd": "${TTS_WS}",
       "args": [
         "mobius_tts_api.py",
         "--port",
         "7871"
+      ],
+      "autostart": false
+    },
+    "gsv": {
+      "enabled": true,
+      "python": "${AI}\\GPT-SoVITS-v4\\GPT-SoVITS-v4-20250529-nvidia50\\runtime\\python.exe",
+      "cwd": "${AI}\\GPT-SoVITS-v4\\GPT-SoVITS-v4-20250529-nvidia50",
+      "args": [
+        "${AI}\\gsv_supervisor.py"
+      ],
+      "port": 7871,
+      "start_timeout_sec": 300,
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "MOBIUS_GSV_ROOT": "${AI}\\GPT-SoVITS-v4\\GPT-SoVITS-v4-20250529-nvidia50",
+        "MOBIUS_GSV_ADAPTER": "${AI}\\gsv_openai_adapter.py"
+      },
+      "autostart": true,
+      "kill_pattern": "api_v2\\.py|gsv_openai_adapter\\.py|gsv_supervisor\\.py",
+      "ports": [
+        7871,
+        7873
+      ]
+    },
+    "embed": {
+      "enabled": true,
+      "autostart": true,
+      "python": "${AI}\\mobius-memory\\Scripts\\python.exe",
+      "cwd": ".",
+      "args": [
+        "ops\\memory\\embed_server.py",
+        "--port",
+        "8903"
+      ],
+      "port": 8903,
+      "start_timeout_sec": 180,
+      "env": {
+        "PYTHONUTF8": "1",
+        "MOBIUS_EMBED_PATH": "${AI}\\models\\bge-m3-st"
+      }
+    },
+    "memory": {
+      "enabled": true,
+      "autostart": true,
+      "python": "${AI}\\qqbot-mcp\\Scripts\\python.exe",
+      "cwd": ".",
+      "args": [
+        "ops\\memory\\memory_mcp.py",
+        "--port",
+        "8902"
+      ],
+      "port": 8902,
+      "start_timeout_sec": 90,
+      "env": {
+        "PYTHONUTF8": "1",
+        "MOBIUS_ENV_FILE": "${AI}\\mobius\\.env"
+      }
+    },
+    "powercontext": {
+      "enabled": true,
+      "autostart": true,
+      "exe": "${HOME}\\.local\\bin\\powercontext.exe",
+      "cwd": "${AI}\\powercontext-config",
+      "args": [
+        "server",
+        "run",
+        "--env-file",
+        ".env"
+      ],
+      "port": 8000,
+      "health_url": "http://127.0.0.1:8000/health",
+      "start_timeout_sec": 120,
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    },
+    "langbot": {
+      "enabled": true,
+      "autostart": true,
+      "cwd": "${AI}\\langbot-native",
+      "port": 5300,
+      "health_url": "http://127.0.0.1:5300/healthz",
+      "start_timeout_sec": 240,
+      "exe": "${HOME}\\.local\\bin\\uv.exe",
+      "args": [
+        "run",
+        "--no-sync",
+        "main.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1"
+      },
+      "kill_pattern": "langbot_plugin\\.cli|langbot-native\\\\.venv|langbot-native\\\\main\\.py|langbot-native.*main\\.py"
+    },
+    "napcat": {
+      "enabled": true,
+      "autostart": false,
+      "note": "原生 NapCat 4.18.42 + QQ 9.9.33；启动需要管理员权限（UAC），故 autostart=false，由启动器提权拉起",
+      "port": 3000,
+      "start_timeout_sec": 120,
+      "exe": "${AI}\\napcat-native\\NapCat.52230.Shell\\versions\\9.9.33-52230\\resources\\app\\napcat\\launcher.bat",
+      "cwd": "${AI}\\napcat-native\\NapCat.52230.Shell\\versions\\9.9.33-52230\\resources\\app\\napcat",
+      "args": [],
+      "ports": [
+        3000,
+        3001
+      ]
+    },
+    "postgres": {
+      "enabled": true,
+      "autostart": true,
+      "note": "便携 PostgreSQL 18.6（P4）；启动器需在 Core 之前拉起它（Core 自身也用本库）",
+      "port": 55432,
+      "start_timeout_sec": 60,
+      "exe": "${AI}\\pgsql-portable\\pgsql\\bin\\pg_ctl.exe",
+      "args": [
+        "-D",
+        "${AI}\\pgsql-portable\\data",
+        "-o",
+        "-p 55432 -c listen_addresses=127.0.0.1",
+        "-l",
+        "${AI}\\pgsql-portable\\pg.log",
+        "start"
+      ],
+      "stop_exe": "${AI}\\pgsql-portable\\pgsql\\bin\\pg_ctl.exe",
+      "stop_args": [
+        "-D",
+        "${AI}\\pgsql-portable\\data",
+        "stop",
+        "-m",
+        "fast"
+      ],
+      "ports": [
+        55432
       ]
     }
   },
@@ -87,10 +232,33 @@
   "integrations": {
     "langbot": {
       "base_url": "http://127.0.0.1:5300",
-      "api_key": "REPLACE_WITH_LANGBOT_API_KEY",
+      "api_key": "",
       "bot_id": "f128506b-a8aa-417c-9b55-39bc2fc99894",
-      "db_path": "C:\\Users\\lenovo\\Desktop\\_说明文档\\qqbot\\langbot\\data\\langbot.db",
+      "db_path": "${LEGACY_LB}\\langbot.db",
       "timeout_sec": 20
     }
-  }
+  },
+  "db_backend": "pg",
+  "db_dsn": "postgresql://postgres:${PG_PASSWORD}@127.0.0.1:55432/mobius_core",
+  "launcher": {
+    "core_python": "${CONDA}\\open-webui\\python.exe",
+    "core_args": [
+      "-m",
+      "core.server"
+    ],
+    "pg_ctl": "${AI}\\pgsql-portable\\pgsql\\bin\\pg_ctl.exe",
+    "pg_data": "${AI}\\pgsql-portable\\data",
+    "pg_log": "${AI}\\pgsql-portable\\pg.log",
+    "pg_port": 55432,
+    "start_napcat": true,
+    "elevate": true
+  },
+  "paths": {
+    "AI": "${ROOT}/runtime/ai",
+    "CONDA": "${ROOT}/runtime/conda",
+    "HOME": "${USERPROFILE}",
+    "TTS_WS": "${ROOT}/runtime/tts",
+    "LEGACY_LB": "${ROOT}/data/legacy-langbot"
+  },
+  "_comment": "示例配置：${VAR} 由启动器/Core 展开。paths 为外部运行时根目录，安装器会按实际布局写入。"
 }

@@ -149,9 +149,50 @@ def wait_until(fn, timeout: float, interval: float = 1.0) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _path_map(cfg: dict) -> dict[str, str]:
+    base = {
+        "ROOT": ROOT,
+        "RUNTIME": os.environ.get("MOBIUS_RUNTIME", "").strip() or os.path.join(ROOT, "runtime"),
+        "MODELS": os.environ.get("MOBIUS_MODELS", "").strip() or os.path.join(ROOT, "models"),
+        "DATA": os.environ.get("MOBIUS_DATA", "").strip() or os.path.join(ROOT, "data"),
+        "LOGS": LOG_DIR,
+    }
+    for key, value in (cfg.get("paths") or {}).items():
+        if isinstance(value, str):
+            base[str(key)] = _expand(value, base)
+    return base
+
+
+def _expand(value: str, mapping: dict[str, str]) -> str:
+    if not isinstance(value, str) or "${" not in value:
+        return value
+    out = value
+    for _ in range(5):
+        prev = out
+        for name, repl in mapping.items():
+            out = out.replace("${" + name + "}", repl)
+        if out == prev:
+            break
+    return out
+
+
+def _expand_cfg(cfg: dict, mapping: dict[str, str]) -> dict:
+    def walk(node):
+        if isinstance(node, dict):
+            return {k: walk(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [walk(v) for v in node]
+        if isinstance(node, str):
+            return _expand(node, mapping)
+        return node
+
+    return walk(cfg)
+
+
 def load_config() -> dict:
     with open(CONFIG_PATH, encoding="utf-8") as f:
-        return json.load(f)
+        cfg = json.load(f)
+    return _expand_cfg(cfg, _path_map(cfg))
 
 
 def launcher_cfg(cfg: dict) -> dict:
@@ -249,6 +290,7 @@ def start_core(lc: dict) -> bool:
     os.makedirs(LOG_DIR, exist_ok=True)
     log("启动 Core …")
     env = os.environ.copy()
+    env.setdefault("MOBIUS_ROOT", ROOT)
     env.setdefault("PYTHONUTF8", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
     with open(CORE_LOG, "a", encoding="utf-8", errors="replace") as logf:

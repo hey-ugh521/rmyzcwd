@@ -25,6 +25,13 @@ def _load_config() -> dict:
 
 
 CFG: dict = _load_config()
+# L3 P1：展开配置里的 ${VAR} 路径占位符（ROOT/RUNTIME/MODELS/自定义 paths）
+try:
+    from . import paths as _paths
+
+    CFG = _paths.expand_config(CFG)
+except Exception:  # noqa: BLE001
+    pass
 DB_PATH = (BASE / CFG.get("db", "data/mobius.db")).resolve()
 # 阶段 3：存储后端可切换（sqlite 默认；pg 走 PostgreSQL）
 DB_BACKEND = str(os.environ.get("CORE_DB_BACKEND") or CFG.get("db_backend") or "sqlite").lower()
