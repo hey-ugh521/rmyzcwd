@@ -2387,6 +2387,34 @@ async def route_loras(request: Request) -> Response:
     return JSONResponse({"ok": True, **data})
 
 
+@api_route("/api/workflows", ["GET"])
+async def route_workflows(request: Request) -> Response:
+    """列出可用工作流（内置映射 + 目录中的自定义 *.json）——扩展接口。"""
+    entries = []
+    seen = set()
+    for name, filename in WORKFLOW_MAP.items():
+        entries.append({
+            "name": name,
+            "file": filename,
+            "source": "builtin",
+            "exists": os.path.isfile(os.path.join(settings.workflows_dir, filename)),
+        })
+        seen.add(filename)
+    try:
+        for filename in sorted(os.listdir(settings.workflows_dir)):
+            if not filename.lower().endswith(".json") or filename in seen or filename == "models.json":
+                continue
+            entries.append({
+                "name": filename,
+                "file": filename,
+                "source": "custom",
+                "exists": True,
+            })
+    except OSError:
+        pass
+    return JSONResponse({"ok": True, "dir": settings.workflows_dir, "workflows": entries})
+
+
 @api_route("/api/characters", ["GET"])
 async def route_characters(request: Request) -> Response:
     characters = load_characters(settings)

@@ -150,7 +150,7 @@ MobiusRoot\
 | **P2 运行时组件化（完成）** | ✅ 三套 Python relocatable（26/56/770 MB）+ LangBot venv（637MB）+ Kokoro venv（904MB）；8 个组件包（合计 12.22GB，含 ComfyUI 3.96GB / GSV 7.93GB，已排除模型与角色权重） | 7–10 天 | ✅ 复制 runtime 可全栈启动；LangBot/Kokoro 已切换验证；见 `ops/l3/P2-RUNTIME.md`、`P2B-RUNTIME.md` |
 | **P3 组件清单与下载器（完成）** | ✅ manifest v1 + `ops/l3/downloader.py`（多源/续传/校验/解压/安装/修复/卸载/更新/本地覆盖/依赖） | 5–7 天 | ✅ 本地 file:// 源全链路验收（5 组件安装、SHA 失败、超长路径、卸载）；见 `ops/l3/P3-DOWNLOADER.md` |
 | **P4 首启向导（完成）** | ✅ 4 步向导（组件/LLM/模型目录/QQ）+ CLI（components/install-components/test-llm/configure-llm/migrate-models） | 5–7 天 | ✅ LLM 连通、模型迁移、GUI 启动验证；见 `ops/l3/P4-WIZARD.md` |
-| P5b 扩展接口与自定义组件（待补验收） | MCP/插件/角色/画笔/工作流扩展契约（L2 已具备）；本地 manifest 覆盖已在下载器实现 | 3–5 天 | 放入自定义 MCP/角色/工作流即生效（需补验收脚本） |
+| **P5b 扩展接口（完成）** | ✅ 验收脚本 9/9：模型/角色卡/工作流/本地组件覆盖 + 新增 `GET /api/workflows` | 3–5 天 | ✅ `python ops/l3/acceptance_extensions.py`；见 `ops/l3/P5B-EXTENSIONS.md` |
 | **P6 可分发合规（完成）** | ✅ 305 包许可清单 + 350 份许可文本 + 组件矩阵 + 分发检查清单 + 签名方案/脚本 | 3–5 天 | ✅ 见 `docs/L3-LICENSES.md`；分发前需按清单复核 NapCat/QQ/受限模型 |
 | **P6 安装器 + 发布流水线（完成）** | ✅ Inno 0.2.0（向导/下载器/许可）；`ops/l3/build_release.ps1` 哈希+清单+签名+上传命令；演练通过 | 3–5 天 | ✅ 安装/升级/卸载/发布演练全过；见 `ops/l3/P6-INSTALLER.md`、`P6-RELEASE.md` |
 
