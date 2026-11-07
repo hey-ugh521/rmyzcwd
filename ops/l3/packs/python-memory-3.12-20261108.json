@@ -1,0 +1,20 @@
+{
+  "id": "python-memory",
+  "name": "python-memory",
+  "kind": "runtime",
+  "version": "3.12-20261108",
+  "required": false,
+  "depends_on": [],
+  "size": 147997837,
+  "sha256": "4994565114bf9e6ccda523bbef4cb533e52888f350554cac4b3fdc6a7a214b73",
+  "urls": "https://example.invalid/mobius/components/python-memory-3.12-20261108.7z",
+  "install": {
+    "format": "7z",
+    "target": "runtime/python-memory",
+    "type": "archive"
+  },
+  "license": {
+    "note": "",
+    "type": "mixed"
+  }
+}

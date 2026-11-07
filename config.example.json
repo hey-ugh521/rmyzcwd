@@ -60,7 +60,7 @@
     },
     "gateway": {
       "enabled": true,
-      "python": "${AI}\\qqbot-mcp\\Scripts\\python.exe",
+      "python": "${RUNTIME}/python-gateway/Scripts/python.exe",
       "cwd": ".",
       "args": [
         "media_gateway\\server.py",
@@ -116,7 +116,7 @@
     "embed": {
       "enabled": true,
       "autostart": true,
-      "python": "${AI}\\mobius-memory\\Scripts\\python.exe",
+      "python": "${RUNTIME}/python-memory/Scripts/python.exe",
       "cwd": ".",
       "args": [
         "ops\\memory\\embed_server.py",
@@ -133,7 +133,7 @@
     "memory": {
       "enabled": true,
       "autostart": true,
-      "python": "${AI}\\qqbot-mcp\\Scripts\\python.exe",
+      "python": "${RUNTIME}/python-gateway/Scripts/python.exe",
       "cwd": ".",
       "args": [
         "ops\\memory\\memory_mcp.py",
@@ -241,14 +241,14 @@
   "db_backend": "pg",
   "db_dsn": "postgresql://postgres:${PG_PASSWORD}@127.0.0.1:55432/mobius_core",
   "launcher": {
-    "core_python": "${CONDA}\\open-webui\\python.exe",
+    "core_python": "${RUNTIME}/python-core/Scripts/python.exe",
     "core_args": [
       "-m",
       "core.server"
     ],
-    "pg_ctl": "${AI}\\pgsql-portable\\pgsql\\bin\\pg_ctl.exe",
-    "pg_data": "${AI}\\pgsql-portable\\data",
-    "pg_log": "${AI}\\pgsql-portable\\pg.log",
+    "pg_ctl": "${AI}/pgsql-portable/pgsql/bin/pg_ctl.exe",
+    "pg_data": "${AI}/pgsql-portable/data",
+    "pg_log": "${AI}/pgsql-portable/pg.log",
     "pg_port": 55432,
     "start_napcat": true,
     "elevate": true
@@ -258,7 +258,8 @@
     "CONDA": "${ROOT}/runtime/conda",
     "HOME": "${USERPROFILE}",
     "TTS_WS": "${ROOT}/runtime/tts",
-    "LEGACY_LB": "${ROOT}/data/legacy-langbot"
+    "LEGACY_LB": "${ROOT}/data/legacy-langbot",
+    "RUNTIME": "${ROOT}/runtime"
   },
   "_comment": "示例配置：${VAR} 由启动器/Core 展开。paths 为外部运行时根目录，安装器会按实际布局写入。"
 }

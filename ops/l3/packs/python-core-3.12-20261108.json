@@ -1,0 +1,20 @@
+{
+  "id": "python-core",
+  "name": "python-core",
+  "kind": "runtime",
+  "version": "3.12-20261108",
+  "required": false,
+  "depends_on": [],
+  "size": 6523656,
+  "sha256": "39e135d3d0b735c41817f44c0671ac28acafe95ec8cc77de0873dc9866cffcbc",
+  "urls": "https://example.invalid/mobius/components/python-core-3.12-20261108.7z",
+  "install": {
+    "target": "runtime/python-core",
+    "format": "7z",
+    "type": "archive"
+  },
+  "license": {
+    "type": "mixed",
+    "note": ""
+  }
+}

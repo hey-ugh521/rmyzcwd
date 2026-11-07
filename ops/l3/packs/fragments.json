@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "api_version": 1,
+  "launcher_min_version": "0.1.0",
+  "components": {
+    "python-core": {
+      "id": "python-core",
+      "name": "python-core",
+      "kind": "runtime",
+      "version": "3.12-20261108",
+      "required": false,
+      "depends_on": [],
+      "size": 6523656,
+      "sha256": "39e135d3d0b735c41817f44c0671ac28acafe95ec8cc77de0873dc9866cffcbc",
+      "urls": "https://example.invalid/mobius/components/python-core-3.12-20261108.7z",
+      "install": {
+        "target": "runtime/python-core",
+        "format": "7z",
+        "type": "archive"
+      },
+      "license": {
+        "type": "mixed",
+        "note": ""
+      }
+    },
+    "python-gateway": {
+      "id": "python-gateway",
+      "name": "python-gateway",
+      "kind": "runtime",
+      "version": "3.12-20261108",
+      "required": false,
+      "depends_on": [],
+      "size": 15464581,
+      "sha256": "5b0427ea25760aecbfe81305778d7b43307627f4ec8e3bdaec9186e45d354ece",
+      "urls": "https://example.invalid/mobius/components/python-gateway-3.12-20261108.7z",
+      "install": {
+        "type": "archive",
+        "format": "7z",
+        "target": "runtime/python-gateway"
+      },
+      "license": {
+        "type": "mixed",
+        "note": ""
+      }
+    },
+    "python-memory": {
+      "id": "python-memory",
+      "name": "python-memory",
+      "kind": "runtime",
+      "version": "3.12-20261108",
+      "required": false,
+      "depends_on": [],
+      "size": 147997837,
+      "sha256": "4994565114bf9e6ccda523bbef4cb533e52888f350554cac4b3fdc6a7a214b73",
+      "urls": "https://example.invalid/mobius/components/python-memory-3.12-20261108.7z",
+      "install": {
+        "format": "7z",
+        "target": "runtime/python-memory",
+        "type": "archive"
+      },
+      "license": {
+        "note": "",
+        "type": "mixed"
+      }
+    }
+  }
+}

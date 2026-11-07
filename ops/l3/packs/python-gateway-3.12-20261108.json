@@ -1,0 +1,20 @@
+{
+  "id": "python-gateway",
+  "name": "python-gateway",
+  "kind": "runtime",
+  "version": "3.12-20261108",
+  "required": false,
+  "depends_on": [],
+  "size": 15464581,
+  "sha256": "5b0427ea25760aecbfe81305778d7b43307627f4ec8e3bdaec9186e45d354ece",
+  "urls": "https://example.invalid/mobius/components/python-gateway-3.12-20261108.7z",
+  "install": {
+    "type": "archive",
+    "format": "7z",
+    "target": "runtime/python-gateway"
+  },
+  "license": {
+    "type": "mixed",
+    "note": ""
+  }
+}
