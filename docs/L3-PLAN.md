@@ -152,7 +152,7 @@ MobiusRoot\
 | **P4 首启向导（完成）** | ✅ 4 步向导（组件/LLM/模型目录/QQ）+ CLI（components/install-components/test-llm/configure-llm/migrate-models） | 5–7 天 | ✅ LLM 连通、模型迁移、GUI 启动验证；见 `ops/l3/P4-WIZARD.md` |
 | **P5b 扩展接口（完成）** | ✅ 验收脚本 9/9：模型/角色卡/工作流/本地组件覆盖 + 新增 `GET /api/workflows` | 3–5 天 | ✅ `python ops/l3/acceptance_extensions.py`；见 `ops/l3/P5B-EXTENSIONS.md` |
 | **P6 可分发合规（完成）** | ✅ 305 包许可清单 + 350 份许可文本 + 组件矩阵 + 分发检查清单 + 签名方案/脚本 | 3–5 天 | ✅ 见 `docs/L3-LICENSES.md`；分发前需按清单复核 NapCat/QQ/受限模型 |
-| **P6 安装器 + 发布流水线（完成）** | ✅ Inno 0.2.0（向导/下载器/许可）；`ops/l3/build_release.ps1` 哈希+清单+签名+上传命令；演练通过 | 3–5 天 | ✅ 安装/升级/卸载/发布演练全过；见 `ops/l3/P6-INSTALLER.md`、`P6-RELEASE.md` |
+| **P6 安装器+发布+托管（完成）** | ✅ Inno 0.2.0；发布流水线；**GitHub Release `l3-20261108`（23 资产，12.45GB，分卷+API URL）**；自签 Valid；HTTP 下载/续传实测 | 3–5 天 | 见 `P6-INSTALLER.md`、`P6-RELEASE.md`、`P6-SIGNING.md`、`P6-HOSTING.md` |
 
 **合计约 6–8 周**（比自用版多「能力面板 / 扩展契约 / 合规签名」三块）。
 

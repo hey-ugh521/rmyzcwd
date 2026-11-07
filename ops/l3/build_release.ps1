@@ -114,6 +114,12 @@ Step "汇总组件 manifest"
 & $pyinstallerEnv -c @"
 import json, glob, os
 frags = {}
+old = {}
+if os.path.isfile(r'ops/l3/packs/fragments.json'):
+    try:
+        old = json.load(open(r'ops/l3/packs/fragments.json', encoding='utf-8')).get('components', {})
+    except Exception:
+        old = {}
 for f in glob.glob(r'ops/l3/packs/*.json'):
     if os.path.basename(f) == 'fragments.json':
         continue
@@ -122,6 +128,16 @@ for f in glob.glob(r'ops/l3/packs/*.json'):
 req = {'python-core','python-gateway','python-memory','langbot','python-langbot','postgres','napcat-code'}
 for cid, c in frags.items():
     c['required'] = cid in req
+    prev = old.get(cid) or {}
+    if prev.get('parts'):
+        c['parts'] = prev['parts']
+        c['urls'] = prev.get('urls') or [p['url'] for p in prev['parts']]
+        c['size'] = prev.get('size') or c.get('size')
+    elif prev.get('urls'):
+        cand = prev['urls']
+        cand = [cand] if isinstance(cand, str) else cand
+        if any(('api.github.com' in u or '/releases/download/' in u) for u in cand):
+            c['urls'] = cand
 main = {'schema': 1, 'api_version': 1, 'launcher_min_version': '$Version', 'components': frags}
 json.dump(main, open(r'ops/l3/packs/fragments.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
 print(' 组件:', len(frags))

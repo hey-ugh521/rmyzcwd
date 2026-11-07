@@ -7,14 +7,58 @@
   "depends_on": [],
   "size": 8312481693,
   "sha256": "c897b6744e5c53556c1a57106fc4789538a22459c536e75a63dfcc8d01b7b79b",
-  "urls": "https://example.invalid/mobius/components/gsv-runtime-20261108.7z",
+  "urls": [
+    "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.001",
+    "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.002",
+    "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.003",
+    "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.004",
+    "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.005"
+  ],
   "install": {
     "format": "7z",
     "type": "archive",
-    "target": "runtime/gsv"
+    "target": "runtime/gsv",
+    "parts": true
   },
   "license": {
     "type": "mixed",
     "note": ""
-  }
+  },
+  "parts": [
+    {
+      "url": "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.001",
+      "size": 1992294400,
+      "sha256": "5a9827abee407a151a8a947d61439b0838532397aeec24d7ddee75ec591c0552",
+      "index": 0,
+      "name": "gsv-runtime-20261108.7z.001"
+    },
+    {
+      "url": "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.002",
+      "size": 1992294400,
+      "sha256": "11527bc7681e571a1a6591289ab594e7d30b541fdcf8e87f543b7884566b2c36",
+      "index": 1,
+      "name": "gsv-runtime-20261108.7z.002"
+    },
+    {
+      "url": "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.003",
+      "size": 1992294400,
+      "sha256": "2a647b43ca110219dd960917d3af8cdcebacd79eabda09c2350c52973c4a6355",
+      "index": 2,
+      "name": "gsv-runtime-20261108.7z.003"
+    },
+    {
+      "url": "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.004",
+      "size": 1992294400,
+      "sha256": "ffed46f697f8045f11c9049c57f1531d59a506c6813727ffb04862849a01a79f",
+      "index": 3,
+      "name": "gsv-runtime-20261108.7z.004"
+    },
+    {
+      "url": "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/gsv-runtime-20261108.7z.005",
+      "size": 343304093,
+      "sha256": "9b8c81ef3104bbbb1b8fb8264ac1beb38f1b44fa16ecf4d82003e4c037f3e941",
+      "index": 4,
+      "name": "gsv-runtime-20261108.7z.005"
+    }
+  ]
 }

@@ -144,7 +144,8 @@ class Downloader:
         return d / f"{sha}{ext}", d / f"{sha}{ext}.part"
 
     def _url_candidates(self, comp: dict) -> list[str]:
-        urls = list(comp.get("urls") or [])
+        raw = comp.get("urls") or []
+        urls = [raw] if isinstance(raw, str) else list(raw)
         if self.source_dir:
             # 从本地目录构造候选（文件名匹配）
             name = Path(comp.get("archive_name") or "").name
@@ -159,7 +160,14 @@ class Downloader:
         return urls
 
     def _open(self, url: str, offset: int):
-        req = urllib.request.Request(url, headers={"User-Agent": "MobiusDownloader/1.0"})
+        headers = {"User-Agent": "MobiusDownloader/1.0"}
+        # GitHub API 资产（私有仓库需要 token；公开仓库也支持）
+        if "api.github.com" in url:
+            headers["Accept"] = "application/octet-stream"
+            token = os.environ.get("MOBIUS_GH_TOKEN") or os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(url, headers=headers)
         if offset > 0:
             req.add_header("Range", f"bytes={offset}-")
         return urllib.request.urlopen(req, timeout=60)
@@ -169,6 +177,9 @@ class Downloader:
         archive, part = self._cache_paths(comp)
         sha = comp["sha256"].lower()
         size = int(comp.get("size") or 0)
+
+        if comp.get("parts"):
+            return self._download_parts(cid, comp, archive, sha, size)
 
         if archive.is_file() and sha256_file(archive) == sha:
             log(f"  缓存命中: {archive.name}")
@@ -264,6 +275,78 @@ class Downloader:
                     os.replace(child, dest)
         finally:
             shutil.rmtree(work, ignore_errors=True)
+
+
+    def _download_parts(self, cid: str, comp: dict, archive: Path, sha: str, size: int) -> Path:
+        """多卷组件：逐卷下载/校验（各自可续传），再拼接并校验整体 SHA256。"""
+        if archive.is_file() and sha256_file(archive) == sha:
+            log(f"  缓存命中: {archive.name}")
+            return archive
+        d = archive.parent
+        d.mkdir(parents=True, exist_ok=True)
+        part_files = []
+        for idx, meta in enumerate(comp["parts"]):
+            pf = d / f"{sha}.part{idx:03d}"
+            part_files.append(pf)
+            want_size = int(meta.get("size") or 0)
+            want_sha = str(meta.get("sha256") or "").lower()
+            if pf.is_file() and want_sha and sha256_file(pf) == want_sha and (not want_size or pf.stat().st_size == want_size):
+                log(f"  分卷命中 ({idx + 1}/{len(comp['parts'])}): {pf.name}")
+                continue
+            url = meta.get("url") or ""
+            if not url:
+                raise ComponentError(f"{cid} 分卷 {idx} 缺少 url")
+            self._download_part(cid, url, pf, idx + 1, len(comp["parts"]), want_sha, want_size)
+        log(f"  拼接 {len(part_files)} 个分卷 -> {archive.name}")
+        with open(archive, "wb") as out:
+            for pf in part_files:
+                with open(pf, "rb") as src:
+                    for block in iter(lambda: src.read(CHUNK), b""):
+                        out.write(block)
+        if size and archive.stat().st_size != size:
+            archive.unlink(missing_ok=True)
+            raise ComponentError(f"分卷拼接后大小不匹配（期望 {size}）")
+        actual = sha256_file(archive)
+        if actual != sha:
+            archive.unlink(missing_ok=True)
+            raise ComponentError(f"分卷拼接后 SHA256 不匹配（期望 {sha[:12]}…，实际 {actual[:12]}…）")
+        log(f"  ✓ 分卷校验通过: {archive.name} ({human(archive.stat().st_size)})")
+        return archive
+
+    def _download_part(self, cid: str, url: str, dest: Path, num: int, total: int,
+                       want_sha: str, want_size: int) -> None:
+        offset = dest.stat().st_size if dest.is_file() else 0
+        if want_size and offset > want_size:
+            dest.unlink(missing_ok=True)
+            offset = 0
+        log(f"  下载分卷 {num}/{total}: {dest.name}" + (f"（续传 {human(offset)}）" if offset else ""))
+        try:
+            with self._open(url, offset) as resp:
+                content_len = int(resp.headers.get("Content-Length") or 0)
+                total_bytes = content_len + offset if resp.status == 206 else content_len
+                mode = "ab" if offset and resp.status == 206 else "wb"
+                if mode == "wb":
+                    offset = 0
+                done = offset
+                with open(dest, mode) as out:
+                    while True:
+                        block = resp.read(CHUNK)
+                        if not block:
+                            break
+                        out.write(block)
+                        done += len(block)
+            if want_size and dest.stat().st_size != want_size:
+                dest.unlink(missing_ok=True)
+                raise ComponentError(f"分卷大小不匹配（期望 {want_size}，实际 {dest.stat().st_size}）")
+            if want_sha:
+                actual = sha256_file(dest)
+                if actual != want_sha:
+                    dest.unlink(missing_ok=True)
+                    raise ComponentError(f"分卷 SHA256 不匹配（期望 {want_sha[:12]}…，实际 {actual[:12]}…）")
+            log(f"  ✓ 分卷 {num} 校验通过 ({human(dest.stat().st_size)})")
+        except (urllib.error.URLError, ComponentError, OSError, TimeoutError) as exc:
+            log(f"  ✗ 分卷 {num} 失败: {exc}")
+            raise
 
     def install(self, cid: str, force: bool = False) -> None:
         comp = self.components[cid]

@@ -7,14 +7,42 @@
   "depends_on": [],
   "size": 4157263366,
   "sha256": "833c3ccd74cecc467b614eb80659298844f43f8870b9eaaa25a8ecf73a3cd0fa",
-  "urls": "https://example.invalid/mobius/components/comfyui-runtime-20261108.7z",
+  "urls": [
+    "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/comfyui-runtime-20261108.7z.001",
+    "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
+    "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/comfyui-runtime-20261108.7z.003"
+  ],
   "install": {
     "format": "7z",
     "target": "runtime/comfyui",
-    "type": "archive"
+    "type": "archive",
+    "parts": true
   },
   "license": {
     "type": "mixed",
     "note": ""
-  }
+  },
+  "parts": [
+    {
+      "url": "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/comfyui-runtime-20261108.7z.001",
+      "size": 1992294400,
+      "sha256": "406b5ef17ca6f13b08fdc692989532aacf673f1f5c1451d9f8bd51abe6b1ce1f",
+      "index": 0,
+      "name": "comfyui-runtime-20261108.7z.001"
+    },
+    {
+      "url": "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
+      "size": 1992294400,
+      "sha256": "78dbb2fbae40ac0fb511eaded5669b80d6795414b95122372ca01b03c6c57280",
+      "index": 1,
+      "name": "comfyui-runtime-20261108.7z.002"
+    },
+    {
+      "url": "https://github.com/hey-ugh521/mobius/releases/download/l3-20261108/comfyui-runtime-20261108.7z.003",
+      "size": 172674566,
+      "sha256": "6e0a95c9395af6b67a455518d2a23e250ad123ab8d1ea065143aea504a101465",
+      "index": 2,
+      "name": "comfyui-runtime-20261108.7z.003"
+    }
+  ]
 }
