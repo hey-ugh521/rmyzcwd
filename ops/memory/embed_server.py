@@ -23,6 +23,20 @@ from sentence_transformers import SentenceTransformer
 MODEL_NAME = os.environ.get("MOBIUS_EMBED_MODEL", "bge-m3")
 MODEL_PATH = os.environ.get("MOBIUS_EMBED_PATH", r"D:\AI\models\bge-m3-st")
 
+
+def _resolve_local_model(name: str) -> str:
+    """优先用本地 HF 缓存快照，避免重启后走网络/鉴权导致 401 或离线失败。"""
+    if os.path.isdir(name):
+        return name
+    snapshots = os.path.join(MODEL_PATH, "models--BAAI--bge-m3", "snapshots")
+    if os.path.isdir(snapshots):
+        for entry in sorted(os.listdir(snapshots), reverse=True):
+            candidate = os.path.join(snapshots, entry)
+            if os.path.isfile(os.path.join(candidate, "config.json")):
+                return candidate
+    return name
+
+
 app = FastAPI(title="mobius-embed", version="1.0")
 _model: SentenceTransformer | None = None
 
@@ -31,8 +45,9 @@ def _load() -> SentenceTransformer:
     global _model
     if _model is None:
         t0 = time.time()
-        _model = SentenceTransformer(MODEL_NAME, cache_folder=MODEL_PATH, device="cpu")
-        print(f"loaded {MODEL_NAME} in {time.time()-t0:.1f}s", flush=True)
+        target = _resolve_local_model(MODEL_NAME)
+        _model = SentenceTransformer(target, cache_folder=MODEL_PATH, device="cpu")
+        print(f"loaded {target} in {time.time()-t0:.1f}s", flush=True)
     return _model
 
 
