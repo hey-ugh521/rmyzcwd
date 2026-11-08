@@ -44,7 +44,84 @@ ACTIVITY_TOUCH = 5.0         # 同一请求内的活跃标记合并窗口
 #
 # 动机：NapCat 登录成功后才同时监听 3000/3001；旧逻辑「3000 开着就算 ready」
 # 会在 QQ 未登录时谎报就绪。ports_all 作为「已登录」的代理判据，无需读 token。
-READY_WHEN_MODES = ("health", "ports_all", "ports_any", "port")
+READY_WHEN_MODES = ("health", "ports_all", "ports_any", "port", "login_probe")
+
+# 服务状态机（显式转移表）：非法转移只记审计，不阻塞运行。
+SERVICE_STATES = ("unknown", "down", "starting", "ready", "busy", "error", "disabled")
+STATE_TRANSITIONS: dict[str, set[str]] = {
+    "unknown": {"down", "starting", "ready", "error", "disabled"},
+    "down": {"starting", "ready", "error", "disabled", "unknown"},
+    "starting": {"starting", "ready", "busy", "error", "down", "disabled"},
+    "ready": {"ready", "busy", "down", "starting", "error", "disabled"},
+    "busy": {"busy", "ready", "down", "starting", "error", "disabled"},
+    "error": {"error", "starting", "down", "ready", "disabled", "unknown"},
+    "disabled": {"disabled", "down", "unknown"},
+}
+
+# 登录态机（与 service.state 正交，NapCat 等需要登录的服务使用）
+LOGIN_STATES = ("unknown", "awaiting_login", "logged_in", "error")
+LOGIN_TRANSITIONS: dict[str, set[str]] = {
+    "unknown": {"unknown", "awaiting_login", "logged_in", "error"},
+    "awaiting_login": {"awaiting_login", "logged_in", "error"},
+    "logged_in": {"logged_in", "awaiting_login", "error"},
+    "error": {"error", "awaiting_login", "logged_in"},
+}
+
+
+def transition_allowed(old: str, new: str) -> bool:
+    """服务状态转移是否合法（同态视为合法）。"""
+    return old == new or new in STATE_TRANSITIONS.get(old, set())
+
+
+def login_transition_allowed(old: str, new: str) -> bool:
+    """登录态转移是否合法（同态视为合法）。"""
+    return old == new or new in LOGIN_TRANSITIONS.get(old, set())
+
+
+async def probe_onebot_login(
+    url: str, token: str = "", expect_user_id: str = "", timeout: float = 5.0
+) -> dict:
+    """调用 OneBot get_login_info 判定登录态。
+
+    返回 {"ok": bool, "login_state": awaiting_login|logged_in|error,
+          "detail": str, "user_id": str}
+    """
+    import httpx  # 本模块已依赖
+
+    if not str(url or "").strip():
+        return {"ok": False, "login_state": "awaiting_login",
+                "detail": "未配置 login_probe.url", "user_id": ""}
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as c:
+            r = await c.post(url, headers=headers, json={})
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "login_state": "awaiting_login",
+                "detail": f"探测失败: {type(exc).__name__}", "user_id": ""}
+    if r.status_code >= 500:
+        return {"ok": False, "login_state": "awaiting_login",
+                "detail": f"HTTP {r.status_code}", "user_id": ""}
+    try:
+        payload = r.json()
+    except Exception:  # noqa: BLE001
+        return {"ok": False, "login_state": "awaiting_login",
+                "detail": "响应非 JSON", "user_id": ""}
+    retcode = payload.get("retcode", -1)
+    if str(retcode) != "0":
+        return {"ok": False, "login_state": "awaiting_login",
+                "detail": f"retcode={retcode}", "user_id": ""}
+    data = payload.get("data") or {}
+    uid = str(data.get("user_id") or "")
+    if not uid:
+        return {"ok": False, "login_state": "awaiting_login",
+                "detail": "未返回 user_id", "user_id": ""}
+    expect = str(expect_user_id or "").strip()
+    if expect and uid != expect:
+        return {"ok": False, "login_state": "error",
+                "detail": f"账号不匹配（期望 {expect}，实际 {uid}）", "user_id": uid}
+    return {"ok": True, "login_state": "logged_in", "detail": f"user_id={uid}", "user_id": uid}
 
 
 def _configured_extra_ports(cfg: dict | None) -> list[int]:
@@ -90,6 +167,8 @@ def _readiness_mode(cfg: dict | None) -> str:
         return "port"
     if mode == "health" and not health:
         return "port"
+    if mode == "login_probe" and not (cfg.get("login_probe") or {}).get("url"):
+        return "ports_all" if _configured_extra_ports(cfg) else "port"
     return mode
 
 
@@ -106,6 +185,10 @@ class _Service:
         self.name = name
         self.cfg = cfg or {}
         self.state = "unknown"          # down|starting|ready|busy|error|disabled
+        self.state_since = now()
+        self.login_state = "unknown"    # unknown|awaiting_login|logged_in|error
+        self.login_state_since = now()
+        self.login_detail = ""
         self.pid: int | None = None
         self.proc: subprocess.Popen | None = None
         self.last_check = 0.0
@@ -136,6 +219,10 @@ class _Service:
         return {
             "name": self.name,
             "state": self.state if self.enabled else "disabled",
+            "state_since": round(self.state_since, 1),
+            "login_state": self.login_state,
+            "login_state_since": round(self.login_state_since, 1),
+            "login_detail": self.login_detail,
             "enabled": self.enabled,
             "autostart": self.autostart,
             "port": self.port,
@@ -298,6 +385,8 @@ class Supervisor:
         mode = _readiness_mode(s.cfg)
         if mode == "health":
             return await _http_ok(s.health_url)
+        if mode == "login_probe":
+            return await self._login_probe(s)
         if mode == "ports_all":
             ports = _readiness_ports(s.cfg)
             if not ports:
@@ -314,24 +403,87 @@ class Supervisor:
         # mode == "port"：只认主端口
         return await _port_open(s.port)
 
+    def _set_state(self, s: _Service, new: str, reason: str = "") -> None:
+        """按显式转移表更新服务状态；非法转移记审计（不阻塞）。"""
+        old = s.state
+        if new == old:
+            return
+        if not transition_allowed(old, new):
+            store.audit(
+                "supervisor", "state.invalid_transition",
+                {"service": s.name, "from": old, "to": new, "reason": reason},
+                source="supervisor",
+            )
+            log.warning("[supervisor] %s 非法状态转移 %s -> %s (%s)", s.name, old, new, reason)
+        s.state = new
+        s.state_since = now()
+        store.audit(
+            "supervisor", "state.transition",
+            {"service": s.name, "from": old, "to": new, "reason": reason},
+            source="supervisor",
+        )
+
+    def _set_login(self, s: _Service, new: str, detail: str = "") -> None:
+        old = s.login_state
+        if new not in LOGIN_STATES:
+            new = "error"
+        if new != old and not login_transition_allowed(old, new):
+            store.audit(
+                "supervisor", "login.invalid_transition",
+                {"service": s.name, "from": old, "to": new, "detail": detail},
+                source="supervisor",
+            )
+            log.warning("[supervisor] %s 非法登录态转移 %s -> %s", s.name, old, new)
+        if new != old:
+            s.login_state = new
+            s.login_state_since = now()
+            store.audit(
+                "supervisor", "login.transition",
+                {"service": s.name, "from": old, "to": new, "detail": detail},
+                source="supervisor",
+            )
+        s.login_detail = detail
+
+    async def _login_probe(self, s: _Service) -> bool:
+        cfg = s.cfg.get("login_probe") or {}
+        token = ""
+        secret_path = cfg.get("token_secret") or []
+        if isinstance(secret_path, (list, tuple)) and secret_path:
+            try:
+                from . import secrets as _secrets
+
+                token = _secrets.get(*[str(x) for x in secret_path])
+            except Exception:  # noqa: BLE001
+                token = ""
+        result = await probe_onebot_login(
+            str(cfg.get("url") or ""),
+            token=token,
+            expect_user_id=str(cfg.get("expect_user_id") or ""),
+            timeout=float(cfg.get("timeout") or 5.0),
+        )
+        self._set_login(s, result["login_state"], result["detail"])
+        return bool(result["ok"])
+
     async def _probe_one(self, s: _Service) -> None:
         s.last_check = now()
         if not s.enabled:
-            s.state = "disabled"
+            self._set_state(s, "disabled", "probe disabled")
             return
         ok = await self._is_up(s)
         if ok:
             if s.state in ("down", "unknown", "error"):
-                s.state = "ready"
+                self._set_state(s, "ready", "probe ok")
                 if not s.started_at:
                     s.started_at = now()
             s.last_error = None
         else:
             # 启动过程中不要清 pid/state，否则并发 /api/status 会把「正在启动」打回 down。
             if s.state != "starting":
-                s.state = "down"
+                self._set_state(s, "down", "probe failed")
                 s.started_at = 0.0
                 s.pid = None
+                if _readiness_mode(s.cfg) == "login_probe":
+                    s.last_error = f"等待 QQ 登录：{s.login_detail or s.login_state}"
 
     async def probe(self, name: str) -> dict:
         s = self.services.get(name)
@@ -449,7 +601,7 @@ class Supervisor:
             if s.state == "starting" or still_running:
                 # 已经在启动中：绝不重复 spawn（否则第二个进程绑不上端口会立刻退出，
                 # 还会把「连续失败」计数打高，进入无谓的退避）。
-                s.state = "starting"
+                self._set_state(s, "starting")
             else:
                 cd = START_COOLDOWN - (now() - self._last_start.get(name, 0))
                 if cd > 0:
@@ -458,9 +610,9 @@ class Supervisor:
                 cnt, until = self._fail.get(name, (0, 0.0))
                 if now() < until:
                     s.last_error = f"连续失败 {cnt} 次，退避至 {time.strftime('%H:%M:%S', time.localtime(until))}"
-                    s.state = "error"
+                    self._set_state(s, "error")
                     return s.public()
-                s.state = "starting"
+                self._set_state(s, "starting")
                 s.last_error = None
                 self._last_start[name] = now()
                 if name == "comfyui":
@@ -469,7 +621,7 @@ class Supervisor:
                 try:
                     self._popen(s)
                 except Exception as e:
-                    s.state = "error"
+                    self._set_state(s, "error")
                     s.last_error = f"启动失败: {e}"
                     cnt, _ = self._fail.get(name, (0, 0.0))
                     self._fail[name] = (cnt + 1, now() + FAIL_BACKOFF if cnt + 1 >= 3 else 0.0)
@@ -483,7 +635,7 @@ class Supervisor:
         while now() < deadline:
             await asyncio.sleep(1.5)
             if s.proc and s.proc.poll() is not None:
-                s.state = "error"
+                self._set_state(s, "error")
                 s.last_error = f"进程退出 code={s.proc.returncode}，详见 logs/{s.name}.log"
                 cnt, _ = self._fail.get(name, (0, 0.0))
                 self._fail[name] = (cnt + 1, now() + FAIL_BACKOFF if cnt + 1 >= 3 else 0.0)
@@ -494,7 +646,7 @@ class Supervisor:
             else:
                 ok = await self._is_up(s)
             if ok:
-                s.state = "ready"
+                self._set_state(s, "ready")
                 s.started_at = now()
                 self.touch_activity()   # 刚起来的不算闲置，别让 idle_loop 立刻又把它睡回去
                 self._fail.pop(name, None)
@@ -505,11 +657,11 @@ class Supervisor:
         # 超时但进程还活着：保持 starting，让后续请求继续等到端口就绪，
         # 而不是标成 error 再 spawn 第二个进程。冷启动（重启后首启）可能要好几分钟。
         if s.proc is not None and s.proc.poll() is None:
-            s.state = "starting"
+            self._set_state(s, "starting")
             s.last_error = (f"启动中（已等 {timeout:.0f}s 仍未就绪，进程 pid={s.pid} 仍在运行；"
                             f"首次冷启动可能需要数分钟，稍后重试即可）")
         else:
-            s.state = "error"
+            self._set_state(s, "error")
             s.last_error = f"启动超时（{timeout:.0f}s）且进程已退出，详见 logs/{s.name}.log"
             cnt, _ = self._fail.get(name, (0, 0.0))
             self._fail[name] = (cnt + 1, now() + FAIL_BACKOFF if cnt + 1 >= 3 else 0.0)
@@ -569,7 +721,9 @@ class Supervisor:
                         log.info("[supervisor] %s 清理游离子进程: %s", name, killed)
             s.proc = None
             s.pid = None
-            s.state = "down"
+            self._set_state(s, "down", "stopped")
+            if s.login_state != "unknown":
+                self._set_login(s, "unknown", "stopped")
             s.started_at = 0.0
         store.audit("supervisor", f"service.stop.{name}", {}, source="supervisor")
         return s.public()
@@ -591,7 +745,7 @@ class Supervisor:
             try:
                 started[s.name] = await self.start(s.name, wait=False)
             except Exception as e:  # noqa: BLE001
-                s.state = "error"
+                self._set_state(s, "error")
                 s.last_error = f"启动失败: {e}"
                 started[s.name] = s.public()
 
@@ -601,11 +755,11 @@ class Supervisor:
             detached = bool(s.cfg.get("detached_start"))
             while now() < deadline:
                 if (not detached) and s.proc is not None and s.proc.poll() is not None:
-                    s.state = "error"
+                    self._set_state(s, "error")
                     s.last_error = f"进程退出 code={s.proc.returncode}，详见 logs/{s.name}.log"
                     return s.public()
                 if await self._is_up(s):
-                    s.state = "ready"
+                    self._set_state(s, "ready")
                     s.last_error = None
                     if not s.started_at:
                         s.started_at = now()
@@ -614,10 +768,10 @@ class Supervisor:
                     return s.public()
                 await asyncio.sleep(1.5)
             if s.proc is not None and s.proc.poll() is None:
-                s.state = "starting"
+                self._set_state(s, "starting")
                 s.last_error = f"启动中（已等 {timeout:.0f}s 仍未就绪，进程仍在运行）"
             else:
-                s.state = "error"
+                self._set_state(s, "error")
                 s.last_error = f"启动超时（{timeout:.0f}s）且进程已退出"
             return s.public()
 

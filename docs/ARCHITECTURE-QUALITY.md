@@ -85,11 +85,14 @@
 | `ports_all` | 所有声明端口监听才算 ready |
 | `ports_any` | 任一端口（旧语义） |
 | `port` | 只测主端口 |
+| `login_probe` | 调 OneBot `get_login_info`（token 取自 secrets SSOT），返回 `retcode=0` 且 `user_id` 匹配才算就绪；NapCat 使用 |
 | 未配置 | 旧默认：health > extra_ports any > port |
 
-NapCat 使用 `ports_all`（3000+3001 都在监听 = 已登录的代理判据，无需读 token），修掉了"3000 开、3001 未开也 ready"的误报。`start()` 等待循环复用同一判据。
+NapCat 现使用 `login_probe`：直接查 OneBot `get_login_info`（token 从 secrets SSOT 读取），并暴露 `login_state`（unknown/awaiting_login/logged_in/error）、`login_state_since`、`login_detail`；`start()` 等待循环复用同一判据。
 
-单测：`tests/test_readiness_modes.py` → 34/34。
+同时引入**显式服务状态转移表**（`STATE_TRANSITIONS`/`LOGIN_TRANSITIONS`）：合法边集中定义，非法转移写审计 `state.invalid_transition` 并告警（不阻塞运行）；`public()` 增加 `state_since`/`login_state*`。
+
+单测：`tests/test_readiness_modes.py` → 34/34；`tests/test_service_state_machine.py` → 26/26（状态表/登录态/probe）。
 
 ### 3.2 任务状态机
 
@@ -100,7 +103,7 @@ NapCat 使用 `ports_all`（3000+3001 都在监听 = 已登录的代理判据，
 | 项 | 建议 |
 |---|---|
 | NapCat/QQ 登录态 | 引入 `login_probe`（OneBot `get_login_info`）作为显式状态 `starting→awaiting_login→logged_in→ready` |
-| 状态转换守卫 | 显式转移表（合法边 + 事件），非法转换写审计 |
+| ✅ 状态转换守卫 | 显式转移表 + 非法转移审计/告警（不阻塞） |
 | 组件安装状态 | `versions.json` 增加 `absent/downloading/installing/installed/failed` |
 | Console 展示 | 暴露 `ready_when`（已加入 `/api/services` 返回）与状态历史 |
 

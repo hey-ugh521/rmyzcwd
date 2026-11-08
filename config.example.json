@@ -208,9 +208,18 @@
         3000,
         3001
       ],
-      "ready_when": "ports_all",
+      "ready_when": "login_probe",
       "kill_pattern": "NapCatWinBootMain|resources\\\\app\\\\napcat\\\\launcher\\.bat",
-      "detached_start": true
+      "detached_start": true,
+      "login_probe": {
+        "url": "http://127.0.0.1:3000/get_login_info",
+        "token_secret": [
+          "napcat",
+          "http_token"
+        ],
+        "expect_user_id": "",
+        "timeout": 5
+      }
     },
     "postgres": {
       "enabled": true,
