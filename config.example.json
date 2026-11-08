@@ -181,7 +181,8 @@
       ],
       "env": {
         "PYTHONUTF8": "1",
-        "VIRTUAL_ENV": "${RUNTIME}/python-langbot"
+        "VIRTUAL_ENV": "${RUNTIME}/python-langbot",
+        "PYTHONPATH": "${AI}/langbot-native/src"
       },
       "kill_pattern": "langbot_plugin\\.cli|langbot-native\\\\.venv|langbot-native\\\\main\\.py|langbot-native.*main\\.py"
     },
