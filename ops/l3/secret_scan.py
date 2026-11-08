@@ -47,6 +47,9 @@ def scan_dir(root: Path, excludes: list[str]) -> list[str]:
         if not path.is_file():
             continue
         rel = str(path.relative_to(root)).replace("\\", "/")
+        # 示例文件只含形状合法的占位值（tests/test_secrets_rotate.py 校验），不参与扫描
+        if rel.endswith("secrets.example.json"):
+            continue
         if any(rel == ex or rel.startswith(ex.rstrip("/") + "/") for ex in excludes):
             continue
         if any(p.search(rel) for p in SENSITIVE_NAMES):
