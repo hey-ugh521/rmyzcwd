@@ -180,6 +180,19 @@ if ($SelfSign -or $SignThumbprint) {
     if ($LASTEXITCODE -ne 0) { Fail "签名失败" }
 }
 
+# ---------------------------------------------------------------- 发布前安全扫描（硬闸门）
+Step "发布前安全扫描"
+$scanner = Join-Path $repo 'ops\l3\secret_scan.py'
+& $pyinstallerEnv $scanner --dir $repo --exclude .git release launcher logs tests ops/probe media_gateway/data media_gateway/tts_output media_gateway/uploads docs/archive config.json data
+if ($LASTEXITCODE -ne 0) { Fail "仓库文件安全扫描未通过，禁止发布" }
+foreach ($c in $components) {
+    $pack = Join-Path $ComponentDir ("{0}-{1}.7z" -f $c.Id, $c.Version)
+    if (Test-Path $pack) {
+        & $pyinstallerEnv $scanner --pack $pack
+        if ($LASTEXITCODE -ne 0) { Fail "组件包未通过安全扫描：$pack" }
+    }
+}
+
 # ---------------------------------------------------------------- 收集产物
 Step "收集产物与哈希"
 $installer = Join-Path $repo "installer\dist\MobiusSetup-$Version.exe"
