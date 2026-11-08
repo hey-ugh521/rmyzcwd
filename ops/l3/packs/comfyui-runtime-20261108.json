@@ -1,21 +1,20 @@
 {
   "id": "comfyui-runtime",
   "name": "comfyui-runtime",
-  "kind": "ComfyUI_windows_portable\\cache\\*",
+  "kind": "runtime",
   "version": "20261108",
   "required": false,
   "depends_on": [],
-  "size": 4157263366,
-  "sha256": "833c3ccd74cecc467b614eb80659298844f43f8870b9eaaa25a8ecf73a3cd0fa",
+  "size": 3586265882,
+  "sha256": "91d42cf19cf84f7251d9cd290f66cfc65975f4785f783325219f6ff3dab28cae",
   "urls": [
     "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.001",
-    "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
-    "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.003"
+    "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002"
   ],
   "install": {
-    "format": "7z",
     "target": "runtime/comfyui",
     "type": "archive",
+    "format": "7z",
     "parts": true
   },
   "license": {
@@ -24,25 +23,18 @@
   },
   "parts": [
     {
+      "index": 0,
+      "name": "comfyui-runtime-20261108.7z.001",
       "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.001",
       "size": 1992294400,
-      "sha256": "406b5ef17ca6f13b08fdc692989532aacf673f1f5c1451d9f8bd51abe6b1ce1f",
-      "index": 0,
-      "name": "comfyui-runtime-20261108.7z.001"
+      "sha256": "37c25bb004b77d0441dcbf9e0574ffeee1e5598154d6b82d48c591a5897fca99"
     },
     {
-      "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
-      "size": 1992294400,
-      "sha256": "78dbb2fbae40ac0fb511eaded5669b80d6795414b95122372ca01b03c6c57280",
       "index": 1,
-      "name": "comfyui-runtime-20261108.7z.002"
-    },
-    {
-      "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.003",
-      "size": 172674566,
-      "sha256": "6e0a95c9395af6b67a455518d2a23e250ad123ab8d1ea065143aea504a101465",
-      "index": 2,
-      "name": "comfyui-runtime-20261108.7z.003"
+      "name": "comfyui-runtime-20261108.7z.002",
+      "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
+      "size": 1593971482,
+      "sha256": "f6c68f12daae18c6cf2cc146142afea53d634c2fe7d420fa26d2fba24a2f3556"
     }
   ]
 }

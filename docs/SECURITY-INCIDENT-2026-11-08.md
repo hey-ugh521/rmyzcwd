@@ -28,6 +28,11 @@
    - `napcat-code` 包：排除 `config/logs/node_modules/*.db*` → 扫描干净
    - 安装器：排除 `*.db`，确认无 `config.json`（实测安装后不存在），自签 Valid
 6. **发布闸门**：新增 `ops/l3/secret_scan.py`（扫描密钥模式 + 敏感文件名，命中即 exit 1）。
+7. **二次扫描补充发现并修复**：
+   - `comfyui-runtime` 包含 `ComfyUI/user/comfyui.db`（用户设置/插件凭据）→ 排除 `models/cache/input/output/user` 后重建（3.96GB → **3.34GB**，扫描干净）
+   - 安装器会把 `ops/probe/state.db` 打进去 → 安装器排除 `*.db/*.db-wal/*.db-shm`
+   - 文档中 4 处明文（Core key、WS token、WebUI token）→ `<REDACTED>` 并重写历史
+8. **发布流水线硬闸门**：`build_release.ps1` 在收集产物前扫描仓库文件与每个组件包，命中即失败（演练通过）。
 
 ## 3. 残留风险
 
@@ -46,4 +51,4 @@
 - [ ] 确认组件包不再包含 `data/`、`config/`、`*.db`、`.env`
 - [ ] 确认安装器无 `config.json`
 - [ ] 确认所有历史密钥均已轮换
-- [ ] 在 CI/发布脚本中加入 secret_scan 作为硬闸门
+- [x] 在发布脚本中加入 secret_scan 作为硬闸门（已实现）
