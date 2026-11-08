@@ -98,13 +98,21 @@ NapCat 现使用 `login_probe`：直接查 OneBot `get_login_info`（token 从 s
 
 `pending → running → completed / failed / cancelled`（持久化 + outbox 事件 + 幂等提交），本次未改动。
 
-### 3.3 仍缺（后续）
+### 3.3 组件安装状态机
+
+状态：`absent → downloading → installing → installed | failed`（`installed → downloading` 支持重装/升级，`failed → downloading` 支持重试，`absent → installed` 用于既有安装回填）。
+
+实现：`ops/l3/component_state.py`（原子写 `component_states.json`、`ComponentStateStore`、非法转移抛 `StateTransitionError`、启动时把超时未更新的 `downloading/installing` 恢复为 `failed`）；`downloader.install/repair/uninstall` 全程包裹状态，`versions.json` 保留安装记录。
+
+验收：单测 `tests/test_component_state.py` → 24/24；真实 `python-core` 安装（6.2MB）→ `installed`（attempts=1/started/finished 完整）、重复安装幂等、卸载 → `absent`；启动器 `components` 列表与 CLI `list` 展示状态文案（下载中/安装中/已安装/失败）。
+
+### 3.4 仍缺（后续）
 
 | 项 | 建议 |
 |---|---|
 | NapCat/QQ 登录态 | 引入 `login_probe`（OneBot `get_login_info`）作为显式状态 `starting→awaiting_login→logged_in→ready` |
 | ✅ 状态转换守卫 | 显式转移表 + 非法转移审计/告警（不阻塞） |
-| 组件安装状态 | `versions.json` 增加 `absent/downloading/installing/installed/failed` |
+| ✅ 组件安装状态 | 已实现 `absent→downloading→installing→installed/failed`，持久化 `component_states.json`，崩溃/超时恢复为 failed |
 | Console 展示 | 暴露 `ready_when`（已加入 `/api/services` 返回）与状态历史 |
 
 ---
@@ -117,4 +125,4 @@ NapCat 现使用 `login_probe`：直接查 OneBot `get_login_info`（token 从 s
 | P1 | ✅ 已完成：`shared/paths.py` 唯一实现（Core+launcher 共用，35/35 测试）；`ops/l3/manifest_check.py`（check/write，77/77）接入 build_release，真实仓库无 drift、15 个组件包 sha 全部一致 |
 | P1 | OneBot 事件级 `message_id` 去重（防重放） |
 | P2 | NapCat `login_probe` 状态机 + 服务状态转移表 |
-| P2 | 组件安装状态机 + Console 展示 |
+| P2 | ✅ 组件安装状态机已完成（installer 的 `components` 列表与 CLI `list` 展示状态） |

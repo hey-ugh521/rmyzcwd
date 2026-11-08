@@ -419,16 +419,36 @@ def components_state() -> list[dict]:
         versions = _json.loads(open(_versions_path(), encoding="utf-8").read()).get("components", {})
     except (OSError, ValueError):
         versions = {}
+    try:
+        states = _json.loads(open(os.path.join(ROOT, "component_states.json"), encoding="utf-8")).get("components", {})
+    except (OSError, ValueError):
+        states = {}
     rows = []
     for cid, comp in sorted((manifest.get("components") or {}).items()):
+        state = str((states.get(cid) or {}).get("state") or "absent")
+        installed = cid in versions
+        if installed and state == "absent":
+            state = "installed"  # 旧版本安装记录回填
         rows.append({
             "id": cid,
             "version": comp.get("version"),
             "required": bool(comp.get("required")),
             "size": int(comp.get("size") or 0),
-            "installed": cid in versions,
+            "installed": installed,
+            "state": state,
         })
     return rows
+
+
+def component_state_text(state: str) -> str:
+    """安装状态机的展示文案。"""
+    return {
+        "absent": "-",
+        "downloading": "下载中",
+        "installing": "安装中",
+        "installed": "已安装",
+        "failed": "失败",
+    }.get(state or "absent", state or "-")
 
 
 def install_components(ids: list[str] | None = None, source_dir: str = "") -> bool:
@@ -609,7 +629,7 @@ def cmd_components() -> int:
         return 1
     for r in rows:
         mark = "*" if r["required"] else " "
-        state = "已安装" if r["installed"] else "-"
+        state = component_state_text(r.get("state") or ("installed" if r["installed"] else "absent"))
         print(f" {mark} {r['id']:<16} {str(r['version']):<18} {r['size']/1024/1024:10.1f} MB  {state}")
     return 0
 
@@ -651,7 +671,8 @@ def run_wizard() -> None:
     def refresh_components() -> None:
         comp_tree.delete(*comp_tree.get_children())
         for r in components_state():
-            comp_tree.insert("", "end", text=r["id"], values=(r["version"], "已安装" if r["installed"] else "-"))
+            comp_tree.insert("", "end", text=r["id"],
+                             values=(r["version"], component_state_text(r.get("state") or ("installed" if r["installed"] else "absent"))))
 
     refresh_components()
     ttk.Label(f1, text="GitHub Token（私有仓库下载组件需要，公开仓库可留空）").pack(anchor="w", pady=(6, 0))

@@ -37,6 +37,13 @@ import urllib.request
 from pathlib import Path
 
 CHUNK = 1024 * 1024
+import sys as _sys
+
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in _sys.path:
+    _sys.path.insert(0, str(_HERE))
+from component_state import ComponentStateStore, StateTransitionError  # noqa: E402
+
 DEFAULT_7Z = os.environ.get("MOBIUS_7Z") or r"D:\AI\napcat-native\7z.exe"
 
 
@@ -79,6 +86,14 @@ class Downloader:
         self.components: dict = self.manifest.get("components") or {}
         self.versions_path = self.root / "versions.json"
         self.installed = self._load_versions()
+        self.state_store = ComponentStateStore(self.root / "component_states.json")
+        # 旧安装记录回填：versions.json 有、状态文件没有 -> installed
+        for cid, entry in self.installed.get("components", {}).items():
+            if self.state_store.state_of(cid) == "absent":
+                try:
+                    self.state_store.mark_installed(cid, str(entry.get("version") or ""), str(entry.get("sha256") or ""))
+                except StateTransitionError:
+                    pass
 
     # ---------------- manifest / versions ----------------
 
@@ -353,26 +368,43 @@ class Downloader:
 
     def install(self, cid: str, force: bool = False) -> None:
         comp = self.components[cid]
+        version = str(comp.get("version") or "")
+        sha = str(comp.get("sha256") or "")
         target_rel = (comp.get("install") or {}).get("target") or f"runtime/{cid}"
         target = (self.root / target_rel).resolve()
         installed = self.installed["components"].get(cid)
         if installed and not force:
+            if self.state_store.state_of(cid) != "installed":
+                try:
+                    self.state_store.mark_installed(cid, version, sha)
+                except StateTransitionError:
+                    pass
             log(f"  {cid} 已安装（{installed.get('version')}），跳过；--force 可重装")
             return
-        archive = self.download(cid)
-        log(f"  解压 {cid} -> {target}")
-        if target.exists() and force:
-            shutil.rmtree(target, ignore_errors=True)
-        self._extract(archive, str((comp.get("install") or {}).get("format", "7z")).lower(), target)
-        self.installed["components"][cid] = {
-            "id": cid,
-            "version": comp.get("version"),
-            "sha256": comp.get("sha256"),
-            "target": target_rel,
-            "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        }
-        self._save_versions()
-        log(f"  ✓ {cid} 安装完成")
+        try:
+            self.state_store.mark_downloading(cid, version, sha)
+            archive = self.download(cid)
+            self.state_store.mark_installing(cid)
+            log(f"  解压 {cid} -> {target}")
+            if target.exists() and force:
+                shutil.rmtree(target, ignore_errors=True)
+            self._extract(archive, str((comp.get("install") or {}).get("format", "7z")).lower(), target)
+            self.installed["components"][cid] = {
+                "id": cid,
+                "version": comp.get("version"),
+                "sha256": comp.get("sha256"),
+                "target": target_rel,
+                "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            }
+            self._save_versions()
+            self.state_store.mark_installed(cid, version, sha)
+            log(f"  ✓ {cid} 安装完成")
+        except Exception as exc:  # noqa: BLE001
+            try:
+                self.state_store.mark_failed(cid, str(exc))
+            except StateTransitionError:
+                pass
+            raise
 
     def repair(self, cid: str) -> None:
         comp = self.components[cid]
@@ -400,6 +432,10 @@ class Downloader:
             shutil.rmtree(target, ignore_errors=True)
         self.installed["components"].pop(cid, None)
         self._save_versions()
+        try:
+            self.state_store.mark_absent(cid)
+        except StateTransitionError:
+            pass
         log(f"  ✓ {cid} 已卸载")
 
     # ---------------- 展示 ----------------
@@ -412,7 +448,8 @@ class Downloader:
                 "version": comp.get("version"),
                 "required": bool(comp.get("required")),
                 "size": human(int(comp.get("size") or 0)),
-                "state": "已安装" if cid in self.installed["components"] else "-",
+                "state": self.state_store.state_of(cid),
+                "installed": cid in self.installed["components"],
             }
             rows.append(row)
         return rows
