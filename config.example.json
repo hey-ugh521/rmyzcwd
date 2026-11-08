@@ -79,7 +79,8 @@
         "MOBIUS_TASK_DSN": "postgresql://postgres:${PG_PASSWORD}@127.0.0.1:55432/mobius",
         "MOBIUS_CORE_TASK_EVENT_URL": "http://127.0.0.1:8900/v1/tasks/events",
         "MOBIUS_WORKFLOWS_DIR": "${AI}\\comic\\workflows",
-        "MOBIUS_COMFY_OUTPUT_DIR": "${AI}\\comic\\ComfyUI_windows_portable\\ComfyUI\\output"
+        "MOBIUS_COMFY_OUTPUT_DIR": "${AI}\\comic\\ComfyUI_windows_portable\\ComfyUI\\output",
+        "MOBIUS_GATEWAY_PUBLIC_URL": "http://127.0.0.1:8899"
       },
       "autostart": true
     },

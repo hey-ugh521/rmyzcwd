@@ -201,7 +201,7 @@ class Settings:
         self.logs_dir = os.path.join(GATEWAY_DIR, "logs")
 
         self.public_base = str(
-            _env("MOBIUS_GATEWAY_PUBLIC_URL", f"http://host.docker.internal:{self.port}")
+            _env("MOBIUS_GATEWAY_PUBLIC_URL", f"http://127.0.0.1:{self.port}")
         ).rstrip("/")
 
         self.comfy_start_timeout = float(
@@ -219,7 +219,7 @@ class Settings:
 
     def apply_port(self, port: int) -> None:
         if not _env("MOBIUS_GATEWAY_PORT") and "MOBIUS_GATEWAY_PUBLIC_URL" not in os.environ:
-            self.public_base = f"http://host.docker.internal:{int(port)}"
+            self.public_base = f"http://127.0.0.1:{int(port)}"
         self.port = int(port)
 
     def ensure_dirs(self) -> None:
