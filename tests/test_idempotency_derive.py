@@ -49,7 +49,6 @@ _TMP_DIR = ""
 HEX32 = re.compile(r"^[0-9a-f]{32}$")
 _PURE_NAMES = {
     "_idem_text",
-    "_idem_json",
     "canonical_idempotency_source",
     "derive_idempotency_key",
 }
@@ -98,7 +97,7 @@ def _extract_pure_functions():
     picked: list[ast.stmt] = []
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "_IDEM_SOURCE_FIELDS"
+            isinstance(target, ast.Name) and target.id == "_IDEM_CONTEXT_FIELDS"
             for target in node.targets
         ):
             picked.append(node)
@@ -112,7 +111,7 @@ def _extract_pure_functions():
     code = compile(ast.fix_missing_locations(module), str(SERVER_PY), "exec")
     namespace: dict[str, Any] = {"hashlib": hashlib, "json": json, "Any": Any}
     exec(code, namespace)  # noqa: S102 - 仅执行本仓库 server.py 中已声明的纯函数
-    names = set(_PURE_NAMES) | {"_IDEM_SOURCE_FIELDS"}
+    names = set(_PURE_NAMES) | {"_IDEM_CONTEXT_FIELDS"}
     return types.SimpleNamespace(**{name: namespace[name] for name in names})
 
 
@@ -198,7 +197,7 @@ def test_stable_derivation(gw) -> None:
 
     padded = dict(body, prompt="  海边日落，少女侧脸  ", model=" qwen_image_2_1 ")
     k4, _ = gw.derive_idempotency_key(padded)
-    check("字符串首尾空白归一化", k4 == k1, f"{k1} vs {k4}")
+    check("payload 内容不参与派生（仅空白/内容差异同 key）", k4 == k1, f"{k1} vs {k4}")
 
     event_body = {name: value for name, value in body.items() if name not in ("message_id", "event_id")}
     event_body["event_id"] = "evt-1"
@@ -215,8 +214,16 @@ def test_stable_derivation(gw) -> None:
 def test_different_inputs(gw) -> None:
     base = dict(_BASE_BODY)
     k0, _ = gw.derive_idempotency_key(base)
-    cases = (
+    context_cases = (
         ("message_id", {"message_id": "msg-other"}),
+        ("source", {"source": "console"}),
+    )
+    for name, patch in context_cases:
+        changed, derived = gw.derive_idempotency_key({**base, **patch})
+        check(f"不同 {name} 派生不同 key", changed != k0 and derived is True, f"{k0} vs {changed}")
+
+    # payload 差异不改变 key（避免同消息重试因微小 payload 变化绕过冲突检测）
+    payload_cases = (
         ("prompt", {"prompt": "森林清晨，少女侧脸"}),
         ("negative", {"negative": "过曝"}),
         ("model", {"model": "anime_illustrious"}),
@@ -226,11 +233,10 @@ def test_different_inputs(gw) -> None:
         ("height", {"height": 512}),
         ("seed", {"seed": 654321}),
         ("reference_image", {"reference_image": "upload-abc"}),
-        ("source", {"source": "console"}),
     )
-    for name, patch in cases:
+    for name, patch in payload_cases:
         changed, derived = gw.derive_idempotency_key({**base, **patch})
-        check(f"不同 {name} 派生不同 key", changed != k0 and derived is True, f"{k0} vs {changed}")
+        check(f"payload {name} 差异不改变 key", changed == k0 and derived is True, f"{k0} vs {changed}")
 
     a, _ = gw.derive_idempotency_key({"message_id": "x", "prompt": "p"})
     b, _ = gw.derive_idempotency_key({"event_id": "x", "prompt": "p"})
@@ -282,7 +288,7 @@ def test_session_user_fallback(gw) -> None:
     check("session_id+user_id 可派生且稳定", d1 is True and d2 is True and k1 == k2, str(k1))
 
     k3, d3 = gw.derive_idempotency_key({**body, "prompt": "一只黑猫"})
-    check("session_id+user_id 下不同 prompt 派生不同", k3 != k1 and d3 is True, f"{k1} vs {k3}")
+    check("session_id+user_id 下 payload 不参与派生（同 key）", k3 == k1 and d3 is True, f"{k1} vs {k3}")
 
     missing_user = {name: value for name, value in body.items() if name != "user_id"}
     check("只有 session_id 不派生", gw.derive_idempotency_key(missing_user) == (None, False))

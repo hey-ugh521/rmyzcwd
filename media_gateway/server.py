@@ -2115,25 +2115,14 @@ async def collect_status(cfg: Settings) -> dict[str, Any]:
 # 生成流程（REST 与 MCP 共用）
 # ---------------------------------------------------------------------------
 
-# 参与幂等派生的字段白名单（顺序固定：同一逻辑请求的规范化串必须逐字节一致）。
-# 只收请求内容与上下文标识，不收 async / timeout_sec 这类传输层参数。
-_IDEM_SOURCE_FIELDS = (
+# 派生幂等 key 的「事件身份」字段（payload 不参与：同 key 不同 payload 交给存储层判冲突）。
+# 顺序固定，保证同一逻辑请求的规范化串逐字节一致。
+_IDEM_CONTEXT_FIELDS = (
     "source",
     "message_id",
     "event_id",
     "user_id",
     "session_id",
-    "prompt",
-    "negative",
-    "model",
-    "workflow",
-    "checkpoint",
-    "character",
-    "width",
-    "height",
-    "seed",
-    "reference_image",
-    "loras",
 )
 
 
@@ -2146,21 +2135,11 @@ def _idem_text(value: Any) -> str:
     return str(value).strip()
 
 
-def _idem_json(value: Any) -> str:
-    """结构值（如 loras）归一化为紧凑、键序稳定的 JSON。"""
-    try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    except (TypeError, ValueError):
-        return _idem_text(value)
-
-
 def canonical_idempotency_source(body: dict[str, Any]) -> str:
-    """把参与派生的字段拼成确定性的规范化串（缺省字段也占位，避免字段增删改变 key）。"""
-    parts: list[str] = ["v1"]
-    for name in _IDEM_SOURCE_FIELDS:
-        value = body.get(name)
-        text = _idem_json(value) if name == "loras" and value is not None else _idem_text(value)
-        parts.append(f"{name}={text}")
+    """把事件身份字段拼成确定性串；payload 差异不改变 key（冲突由 payload_hash 判定）。"""
+    parts: list[str] = ["v2"]
+    for name in _IDEM_CONTEXT_FIELDS:
+        parts.append(f"{name}={_idem_text(body.get(name))}")
     return "\n".join(parts)
 
 
@@ -2170,8 +2149,9 @@ def derive_idempotency_key(body: dict[str, Any]) -> tuple[str | None, bool]:
     规则（对应 P0 幂等兜底）：
       1. 显式 body["idempotency_key"] 优先，原样使用（derived=False）；
       2. 没有显式 key，但带 OneBot 消息标识（message_id / event_id），
-         或同时带 session_id + user_id 时，对规范化字段串取 sha256 hex 前 32 位
-         （derived=True）；
+         或同时带 session_id + user_id 时，对「事件身份」串（source/message_id/event_id/
+         user_id/session_id，不含 prompt 等 payload）取 sha256 hex 前 32 位（derived=True）；
+         同一消息重试即使 payload 有差异也复用同 key，由存储层返回 idempotency_conflict；
       3. 完全没有上下文标识时返回 (None, False)，交给存储层生成随机 key（保持原行为）。
     """
     explicit = str(body.get("idempotency_key") or "").strip()
