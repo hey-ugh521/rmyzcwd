@@ -79,11 +79,11 @@ $components = @(
     @{ Id = 'python-memory';   Version = '3.12-20261108'; Source = "$RuntimeDir\python-memory";   Target = 'runtime/python-memory';   Exclude = '' },
     @{ Id = 'python-langbot';  Version = '3.12-20261108'; Source = "$RuntimeDir\python-langbot";  Target = 'runtime/python-langbot';  Exclude = '' },
     @{ Id = 'python-kokoro';   Version = '3.12-20261108'; Source = "$RuntimeDir\python-kokoro";   Target = 'runtime/python-kokoro';   Exclude = '' },
-    @{ Id = 'langbot';         Version = '20261108';      Source = $LangbotDir;                   Target = 'runtime/langbot';         Exclude = 'langbot-native\.venv\*;langbot-native\data\logs\*' },
+    @{ Id = 'langbot';         Version = '20261108';      Source = $LangbotDir;                   Target = 'runtime/langbot';         Exclude = 'langbot-native\.venv\*;langbot-native\data\*;langbot-native\logs\*;langbot-native\tests\*;langbot-native\skills\*' },
     @{ Id = 'comfyui-runtime'; Version = '20261108';      Source = $ComfyDir;                     Target = 'runtime/comfyui';         Exclude = 'ComfyUI_windows_portable\ComfyUI\models\*;ComfyUI_windows_portable\cache\*' },
     @{ Id = 'gsv-runtime';     Version = '20261108';      Source = $GsvDir;                       Target = 'runtime/gsv';             Exclude = 'GPT-SoVITS-v4-20250529-nvidia50\GPT_weights_v2\*;GPT-SoVITS-v4-20250529-nvidia50\GPT_weights_v4\*;GPT-SoVITS-v4-20250529-nvidia50\SoVITS_weights_v2\*;GPT-SoVITS-v4-20250529-nvidia50\SoVITS_weights_v4\*' },
     @{ Id = 'postgres';        Version = '18.6-20261108'; Source = $PgDir;                        Target = 'runtime/postgres';        Exclude = 'pgsql\data\*;pgsql\*.log' },
-    @{ Id = 'napcat-code';     Version = '4.18.42-20261108'; Source = $NapcatDir;                 Target = 'runtime/napcat';          Exclude = 'napcat\node_modules\*' }
+    @{ Id = 'napcat-code';     Version = '4.18.42-20261108'; Source = $NapcatDir;                 Target = 'runtime/napcat';          Exclude = 'napcat\node_modules\*;napcat\config\*;napcat\logs\*;napcat\*.db;napcat\*.db-shm;napcat\*.db-wal' }
 )
 
 # ---------------------------------------------------------------- 构建组件

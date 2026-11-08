@@ -1,19 +1,17 @@
 {
   "id": "langbot",
   "name": "langbot",
-  "kind": "langbot-native\\data\\logs\\*",
+  "kind": "runtime",
   "version": "20261108",
   "required": false,
   "depends_on": [],
-  "size": 182712960,
-  "sha256": "45b8521c1002f07792ab3cedc657e499dc4c9e2d55e9ddead34c72c9646c9a58",
-  "urls": [
-    "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/langbot-20261108.7z"
-  ],
+  "size": 9316184,
+  "sha256": "7c0bbfcdf1efe971f04f8f6fec44c9e69aec07ba4ded0ff7df2568171f10d9fd",
+  "urls": "https://example.invalid/mobius/components/langbot-20261108.7z",
   "install": {
-    "format": "7z",
+    "target": "runtime/langbot",
     "type": "archive",
-    "target": "runtime/langbot"
+    "format": "7z"
   },
   "license": {
     "note": "",

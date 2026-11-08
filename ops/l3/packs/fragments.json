@@ -118,19 +118,19 @@
     "langbot": {
       "id": "langbot",
       "name": "langbot",
-      "kind": "langbot-native\\data\\logs\\*",
+      "kind": "runtime",
       "version": "20261108",
       "required": true,
       "depends_on": [],
-      "size": 182712960,
-      "sha256": "45b8521c1002f07792ab3cedc657e499dc4c9e2d55e9ddead34c72c9646c9a58",
+      "size": 9316184,
+      "sha256": "7c0bbfcdf1efe971f04f8f6fec44c9e69aec07ba4ded0ff7df2568171f10d9fd",
       "urls": [
         "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/langbot-20261108.7z"
       ],
       "install": {
-        "format": "7z",
+        "target": "runtime/langbot",
         "type": "archive",
-        "target": "runtime/langbot"
+        "format": "7z"
       },
       "license": {
         "note": "",
@@ -144,19 +144,19 @@
       "version": "4.18.42-20261108",
       "required": true,
       "depends_on": [],
-      "size": 21052833,
-      "sha256": "e2cdb828b329f217a1085af1fe9e1abca3f2e9936d068193c86696bd5572aed0",
+      "size": 21056030,
+      "sha256": "86be4a73502e9023185771812db4d81ae8bcb330feb2192f1d031920a1209848",
       "urls": [
         "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/napcat-code-4.18.42-20261108.7z"
       ],
       "install": {
-        "format": "7z",
         "target": "runtime/napcat",
+        "format": "7z",
         "type": "archive"
       },
       "license": {
-        "type": "custom-noncommercial",
-        "note": ""
+        "note": "",
+        "type": "mixed"
       }
     },
     "postgres": {
