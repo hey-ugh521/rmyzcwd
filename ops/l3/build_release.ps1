@@ -110,38 +110,11 @@ if (-not $SkipComponents) {
 }
 
 # ---------------------------------------------------------------- 汇总 manifest
+# 聚合逻辑集中在 ops\l3\manifest_check.py（源片段 -> fragments.json）；
+# 仅当 existing 同 id 的 sha256 一致时才沿用旧 parts/urls，防止旧分卷清单复活。
 Step "汇总组件 manifest"
-& $pyinstallerEnv -c @"
-import json, glob, os
-frags = {}
-old = {}
-if os.path.isfile(r'ops/l3/packs/fragments.json'):
-    try:
-        old = json.load(open(r'ops/l3/packs/fragments.json', encoding='utf-8')).get('components', {})
-    except Exception:
-        old = {}
-for f in glob.glob(r'ops/l3/packs/*.json'):
-    if os.path.basename(f) == 'fragments.json':
-        continue
-    d = json.load(open(f, encoding='utf-8'))
-    frags[d['id']] = d
-req = {'python-core','python-gateway','python-memory','langbot','python-langbot','postgres','napcat-code'}
-for cid, c in frags.items():
-    c['required'] = cid in req
-    prev = old.get(cid) or {}
-    if prev.get('parts') and prev.get('sha256') == c.get('sha256'):
-        c['parts'] = prev['parts']
-        c['urls'] = prev.get('urls') or [p['url'] for p in prev['parts']]
-        c['size'] = prev.get('size') or c.get('size')
-    elif prev.get('urls'):
-        cand = prev['urls']
-        cand = [cand] if isinstance(cand, str) else cand
-        if any(('api.github.com' in u or '/releases/download/' in u) for u in cand):
-            c['urls'] = cand
-main = {'schema': 1, 'api_version': 1, 'launcher_min_version': '$Version', 'components': frags}
-json.dump(main, open(r'ops/l3/packs/fragments.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
-print(' 组件:', len(frags))
-"@
+$manifestCheck = Join-Path $repo 'ops\l3\manifest_check.py'
+& $pyinstallerEnv $manifestCheck write
 if ($LASTEXITCODE -ne 0) { Fail "manifest 汇总失败" }
 
 # 按 BaseUrl 重写 urls

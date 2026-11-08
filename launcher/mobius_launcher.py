@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import importlib.util
 import json
 import os
 import shutil
@@ -27,15 +28,26 @@ import time
 import urllib.error
 import urllib.request
 
+
 def _find_root(start: str) -> str:
-    """从 start 向上找含 config.json 的 Möbius 根目录。"""
+    """启动器 bootstrap：仅定位 ROOT（此时 shared/paths.py 尚未加载）。
+
+    搜索顺序：MOBIUS_ROOT（必须含标记）→ 从 start 向上找含 shared/paths.py
+    或 config 标记的目录（最多 5 层）→ frozen exe 退到 exe 所在目录 /
+    源码模式退到 launcher 的上一级目录。ROOT 的正式解析由 shared.paths 负责。
+    """
+    markers = ("shared/paths.py", "config.json", "config.example.json")
+    start_dir = os.path.abspath(start)
     env_root = os.environ.get("MOBIUS_ROOT", "").strip()
-    if env_root and os.path.isfile(os.path.join(env_root, "config.json")):
-        return env_root
-    cur = os.path.abspath(start)
+    if env_root:
+        env_dir = os.path.abspath(env_root)
+        if any(os.path.exists(os.path.join(env_dir, *m.replace("\\", "/").split("/")))
+               for m in markers):
+            return env_dir
+    cur = start_dir
     for _ in range(5):
-        if (os.path.isfile(os.path.join(cur, "config.json"))
-                or os.path.isfile(os.path.join(cur, "config.example.json"))):
+        if any(os.path.exists(os.path.join(cur, *m.replace("\\", "/").split("/")))
+               for m in markers):
             return cur
         parent = os.path.dirname(cur)
         if parent == cur:
@@ -48,6 +60,26 @@ def _find_root(start: str) -> str:
 
 ROOT = _find_root(os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, "frozen", False)
                   else os.path.dirname(os.path.abspath(__file__)))
+
+
+def _load_shared_paths(root: str):
+    """动态加载 ROOT/shared/paths.py，启动器与 Core 共用同一份实现。
+
+    安装布局中 shared/ 与启动器同级；缺失时抛出明确错误，不回退到旧实现。
+    """
+    path = os.path.join(root, "shared", "paths.py")
+    if not os.path.isfile(path):
+        raise RuntimeError(
+            "缺少共享路径模块：" + path + "（安装不完整，请重新安装 Möbius）")
+    spec = importlib.util.spec_from_file_location("mobius_shared_paths", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("无法加载共享路径模块：" + path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_shared_paths = _load_shared_paths(ROOT)
 
 CONFIG_PATH = os.path.join(ROOT, "config.json")
 LOG_DIR = os.path.join(ROOT, "logs")
@@ -154,46 +186,6 @@ def wait_until(fn, timeout: float, interval: float = 1.0) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _path_map(cfg: dict) -> dict[str, str]:
-    base = {
-        "ROOT": ROOT,
-        "RUNTIME": os.environ.get("MOBIUS_RUNTIME", "").strip() or os.path.join(ROOT, "runtime"),
-        "MODELS": os.environ.get("MOBIUS_MODELS", "").strip() or os.path.join(ROOT, "models"),
-        "DATA": os.environ.get("MOBIUS_DATA", "").strip() or os.path.join(ROOT, "data"),
-        "LOGS": LOG_DIR,
-    }
-    for key, value in (cfg.get("paths") or {}).items():
-        if isinstance(value, str):
-            base[str(key)] = _expand(value, base)
-    return base
-
-
-def _expand(value: str, mapping: dict[str, str]) -> str:
-    if not isinstance(value, str) or "${" not in value:
-        return value
-    out = value
-    for _ in range(5):
-        prev = out
-        for name, repl in mapping.items():
-            out = out.replace("${" + name + "}", repl)
-        if out == prev:
-            break
-    return out
-
-
-def _expand_cfg(cfg: dict, mapping: dict[str, str]) -> dict:
-    def walk(node):
-        if isinstance(node, dict):
-            return {k: walk(v) for k, v in node.items()}
-        if isinstance(node, list):
-            return [walk(v) for v in node]
-        if isinstance(node, str):
-            return _expand(node, mapping)
-        return node
-
-    return walk(cfg)
-
-
 def _ensure_config_file() -> None:
     """首次运行：没有 config.json 时用示例配置初始化（向导随后补全）。"""
     if os.path.isfile(CONFIG_PATH):
@@ -208,7 +200,7 @@ def load_config() -> dict:
     _ensure_config_file()
     with open(CONFIG_PATH, encoding="utf-8") as f:
         cfg = json.load(f)
-    return _expand_cfg(cfg, _path_map(cfg))
+    return _shared_paths.expand_config(cfg, root=ROOT)
 
 
 def launcher_cfg(cfg: dict) -> dict:

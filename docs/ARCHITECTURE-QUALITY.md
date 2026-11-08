@@ -31,6 +31,8 @@
 
 - `fragments.json` 聚合保留逻辑加 sha 校验（防止旧 parts 复活）
 - 安装器排除 `config.json`/`*.db`；组件包排除 `data/`、`config/`、用户数据
+- 路径展开收敛到 `shared/paths.py`（`core/paths.py` 为薄兼容层，launcher 动态加载同一份）
+- manifest 聚合/校验收敛到 `ops/l3/manifest_check.py`（build_release 不再内联聚合；write 保留 sha 一致组件的 parts/urls 与 release 元数据）
 - 密钥统一到 `secrets.json`：Core 启动时覆盖 `core.api_key`/`llm.api_key`/`integrations key`/`db_dsn`；`credentials.py` 优先读 SSOT；各消费方视图由 `rotate.py sync` 生成，`check` 检出 drift
 
 ---
@@ -108,7 +110,7 @@ NapCat 使用 `ports_all`（3000+3001 都在监听 = 已登录的代理判据，
 | 级别 | 项 |
 |---|---|
 | P1 | ✅ 密钥 SSOT 已完成：`secrets.json` + `ops/secrets/rotate.py`（init/show/check/sync/rotate），见 `docs/SECRETS-SSOT.md` |
-| P1 | 路径展开抽公共模块；manifest 生成物 drift 校验 |
+| P1 | ✅ 已完成：`shared/paths.py` 唯一实现（Core+launcher 共用，35/35 测试）；`ops/l3/manifest_check.py`（check/write，77/77）接入 build_release，真实仓库无 drift、15 个组件包 sha 全部一致 |
 | P1 | OneBot 事件级 `message_id` 去重（防重放） |
 | P2 | NapCat `login_probe` 状态机 + 服务状态转移表 |
 | P2 | 组件安装状态机 + Console 展示 |

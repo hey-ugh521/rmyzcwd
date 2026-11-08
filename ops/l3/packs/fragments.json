@@ -2,6 +2,11 @@
   "schema": 1,
   "api_version": 1,
   "launcher_min_version": "0.2.0",
+  "release": {
+    "repo": "hey-ugh521/rmyzcwd",
+    "tag": "l3-20261108",
+    "assets": 22
+  },
   "components": {
     "comfyui-runtime": {
       "id": "comfyui-runtime",
