@@ -1,0 +1,115 @@
+--- a/src/langbot/pkg/platform/adapters/aiocqhttp/adapter.py
++++ b/src/langbot/pkg/platform/adapters/aiocqhttp/adapter.py
+@@ -19,10 +19,15 @@
+ import langbot_plugin.api.definition.abstract.platform.event_logger as abstract_platform_logger
+ from langbot.pkg.platform.adapters.aiocqhttp.api_impl import AiocqhttpAPIMixin
+ from langbot.pkg.platform.adapters.aiocqhttp.event_converter import AiocqhttpEventConverter
++from langbot.pkg.platform.adapters.aiocqhttp.dedupe import MessageDedupe
+ from langbot.pkg.platform.adapters.aiocqhttp.message_converter import AiocqhttpMessageConverter
+ from langbot.pkg.platform.adapters.aiocqhttp.platform_api import PLATFORM_API_MAP
+ from langbot_plugin.api.entities.builtin.platform import events as platform_events
+ from langbot_plugin.api.entities.builtin.platform.errors import NotSupportedError
++
++
++# 本地补丁：OneBot message_id 去重（TTL+LRU；env 可关闭）
++_MESSAGE_DEDUPE = MessageDedupe.from_env()
+ 
+ 
+ class AiocqhttpAdapter(AiocqhttpAPIMixin, abstract_platform_adapter.AbstractPlatformAdapter):
+@@ -90,6 +95,10 @@
+         self.bot.connection = connection
+         self.bot_account_id = expected or self_id
+         self._lookup.clear()
++        if _MESSAGE_DEDUPE.enabled:
++            await self.logger.info(
++                f"OneBot message dedupe enabled: ttl={_MESSAGE_DEDUPE.ttl:.0f}s max={_MESSAGE_DEDUPE.max_size}"
++            )
+         task = create_detached_task(connection.run(), workspace_uuid=self._runtime.workspace_uuid)
+         self._connection_task = task
+         try:
+@@ -217,6 +226,12 @@
+             return
+         if getattr(event, 'type', None) == 'message' and str(getattr(event, 'user_id', '')) == self.bot_account_id:
+             return
++        # 本地补丁：同一 message_id 的重复投递（重连/重试/重放）直接丢弃
++        if getattr(event, 'type', None) == 'message':
++            _mid = str(getattr(event, 'message_id', '') or '')
++            if _mid and _MESSAGE_DEDUPE.is_duplicate(f"{self.bot_account_id}:{_mid}"):
++                await self.logger.info(f"OneBot duplicate message dropped: message_id={_mid}")
++                return
+         try:
+             if getattr(event, 'type', None) == 'message' and (
+                 platform_events.FriendMessage in self.listeners or platform_events.GroupMessage in self.listeners
+--- /dev/null
++++ b/src/langbot/pkg/platform/adapters/aiocqhttp/dedupe.py
+@@ -0,0 +1,70 @@
++"""OneBot 事件级 message_id 去重（本地补丁文件之一）。
++
++目的：NapCat/OneBot 在重连、重试或重放时可能把同一条消息事件投递多次，
++导致重复回复/重复出图。此模块在适配器入口按 message_id 做 TTL+LRU 去重。
++
++环境变量：
++  MOBIUS_ONEBOT_DEDUPE_TTL   去重窗口秒数（0 关闭，默认 600）
++  MOBIUS_ONEBOT_DEDUPE_MAX   缓存条目上限（默认 2048）
++
++注意：进程内缓存，重启后清空；对短时间重放足够。
++"""
++
++from __future__ import annotations
++
++import os
++import time
++from collections import OrderedDict
++
++
++class MessageDedupe:
++    def __init__(self, ttl: float = 600.0, max_size: int = 2048, clock=None) -> None:
++        self.ttl = float(ttl)
++        self.max_size = max(1, int(max_size))
++        self._clock = clock or time.monotonic
++        self._seen: "OrderedDict[str, float]" = OrderedDict()
++
++    @classmethod
++    def from_env(cls) -> "MessageDedupe":
++        try:
++            ttl = float(os.environ.get("MOBIUS_ONEBOT_DEDUPE_TTL", "600") or 0)
++        except ValueError:
++            ttl = 600.0
++        try:
++            max_size = int(os.environ.get("MOBIUS_ONEBOT_DEDUPE_MAX", "2048") or 2048)
++        except ValueError:
++            max_size = 2048
++        return cls(ttl=ttl, max_size=max_size)
++
++    @property
++    def enabled(self) -> bool:
++        return self.ttl > 0
++
++    def _prune(self, now: float) -> None:
++        if not self._seen:
++            return
++        cutoff = now - self.ttl
++        while self._seen:
++            key, ts = next(iter(self._seen.items()))
++            if ts >= cutoff:
++                break
++            self._seen.popitem(last=False)
++        while len(self._seen) > self.max_size:
++            self._seen.popitem(last=False)
++
++    def is_duplicate(self, key: str) -> bool:
++        """返回 True 表示窗口内已见过（重复），False 表示首次或已过期。"""
++        if not self.enabled or not key:
++            return False
++        now = self._clock()
++        self._prune(now)
++        if key in self._seen:
++            self._seen.move_to_end(key)
++            return True
++        self._seen[key] = now
++        while len(self._seen) > self.max_size:
++            self._seen.popitem(last=False)
++        return False
++
++    def stats(self) -> dict:
++        return {"ttl": self.ttl, "max_size": self.max_size, "size": len(self._seen), "enabled": self.enabled}

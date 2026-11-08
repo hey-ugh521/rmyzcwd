@@ -147,16 +147,16 @@
       "version": "20261108",
       "required": true,
       "depends_on": [],
-      "size": 9316184,
-      "sha256": "7c0bbfcdf1efe971f04f8f6fec44c9e69aec07ba4ded0ff7df2568171f10d9fd",
+      "size": 9319540,
+      "sha256": "2f2b348a22676b02da9fa447cc313c2da4c9e600d68f0bb7b836f7c1dfc0254a",
       "urls": [
         "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/langbot-20261108.7z",
-        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723492791"
+        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/724055904"
       ],
       "install": {
-        "target": "runtime/langbot",
         "type": "archive",
-        "format": "7z"
+        "format": "7z",
+        "target": "runtime/langbot"
       },
       "license": {
         "note": "",

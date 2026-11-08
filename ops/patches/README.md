@@ -1,63 +1,46 @@
-# LangBot 图片送达补丁（Möbius 专用）
+# 本地补丁（vendored 源码）
 
-LangBot 容器内有两处本地补丁，**容器重建/升级后需要重新应用**。
+记录对第三方/外部源码（主要是 `D:\AI\langbot-native`）的本地补丁，保证可复现、可审计、升级时可重放。
 
-## 补丁 1：关闭 QQ 流式输出
+## 约束
 
-文件：`/app/src/langbot/pkg/pipeline/process/handlers/chat.py`
+- 补丁只针对**本地 vendored 源码**，不提交第三方仓库
+- 每个补丁一个 `.patch`（unified diff，路径相对 LangBot 根）＋ 一段说明
+- LangBot 升级后需重新应用；应用前先备份原文件
+- 补丁行为必须可通过环境变量/配置关闭（便于排障）
 
-原因：QQ 适配器开启 token 级流式时，回复被拆成几十个 chunk 逐条发送，
-图片 URL 桥接（按完整文本匹配 URL）无法命中，导致 QQ 只收到一段文本链接。
+## 补丁列表
 
-做法：把
-```python
-is_stream = await query.adapter.is_stream_output_supported()
-```
-替换为
-```python
-is_stream = False  # Möbius: QQ 不做 token 级流式，整条发送以便图片 URL 桥接
-```
+### langbot-onebot-dedupe.patch
 
-## 补丁 2：图片 URL → 图片消息（桥接函数）
+**问题**：NapCat/OneBot 在 WS 重连、重试或重放时可能把同一条消息事件投递多次，导致重复回复/重复出图。
 
-文件：`/app/src/langbot/pkg/pipeline/respback/respback.py`
+**实现**：在 `AiocqhttpAdapter._handle_native_event()` 入口按 `message_id` 做进程内去重：
 
-原因：网关返回的图片地址是内网地址（`host.docker.internal:8899`），
-QQ 客户端解析不了；必须在 LangBot 侧把 URL 下载成 base64 图片段再发送。
-原实现只按裸 URL 匹配，遇到 `**加粗**`/`[文字](链接)` 会带上多余字符导致下载失败。
+- 新增文件 `src/langbot/pkg/platform/adapters/aiocqhttp/dedupe.py`（`MessageDedupe`：TTL + LRU）
+- 适配器在 meta/self 过滤之后、事件转换之前丢弃重复 `message_id`
+- 连接建立时记录一行配置日志
+- 环境变量：
+  - `MOBIUS_ONEBOT_DEDUPE_TTL`（默认 600 秒；0 = 关闭）
+  - `MOBIUS_ONEBOT_DEDUPE_MAX`（默认 2048 条）
 
-新实现：
-- 先匹配 Markdown 图片/链接 `![alt](url)`、`[text](url)`
-- 再匹配裸 URL，并去掉尾部标点、`*`、`` ` ``、`_` 等
-- 下载成功 → `platform_message.Image(base64=...)` 追加到消息链，并从文本中删掉 URL
-
-## 应用方式（宿主）
+**应用**：
 
 ```powershell
-# 1) 取出文件
-docker cp langbot:/app/src/langbot/pkg/pipeline/process/handlers/chat.py      .\logs\chat.py
-docker cp langbot:/app/src/langbot/pkg/pipeline/respback/respback.py         .\logs\respback.py
-
-# 2) 打补丁（幂等）
-D:\AI\qqbot-mcp\Scripts\python.exe ops\patches\mobius_chat_streamoff_patch.py .\logs\chat.py
-D:\AI\qqbot-mcp\Scripts\python.exe ops\patches\mobius_respback_patch.py      .\logs\respback.py
-
-# 3) 回写并重启
-docker cp .\logs\chat.py      langbot:/app/src/langbot/pkg/pipeline/process/handlers/chat.py
-docker cp .\logs\respback.py  langbot:/app/src/langbot/pkg/pipeline/respback/respback.py
-docker exec langbot python -c "import py_compile; py_compile.compile('/app/src/langbot/pkg/pipeline/process/handlers/chat.py', doraise=True); py_compile.compile('/app/src/langbot/pkg/pipeline/respback/respback.py', doraise=True)"
-docker restart langbot
+cd D:\AI\langbot-native
+# 建议先 git status 确认工作区（LangBot 源码目录若为 git 仓库）
+git apply --whitespace=nowarn C:\Users\lenovo\Desktop\_说明文档\mobius\ops\patches\langbot-onebot-dedupe.patch
 ```
 
-## 验证
+或按 patch 内容手工修改（补丁很小）。
 
-- 发一条生图请求（如「画一只白鹭」）
-- LangBot 日志应出现：`已把 1 张图片 URL 转为图片消息`
-- QQ 端应收到**图片本身**，而不是一条 `http://host.docker.internal...` 文本
+**验证**：
 
-## 注意
+```powershell
+D:\AI\qqbot-mcp\Scripts\python.exe tests\test_onebot_dedupe.py   # 单元
+# 启动 LangBot 后日志应出现：OneBot message dedupe enabled: ttl=600s max=2048
+```
 
-- 两个 `.mobius.bak` 备份文件在容器内同目录
-- 补丁只在容器文件系统，**重建容器后必须重跑**
-- 端口收口（网关只绑 127.0.0.1）本身不是问题：LangBot 容器可通过
-  `host.docker.internal:8899` 访问网关（已验证返回 200 image/png）
+**验证记录（2026-11-08）**：`tests/test_onebot_dedupe.py` → 10/10；用真实 `AiocqhttpAdapter` 对同一条事件投递两次 → `_dispatch_native_event` 仅调用 1 次。
+
+**局限**：进程内缓存，LangBot 重启后清空；覆盖的是短时间重放窗口（默认 10 分钟）。跨重启去重需要持久化存储（可作为后续增强）。

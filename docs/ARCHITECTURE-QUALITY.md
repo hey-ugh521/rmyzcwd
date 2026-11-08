@@ -49,6 +49,7 @@
 | NapCat 启动 | 命名互斥 + 进程/端口探测 no-op + UAC | ✅ |
 | 外部实例停止 | `?force=true` 按 `kill_pattern` 清理 | ✅ |
 | 组件安装/卸载 | 已装跳过；依赖检查 | ✅ |
+| OneBot 事件入口 | `AiocqhttpAdapter` 按 `message_id` 去重（TTL+LRU，`MOBIUS_ONEBOT_DEDUPE_TTL/MAX` 可调/关闭） | ✅ 本地 patch |
 
 ### 2.2 关键设计变更（v2）
 

@@ -183,7 +183,9 @@
       "env": {
         "PYTHONUTF8": "1",
         "VIRTUAL_ENV": "${RUNTIME}/python-langbot",
-        "PYTHONPATH": "${AI}/langbot-native/src"
+        "PYTHONPATH": "${AI}/langbot-native/src",
+        "MOBIUS_ONEBOT_DEDUPE_TTL": "600",
+        "MOBIUS_ONEBOT_DEDUPE_MAX": "2048"
       },
       "kill_pattern": "langbot_plugin\\.cli|langbot-native\\\\.venv|langbot-native\\\\main\\.py|langbot-native.*main\\.py"
     },
