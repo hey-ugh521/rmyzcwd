@@ -206,7 +206,8 @@
         3000,
         3001
       ],
-      "kill_pattern": "NapCatWinBootMain|resources\\\\app\\\\napcat\\\\launcher\\.bat"
+      "kill_pattern": "NapCatWinBootMain|resources\\\\app\\\\napcat\\\\launcher\\.bat",
+      "detached_start": true
     },
     "postgres": {
       "enabled": true,

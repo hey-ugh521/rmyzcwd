@@ -525,8 +525,9 @@ class Supervisor:
         async def _wait_one(s: _Service) -> dict:
             timeout = float(s.cfg.get("start_timeout_sec", 120))
             deadline = now() + timeout
+            detached = bool(s.cfg.get("detached_start"))
             while now() < deadline:
-                if s.proc is not None and s.proc.poll() is not None:
+                if (not detached) and s.proc is not None and s.proc.poll() is not None:
                     s.state = "error"
                     s.last_error = f"进程退出 code={s.proc.returncode}，详见 logs/{s.name}.log"
                     return s.public()
