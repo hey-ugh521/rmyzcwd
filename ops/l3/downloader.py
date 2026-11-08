@@ -293,10 +293,10 @@ class Downloader:
             if pf.is_file() and want_sha and sha256_file(pf) == want_sha and (not want_size or pf.stat().st_size == want_size):
                 log(f"  分卷命中 ({idx + 1}/{len(comp['parts'])}): {pf.name}")
                 continue
-            url = meta.get("url") or ""
-            if not url:
+            urls = meta.get("urls") or ([meta["url"]] if meta.get("url") else [])
+            if not urls:
                 raise ComponentError(f"{cid} 分卷 {idx} 缺少 url")
-            self._download_part(cid, url, pf, idx + 1, len(comp["parts"]), want_sha, want_size)
+            self._download_part(cid, urls, pf, idx + 1, len(comp["parts"]), want_sha, want_size)
         log(f"  拼接 {len(part_files)} 个分卷 -> {archive.name}")
         with open(archive, "wb") as out:
             for pf in part_files:
@@ -313,40 +313,43 @@ class Downloader:
         log(f"  ✓ 分卷校验通过: {archive.name} ({human(archive.stat().st_size)})")
         return archive
 
-    def _download_part(self, cid: str, url: str, dest: Path, num: int, total: int,
+    def _download_part(self, cid: str, urls, dest: Path, num: int, total: int,
                        want_sha: str, want_size: int) -> None:
-        offset = dest.stat().st_size if dest.is_file() else 0
-        if want_size and offset > want_size:
-            dest.unlink(missing_ok=True)
-            offset = 0
-        log(f"  下载分卷 {num}/{total}: {dest.name}" + (f"（续传 {human(offset)}）" if offset else ""))
-        try:
-            with self._open(url, offset) as resp:
-                content_len = int(resp.headers.get("Content-Length") or 0)
-                total_bytes = content_len + offset if resp.status == 206 else content_len
-                mode = "ab" if offset and resp.status == 206 else "wb"
-                if mode == "wb":
-                    offset = 0
-                done = offset
-                with open(dest, mode) as out:
-                    while True:
-                        block = resp.read(CHUNK)
-                        if not block:
-                            break
-                        out.write(block)
-                        done += len(block)
-            if want_size and dest.stat().st_size != want_size:
+        candidates = urls if isinstance(urls, (list, tuple)) else [urls]
+        last_error: Exception | None = None
+        for url in candidates:
+            offset = dest.stat().st_size if dest.is_file() else 0
+            if want_size and offset > want_size:
                 dest.unlink(missing_ok=True)
-                raise ComponentError(f"分卷大小不匹配（期望 {want_size}，实际 {dest.stat().st_size}）")
-            if want_sha:
-                actual = sha256_file(dest)
-                if actual != want_sha:
+                offset = 0
+            log(f"  下载分卷 {num}/{total}: {dest.name} <- {str(url)[:90]}" + (f"（续传 {human(offset)}）" if offset else ""))
+            try:
+                with self._open(url, offset) as resp:
+                    total_bytes = int(resp.headers.get("Content-Length") or 0) + offset if resp.status == 206 else int(resp.headers.get("Content-Length") or 0)
+                    mode = "ab" if offset and resp.status == 206 else "wb"
+                    if mode == "wb":
+                        offset = 0
+                    with open(dest, mode) as out:
+                        while True:
+                            block = resp.read(CHUNK)
+                            if not block:
+                                break
+                            out.write(block)
+                if want_size and dest.stat().st_size != want_size:
                     dest.unlink(missing_ok=True)
-                    raise ComponentError(f"分卷 SHA256 不匹配（期望 {want_sha[:12]}…，实际 {actual[:12]}…）")
-            log(f"  ✓ 分卷 {num} 校验通过 ({human(dest.stat().st_size)})")
-        except (urllib.error.URLError, ComponentError, OSError, TimeoutError) as exc:
-            log(f"  ✗ 分卷 {num} 失败: {exc}")
-            raise
+                    raise ComponentError(f"分卷大小不匹配（期望 {want_size}，实际 {dest.stat().st_size}）")
+                if want_sha:
+                    actual = sha256_file(dest)
+                    if actual != want_sha:
+                        dest.unlink(missing_ok=True)
+                        raise ComponentError(f"分卷 SHA256 不匹配（期望 {want_sha[:12]}…，实际 {actual[:12]}…）")
+                log(f"  ✓ 分卷 {num} 校验通过 ({human(dest.stat().st_size)})")
+                return
+            except (urllib.error.URLError, ComponentError, OSError, TimeoutError) as exc:
+                last_error = exc
+                log(f"  ✗ 分卷 {num} 源失败: {exc}")
+                continue
+        raise ComponentError(f"分卷 {num} 所有源均失败: {last_error}")
 
     def install(self, cid: str, force: bool = False) -> None:
         comp = self.components[cid]

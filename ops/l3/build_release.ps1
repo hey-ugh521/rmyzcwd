@@ -129,7 +129,7 @@ req = {'python-core','python-gateway','python-memory','langbot','python-langbot'
 for cid, c in frags.items():
     c['required'] = cid in req
     prev = old.get(cid) or {}
-    if prev.get('parts'):
+    if prev.get('parts') and prev.get('sha256') == c.get('sha256'):
         c['parts'] = prev['parts']
         c['urls'] = prev.get('urls') or [p['url'] for p in prev['parts']]
         c['size'] = prev.get('size') or c.get('size')

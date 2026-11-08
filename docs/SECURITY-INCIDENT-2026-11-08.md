@@ -1,7 +1,7 @@
 # 安全事件记录：公开仓库/Release 泄露（2026-11-08）
 
 > 状态：已止血（Release 删除、仓库转 Private）、活密钥全部轮换、可达 Git 历史清理、组件/安装包重建并通过扫描。
-> 待决策：是否以「全新仓库」重新公开（GitHub 可能保留 force-push 前的不可达对象）。
+> 更新（2026-11-08 18:30）：已删除并重建仓库（全新历史），重新公开；Release `l3-20261108` 已用**脱敏组件包 + 安全安装器**重建并上传。
 
 ## 1. 暴露清单（外部审计提供）
 
@@ -52,3 +52,15 @@
 - [ ] 确认安装器无 `config.json`
 - [ ] 确认所有历史密钥均已轮换
 - [x] 在发布脚本中加入 secret_scan 作为硬闸门（已实现）
+
+
+## 5. 重新公开（2026-11-08 18:30）
+
+- 删除旧仓库（含不可达对象）→ 重建 `hey-ugh521/rmyzcwd`（PUBLIC，129 提交干净历史）
+- Release `l3-20261108`：22 个资产，全部来自脱敏重建包
+  - `langbot` 8.9MB（无 data/config/db）
+  - `napcat-code` 20.1MB（无 config/db）
+  - `comfyui-runtime` 3.34GB（无 user/input/output/models）
+  - 安装器 27.1MB（无 config.json、无 *.db，自签 Valid）
+- manifest 双 URL（浏览器 + GitHub API 回退）：浏览器下载遇 504 时自动走 API
+- 免 token 实测：`python-core` 安装成功

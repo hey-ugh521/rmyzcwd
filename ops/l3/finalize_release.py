@@ -56,6 +56,7 @@ def main() -> int:
                     missing.append(name)
                     continue
                 part["url"] = asset.get("url") or asset.get("apiUrl")
+                part["urls"] = [u for u in (asset.get("url"), asset.get("apiUrl")) if u]
                 part.setdefault("name", name)
             comp["urls"] = [p["url"] for p in comp["parts"]]
         else:
@@ -64,7 +65,7 @@ def main() -> int:
             if not asset:
                 missing.append(name)
                 continue
-            comp["urls"] = [asset.get("url") or asset.get("apiUrl")]
+            comp["urls"] = [u for u in (asset.get("url"), asset.get("apiUrl")) if u]
 
     if missing:
         print("缺失资产（可重跑上传后再次 finalize）：")

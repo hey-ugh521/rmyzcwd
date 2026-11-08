@@ -10,12 +10,11 @@
       "version": "20261108",
       "required": false,
       "depends_on": [],
-      "size": 4157263366,
+      "size": 3586265882,
       "sha256": "91d42cf19cf84f7251d9cd290f66cfc65975f4785f783325219f6ff3dab28cae",
       "urls": [
         "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.001",
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.003"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002"
       ],
       "install": {
         "target": "runtime/comfyui",
@@ -29,25 +28,26 @@
       },
       "parts": [
         {
+          "index": 0,
+          "name": "comfyui-runtime-20261108.7z.001",
           "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.001",
           "size": 1992294400,
-          "sha256": "406b5ef17ca6f13b08fdc692989532aacf673f1f5c1451d9f8bd51abe6b1ce1f",
-          "index": 0,
-          "name": "comfyui-runtime-20261108.7z.001"
+          "sha256": "37c25bb004b77d0441dcbf9e0574ffeee1e5598154d6b82d48c591a5897fca99",
+          "urls": [
+            "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.001",
+            "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723501571"
+          ]
         },
         {
-          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
-          "size": 1992294400,
-          "sha256": "78dbb2fbae40ac0fb511eaded5669b80d6795414b95122372ca01b03c6c57280",
           "index": 1,
-          "name": "comfyui-runtime-20261108.7z.002"
-        },
-        {
-          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.003",
-          "size": 172674566,
-          "sha256": "6e0a95c9395af6b67a455518d2a23e250ad123ab8d1ea065143aea504a101465",
-          "index": 2,
-          "name": "comfyui-runtime-20261108.7z.003"
+          "name": "comfyui-runtime-20261108.7z.002",
+          "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
+          "size": 1593971482,
+          "sha256": "f6c68f12daae18c6cf2cc146142afea53d634c2fe7d420fa26d2fba24a2f3556",
+          "urls": [
+            "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/comfyui-runtime-20261108.7z.002",
+            "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723501591"
+          ]
         }
       ]
     },
@@ -83,35 +83,55 @@
           "size": 1992294400,
           "sha256": "5a9827abee407a151a8a947d61439b0838532397aeec24d7ddee75ec591c0552",
           "index": 0,
-          "name": "gsv-runtime-20261108.7z.001"
+          "name": "gsv-runtime-20261108.7z.001",
+          "urls": [
+            "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.001",
+            "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723501589"
+          ]
         },
         {
           "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.002",
           "size": 1992294400,
           "sha256": "11527bc7681e571a1a6591289ab594e7d30b541fdcf8e87f543b7884566b2c36",
           "index": 1,
-          "name": "gsv-runtime-20261108.7z.002"
+          "name": "gsv-runtime-20261108.7z.002",
+          "urls": [
+            "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.002",
+            "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723501594"
+          ]
         },
         {
           "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.003",
           "size": 1992294400,
           "sha256": "2a647b43ca110219dd960917d3af8cdcebacd79eabda09c2350c52973c4a6355",
           "index": 2,
-          "name": "gsv-runtime-20261108.7z.003"
+          "name": "gsv-runtime-20261108.7z.003",
+          "urls": [
+            "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.003",
+            "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723501588"
+          ]
         },
         {
           "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.004",
           "size": 1992294400,
           "sha256": "ffed46f697f8045f11c9049c57f1531d59a506c6813727ffb04862849a01a79f",
           "index": 3,
-          "name": "gsv-runtime-20261108.7z.004"
+          "name": "gsv-runtime-20261108.7z.004",
+          "urls": [
+            "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.004",
+            "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723556471"
+          ]
         },
         {
           "url": "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.005",
           "size": 343304093,
           "sha256": "9b8c81ef3104bbbb1b8fb8264ac1beb38f1b44fa16ecf4d82003e4c037f3e941",
           "index": 4,
-          "name": "gsv-runtime-20261108.7z.005"
+          "name": "gsv-runtime-20261108.7z.005",
+          "urls": [
+            "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/gsv-runtime-20261108.7z.005",
+            "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723575442"
+          ]
         }
       ]
     },
@@ -125,7 +145,8 @@
       "size": 9316184,
       "sha256": "7c0bbfcdf1efe971f04f8f6fec44c9e69aec07ba4ded0ff7df2568171f10d9fd",
       "urls": [
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/langbot-20261108.7z"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/langbot-20261108.7z",
+        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723492791"
       ],
       "install": {
         "target": "runtime/langbot",
@@ -147,7 +168,8 @@
       "size": 21056030,
       "sha256": "86be4a73502e9023185771812db4d81ae8bcb330feb2192f1d031920a1209848",
       "urls": [
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/napcat-code-4.18.42-20261108.7z"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/napcat-code-4.18.42-20261108.7z",
+        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723493425"
       ],
       "install": {
         "target": "runtime/napcat",
@@ -169,7 +191,8 @@
       "size": 224588177,
       "sha256": "2830c9925d49134dde4ee2f0e4cda41e7e70258b283220f4c16e499e6c3a017e",
       "urls": [
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/postgres-18.6-20261108.7z"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/postgres-18.6-20261108.7z",
+        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723493124"
       ],
       "install": {
         "target": "runtime/postgres",
@@ -191,7 +214,8 @@
       "size": 6523656,
       "sha256": "39e135d3d0b735c41817f44c0671ac28acafe95ec8cc77de0873dc9866cffcbc",
       "urls": [
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-core-3.12-20261108.7z"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-core-3.12-20261108.7z",
+        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723491994"
       ],
       "install": {
         "target": "runtime/python-core",
@@ -213,7 +237,8 @@
       "size": 15464581,
       "sha256": "5b0427ea25760aecbfe81305778d7b43307627f4ec8e3bdaec9186e45d354ece",
       "urls": [
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-gateway-3.12-20261108.7z"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-gateway-3.12-20261108.7z",
+        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723491996"
       ],
       "install": {
         "type": "archive",
@@ -235,7 +260,8 @@
       "size": 152123526,
       "sha256": "2ca9383f0567ccdf679d86ee91c46067196acf31997afa6504f432caabe1d1f1",
       "urls": [
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-kokoro-3.12-20261108.7z"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-kokoro-3.12-20261108.7z",
+        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723498502"
       ],
       "install": {
         "target": "runtime/python-kokoro",
@@ -257,7 +283,8 @@
       "size": 143961502,
       "sha256": "831f3b238284886fd2326c751fe0c59f67c65c599a088735562f09df9a5f61f3",
       "urls": [
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-langbot-3.12-20261108.7z"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-langbot-3.12-20261108.7z",
+        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723498514"
       ],
       "install": {
         "target": "runtime/python-langbot",
@@ -279,7 +306,8 @@
       "size": 147997837,
       "sha256": "4994565114bf9e6ccda523bbef4cb533e52888f350554cac4b3fdc6a7a214b73",
       "urls": [
-        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-memory-3.12-20261108.7z"
+        "https://github.com/hey-ugh521/rmyzcwd/releases/download/l3-20261108/python-memory-3.12-20261108.7z",
+        "https://api.github.com/repos/hey-ugh521/rmyzcwd/releases/assets/723498500"
       ],
       "install": {
         "format": "7z",
