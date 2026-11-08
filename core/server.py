@@ -334,10 +334,10 @@ async def api_service_start(name: str, wait: int = 0):
 
 
 @app.post("/api/services/{name}/stop")
-async def api_service_stop(name: str):
+async def api_service_stop(name: str, force: bool = False):
     if name not in sup.services:
         raise HTTPException(404, f"未知服务 {name}")
-    return {"ok": True, "service": await sup.stop(name)}
+    return {"ok": True, "service": await sup.stop(name, force=force)}
 
 
 @app.post("/api/services/{name}/restart")

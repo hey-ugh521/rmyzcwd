@@ -190,16 +190,23 @@
     "napcat": {
       "enabled": true,
       "autostart": false,
-      "note": "原生 NapCat 4.18.42 + QQ 9.9.33；启动需要管理员权限（UAC），故 autostart=false，由启动器提权拉起",
+      "note": "原生 NapCat 4.18.42 + QQ 9.9.33；幂等包装启动，需管理员权限（由提权后的 Core/启动器拉起）",
       "port": 3000,
       "start_timeout_sec": 120,
-      "exe": "${RUNTIME}/napcat/launcher.bat",
+      "exe": "powershell.exe",
       "cwd": "${RUNTIME}/napcat",
-      "args": [],
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${ROOT}\\ops\\napcat\\start-napcat.ps1"
+      ],
       "ports": [
         3000,
         3001
-      ]
+      ],
+      "kill_pattern": "NapCatWinBootMain|resources\\\\app\\\\napcat\\\\launcher\\.bat"
     },
     "postgres": {
       "enabled": true,

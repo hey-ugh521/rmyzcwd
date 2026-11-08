@@ -31,3 +31,20 @@
 1. 改真实配置（WebUI 或容器内文件）
 2. 同步本目录副本（重新脱敏）
 3. 提交
+
+
+## 幂等启动（2026-11-08）
+
+所有启动入口统一走 `ops/napcat/start-napcat.ps1`：
+
+- 命名互斥 `Global\MobiusNapCatStart` 串行化并发启动
+- 已存在 `NapCatWinBootMain` 进程或 3000/3001 监听 → 直接退出（幂等 no-op）
+- 未提权时自动 UAC 提权
+- Core `services.napcat.exe` 已指向该包装脚本
+
+管理外部实例：
+
+```powershell
+# 强制停止外部启动的 NapCat（按 kill_pattern）
+curl -X POST "http://127.0.0.1:8900/api/services/napcat/stop?force=true"
+```

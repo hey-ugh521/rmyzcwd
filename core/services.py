@@ -442,12 +442,24 @@ class Supervisor:
             self._fail[name] = (cnt + 1, now() + FAIL_BACKOFF if cnt + 1 >= 3 else 0.0)
         return s.public()
 
-    async def stop(self, name: str, only_if_ours: bool = True) -> dict:
+    async def stop(self, name: str, only_if_ours: bool = True, force: bool = False) -> dict:
         s = self.services[name]
         async with self._lock:
             if only_if_ours and s.proc is None:
+                pattern = str(s.cfg.get("kill_pattern") or "").strip()
+                if force and pattern:
+                    # 显式 force：允许按 kill_pattern 结束外部实例（如手工启动的 NapCat）
+                    s.last_error = "强制停止外部实例（force）"
+                    _kill_matched(pattern)
+                    for _ in range(20):
+                        await asyncio.sleep(0.3)
+                        await self._probe_one(s)
+                        if s.state not in ("ready", "busy", "starting"):
+                            break
+                    s.proc = None
+                    return s.public()
                 # 不是本进程拉起的（用户手工开的 ComfyUI 等），不擅自杀，也不谎报 down。
-                s.last_error = "外部实例，未由 Core 启动，跳过停止"
+                s.last_error = "外部实例，未由 Core 启动，跳过停止（可 force=true）"
                 await self._probe_one(s)
                 return s.public()
             proc = s.proc
