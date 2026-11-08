@@ -206,6 +206,7 @@
         3000,
         3001
       ],
+      "ready_when": "ports_all",
       "kill_pattern": "NapCatWinBootMain|resources\\\\app\\\\napcat\\\\launcher\\.bat",
       "detached_start": true
     },

@@ -34,6 +34,65 @@ FAIL_BACKOFF = 300.0         # 连续失败后进入退避
 ACTIVITY_TOUCH = 5.0         # 同一请求内的活跃标记合并窗口
 
 
+# ---------------------------------------------------------------- 就绪判据
+# ready_when 可选值：
+#   health     只测 health_url（缺失则回退单端口）
+#   ports_all  端口全部监听才算就绪（extra_ports 优先，否则 [port]）
+#   ports_any  任一端口监听即就绪（旧语义，保留兼容）
+#   port       只测单端口 port
+# 未配置 / 未知值 → 保持旧默认：health_url > extra_ports 任一 > 单端口。
+#
+# 动机：NapCat 登录成功后才同时监听 3000/3001；旧逻辑「3000 开着就算 ready」
+# 会在 QQ 未登录时谎报就绪。ports_all 作为「已登录」的代理判据，无需读 token。
+READY_WHEN_MODES = ("health", "ports_all", "ports_any", "port")
+
+
+def _configured_extra_ports(cfg: dict | None) -> list[int]:
+    """配置里显式声明的额外端口（配置键 ports），无效值忽略。"""
+    cfg = cfg or {}
+    ports: list[int] = []
+    for raw in cfg.get("ports") or []:
+        try:
+            p = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if p > 0:
+            ports.append(p)
+    return ports
+
+
+def _readiness_ports(cfg: dict | None) -> list[int]:
+    """就绪判据探测的端口列表：额外端口优先，否则回退单端口 port。"""
+    ports = _configured_extra_ports(cfg)
+    if ports:
+        return ports
+    try:
+        p = int((cfg or {}).get("port") or 0)
+    except (TypeError, ValueError):
+        p = 0
+    return [p] if p > 0 else []
+
+
+def _readiness_mode(cfg: dict | None) -> str:
+    """解析 ready_when 为有效模式（纯函数，便于单测）。
+
+    返回 READY_WHEN_MODES 之一；未配置/未知值回退旧默认；health 缺地址回退 port。
+    """
+    cfg = cfg or {}
+    mode = str(cfg.get("ready_when") or "").strip().lower()
+    health = str(cfg.get("health_url") or "").strip()
+    if mode not in READY_WHEN_MODES:
+        # 旧默认：有 health_url 只测健康检查；有额外端口任一生效即就绪；否则单端口。
+        if health:
+            return "health"
+        if _configured_extra_ports(cfg):
+            return "ports_any"
+        return "port"
+    if mode == "health" and not health:
+        return "port"
+    return mode
+
+
 class MediaDisabled(RuntimeError):
     pass
 
@@ -80,6 +139,7 @@ class _Service:
             "enabled": self.enabled,
             "autostart": self.autostart,
             "port": self.port,
+            "ready_when": _readiness_mode(self.cfg),
             "last_check": round(self.last_check, 1),
             "pid": self.pid,
             "error": self.last_error,
@@ -228,16 +288,30 @@ class Supervisor:
         return {s.name: s.public() for s in self.services.values()}
 
     async def _is_up(self, s: _Service) -> bool:
-        """探测服务是否就绪（供 start/probe/start_all 共用）。"""
+        """探测服务是否就绪（供 start/probe/start_all 共用）。
+
+        判据由 ready_when 决定（见 _readiness_mode）；未配置时沿用旧默认，
+        保证 ComfyUI / 网关 / Kokoro 等既有服务行为不变。
+        """
         if not s.enabled:
             return False
-        if s.health_url:
+        mode = _readiness_mode(s.cfg)
+        if mode == "health":
             return await _http_ok(s.health_url)
-        if s.extra_ports:
-            for p in s.extra_ports:
+        if mode == "ports_all":
+            ports = _readiness_ports(s.cfg)
+            if not ports:
+                return False
+            for p in ports:
+                if not await _port_open(p):
+                    return False
+            return True
+        if mode == "ports_any":
+            for p in _readiness_ports(s.cfg):
                 if await _port_open(p):
                     return True
             return False
+        # mode == "port"：只认主端口
         return await _port_open(s.port)
 
     async def _probe_one(self, s: _Service) -> None:
@@ -414,12 +488,11 @@ class Supervisor:
                 cnt, _ = self._fail.get(name, (0, 0.0))
                 self._fail[name] = (cnt + 1, now() + FAIL_BACKOFF if cnt + 1 >= 3 else 0.0)
                 return s.public()
-            if s.name == "comfyui" or s.health_url:
-                ok = await _http_ok(s.health_url or "http://127.0.0.1:8188/system_stats")
-            elif s.extra_ports:
-                ok = any([await _port_open(p) for p in s.extra_ports])
+            if s.name == "comfyui" and not s.health_url:
+                # 旧特例：ComfyUI 未配 health_url 时仍探默认 /system_stats
+                ok = await _http_ok("http://127.0.0.1:8188/system_stats")
             else:
-                ok = await _port_open(s.port)
+                ok = await self._is_up(s)
             if ok:
                 s.state = "ready"
                 s.started_at = now()

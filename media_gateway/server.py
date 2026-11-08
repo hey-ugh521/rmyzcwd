@@ -21,6 +21,7 @@ import argparse
 import asyncio
 import copy
 import functools
+import hashlib
 import io
 import json
 import logging
@@ -2114,11 +2115,86 @@ async def collect_status(cfg: Settings) -> dict[str, Any]:
 # 生成流程（REST 与 MCP 共用）
 # ---------------------------------------------------------------------------
 
+# 参与幂等派生的字段白名单（顺序固定：同一逻辑请求的规范化串必须逐字节一致）。
+# 只收请求内容与上下文标识，不收 async / timeout_sec 这类传输层参数。
+_IDEM_SOURCE_FIELDS = (
+    "source",
+    "message_id",
+    "event_id",
+    "user_id",
+    "session_id",
+    "prompt",
+    "negative",
+    "model",
+    "workflow",
+    "checkpoint",
+    "character",
+    "width",
+    "height",
+    "seed",
+    "reference_image",
+    "loras",
+)
+
+
+def _idem_text(value: Any) -> str:
+    """标量归一化：None 视作空串，其余转字符串后去首尾空白。"""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value).strip()
+
+
+def _idem_json(value: Any) -> str:
+    """结构值（如 loras）归一化为紧凑、键序稳定的 JSON。"""
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return _idem_text(value)
+
+
+def canonical_idempotency_source(body: dict[str, Any]) -> str:
+    """把参与派生的字段拼成确定性的规范化串（缺省字段也占位，避免字段增删改变 key）。"""
+    parts: list[str] = ["v1"]
+    for name in _IDEM_SOURCE_FIELDS:
+        value = body.get(name)
+        text = _idem_json(value) if name == "loras" and value is not None else _idem_text(value)
+        parts.append(f"{name}={text}")
+    return "\n".join(parts)
+
+
+def derive_idempotency_key(body: dict[str, Any]) -> tuple[str | None, bool]:
+    """派生服务端幂等 key，返回 (实际使用的 key, 是否由上下文派生)。
+
+    规则（对应 P0 幂等兜底）：
+      1. 显式 body["idempotency_key"] 优先，原样使用（derived=False）；
+      2. 没有显式 key，但带 OneBot 消息标识（message_id / event_id），
+         或同时带 session_id + user_id 时，对规范化字段串取 sha256 hex 前 32 位
+         （derived=True）；
+      3. 完全没有上下文标识时返回 (None, False)，交给存储层生成随机 key（保持原行为）。
+    """
+    explicit = str(body.get("idempotency_key") or "").strip()
+    if explicit:
+        return explicit, False
+
+    message_id = str(body.get("message_id") or "").strip()
+    event_id = str(body.get("event_id") or "").strip()
+    session_id = str(body.get("session_id") or "").strip()
+    user_id = str(body.get("user_id") or "").strip()
+    if not (message_id or event_id or (session_id and user_id)):
+        return None, False
+
+    canonical = canonical_idempotency_source(body)
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return digest[:32], True
+
 
 async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool) -> dict[str, Any]:
     spec = resolve_spec(cfg, body, kind="image")
     await require_comfy(cfg)  # 契约 §5.1：不可达先 ensure，失败立即返回错误
-    idem = str(body.get("idempotency_key") or "").strip() or None
+    # 幂等 key：显式优先，漏传时用 message_id/session+user 等上下文派生（见 derive_idempotency_key）
+    idem, idem_derived = derive_idempotency_key(body)
     try:
         task, idempotent_hit = store.submit(
             kind="image",
@@ -2146,6 +2222,8 @@ async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool)
             "task_id": task.id,
             "status": task.status,
             "idempotent_hit": idempotent_hit,
+            "idempotency_key": task.idempotency_key,
+            "idempotency_derived": idem_derived,
             "workflow": spec["workflow"],
             "checkpoint": spec["checkpoint"],
             "loras": spec["loras"],
@@ -2158,6 +2236,8 @@ async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool)
             {
                 "ok": True,
                 "task_id": finished.id,
+                "idempotency_key": finished.idempotency_key,
+                "idempotency_derived": idem_derived,
                 "status": STATUS_COMPLETED,
                 "workflow": spec["workflow"],
                 "checkpoint": spec["checkpoint"],
@@ -2758,6 +2838,7 @@ async def comfyui_generate(
         "【生图首选】异步提交 ComfyUI 生图任务，1 秒内返回 task_id，不会阻塞。"
         "默认模型是 qwen_image_2_1（千问，速度均衡）；不传 model 即用它。"
         "提交后用 comfyui_task_status 轮询（间隔 5~10 秒，最多 60 次）。"
+        "幂等：优先复用同一消息的 message_id（服务端会据此派生幂等 key）；"
         "每次用户主动发起的请求都要自己生成新的 idempotency_key；"
         "同一次逻辑请求的失败重试必须复用同一个 key，避免重复出图。"
     ),
@@ -2774,10 +2855,15 @@ async def comfyui_task_submit(
     loras: Annotated[list[dict[str, Any]] | None, Field(description="LoRA 数组：[{\"name\":\"xxx.safetensors\",\"weight\":0.75}]；仅 anime_illustrious 支持")] = None,
     reference_image_url: str = "",
     idempotency_key: str = "",
+    message_id: str = "",
+    event_id: str = "",
 ) -> str:
     """异步提交生图任务。参数同 comfyui_generate。
 
     idempotency_key：同一个逻辑请求的重试请带上同一个 key，避免重复出图。
+    message_id / event_id：OneBot 消息 ID。优先复用同一消息的 message_id
+        （同一条消息的重试传同一个值），服务端会据此派生幂等 key；
+        漏传 idempotency_key 时也能按同一逻辑请求去重。
     """
     try:
         body = _tool_body(
@@ -2786,6 +2872,10 @@ async def comfyui_task_submit(
         )
         if idempotency_key:
             body["idempotency_key"] = idempotency_key
+        if message_id:
+            body["message_id"] = message_id
+        if event_id:
+            body["event_id"] = event_id
         result = await submit_generate(settings, body, async_mode=True)
         return _json(result)
     except Exception as exc:  # noqa: BLE001
