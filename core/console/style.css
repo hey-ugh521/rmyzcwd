@@ -1082,3 +1082,7 @@ details.raw .raw-body { padding: 0 14px 14px; }
   .topbar { padding: 0 12px; }
   .clock, .chips { display: none; }
 }
+
+/* 服务状态历史（Console） */
+.service-history { margin-top: 14px; }
+.svc-login { font-size: 11px; color: var(--faint); margin-top: 2px; }

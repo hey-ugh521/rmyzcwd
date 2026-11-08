@@ -346,6 +346,26 @@ def audit_list(limit: int = 100, kind: str | None = None) -> list[dict]:
     return rows
 
 
+def audit_state_history(limit: int = 30, service: str | None = None) -> list[dict]:
+    """服务状态/登录态变更历史（供 Console 状态历史面板）。"""
+    sql = "SELECT * FROM audit WHERE (action LIKE ? OR action LIKE ?)"
+    args: list[Any] = ["state.%", "login.%"]
+    sql += " ORDER BY ts DESC LIMIT ?"
+    args.append(int(limit) * (5 if service else 1))
+    with conn() as c:
+        rows = _rows(c.execute(sql, args))
+    out: list[dict] = []
+    for r in rows:
+        detail = _loads(r.get("detail"), {})
+        r["detail"] = detail
+        if service and str(detail.get("service") or "") != service:
+            continue
+        out.append(r)
+        if len(out) >= int(limit):
+            break
+    return out
+
+
 # ---------------------------------------------------------------- turns（临时工作记忆）
 
 def turn_add(session_id: str, user_id: str, role: str, content: str) -> None:

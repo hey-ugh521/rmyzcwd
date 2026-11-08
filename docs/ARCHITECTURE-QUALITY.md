@@ -92,7 +92,7 @@ NapCat 现使用 `login_probe`：直接查 OneBot `get_login_info`（token 从 s
 
 同时引入**显式服务状态转移表**（`STATE_TRANSITIONS`/`LOGIN_TRANSITIONS`）：合法边集中定义，非法转移写审计 `state.invalid_transition` 并告警（不阻塞运行）；`public()` 增加 `state_since`/`login_state*`。
 
-单测：`tests/test_readiness_modes.py` → 34/34；`tests/test_service_state_machine.py` → 26/26（状态表/登录态/probe）。
+单测：`tests/test_readiness_modes.py` → 34/34；`tests/test_service_state_machine.py` → 26/26（状态表/登录态/probe）；Console 状态历史：`tests/test_console_state_history.py` → 13/13（静态 + 在线 API）。
 
 ### 3.2 任务状态机
 
@@ -113,7 +113,7 @@ NapCat 现使用 `login_probe`：直接查 OneBot `get_login_info`（token 从 s
 | NapCat/QQ 登录态 | 引入 `login_probe`（OneBot `get_login_info`）作为显式状态 `starting→awaiting_login→logged_in→ready` |
 | ✅ 状态转换守卫 | 显式转移表 + 非法转移审计/告警（不阻塞） |
 | ✅ 组件安装状态 | 已实现 `absent→downloading→installing→installed/failed`，持久化 `component_states.json`，崩溃/超时恢复为 failed |
-| Console 展示 | 暴露 `ready_when`（已加入 `/api/services` 返回）与状态历史 |
+| ✅ Console 展示 | 服务卡片显示登录态/状态持续时长；新增「最近状态变化」面板（`GET /api/services/history?limit&service`） |
 
 ---
 

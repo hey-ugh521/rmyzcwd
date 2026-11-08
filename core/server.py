@@ -315,6 +315,12 @@ async def api_services():
     }
 
 
+@app.get("/api/services/history")
+async def api_services_history(limit: int = 30, service: str | None = None):
+    """最近的服务状态/登录态变化（Console 状态历史）。"""
+    return {"ok": True, "history": store.audit_state_history(limit=limit, service=service)}
+
+
 @app.get("/api/services/{name}")
 async def api_service_get(name: str):
     try:

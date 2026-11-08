@@ -56,6 +56,12 @@
 
   var KIND_TEXT = { image: '生图', voice: '语音', unknown: '未知' };
   var SOURCE_TEXT = { qq: 'QQ', web: 'Web', console: 'Console' };
+  var LOGIN_TEXT = {
+    logged_in: '已登录',
+    awaiting_login: '等待登录',
+    error: '登录异常',
+    unknown: '未知'
+  };
   var STATE_TEXT = {
     ready: 'ready · 就绪',
     starting: 'starting · 启动中',
@@ -2467,6 +2473,34 @@
 
   var SERVICES_POLL_MS = 5000;
 
+  function paintHistory(data) {
+    var box = $('#svc-history');
+    if (!box) return;
+    var items = (data && data.history) || [];
+    var hint = $('#svc-history-hint');
+    if (hint) hint.textContent = items.length ? '最近 ' + items.length + ' 条' : '';
+    if (!items.length) {
+      box.innerHTML = '<div class="hint">暂无状态变化记录</div>';
+      return;
+    }
+    var html = '<div class="table-wrap"><table class="table"><thead><tr>' +
+      '<th>时间</th><th>服务</th><th>变化</th><th>详情</th></tr></thead><tbody>';
+    items.forEach(function (r) {
+      var d = r.detail || {};
+      var ts = numberOr(r.ts, 0);
+      var when = ts > 0 ? new Date(ts * 1000).toLocaleTimeString() : '-';
+      var isLogin = String(r.action || '').indexOf('login') === 0;
+      var change = (d.from !== undefined ? d.from : '?') + ' → ' + (d.to !== undefined ? d.to : '?');
+      var detail = isLogin ? (d.detail || '') : (d.reason || d.detail || '');
+      html += '<tr><td class="cell-num">' + esc(when) + '</td>' +
+        '<td class="cell-strong">' + esc(d.service || '-') + '</td>' +
+        '<td class="cell-num">' + esc((isLogin ? '登录 ' : '') + change) + '</td>' +
+        '<td class="cell-prompt"><span class="p" title="' + esc(detail) + '">' + esc(detail || '-') + '</span></td></tr>';
+    });
+    html += '</tbody></table></div>';
+    box.innerHTML = html;
+  }
+
   function renderServices(root) {
     root.innerHTML = servicesShell();
     bindServices();
@@ -2486,6 +2520,10 @@
       '<button class="btn sm" id="svc-stop-all" type="button">停止全部</button></div></div>' +
       '<div id="svc-error"></div>' +
       '<div class="service-grid" id="svc-list">' + serviceSkeletons() + '</div>' +
+      '<div class="card service-history">' +
+      '<div class="card-head"><h3>最近状态变化</h3><span class="hint" id="svc-history-hint"></span></div>' +
+      '<div class="card-body" id="svc-history"><div class="hint">加载中…</div></div>' +
+      '</div>' +
       '</div>';
   }
 
@@ -2541,6 +2579,7 @@
   function tickServices(force) {
     return api('/api/services').then(function (data) {
       paintServices(data);
+      api('/api/services/history?limit=20').then(paintHistory, function () {});
       var updated = $('#svc-updated');
       if (updated) updated.textContent = '更新于 ' + new Date().toLocaleTimeString();
       var sub = $('#svc-sub');
@@ -2568,6 +2607,12 @@
         '<span class="svc-name">' + esc(meta.name || s.name) + '</span>' +
         '<span class="svc-port">:' + esc(String(s.port || '')) + (s.autostart ? ' · auto' : '') + '</span></div>' +
         '<div class="svc-state state-' + esc(s.state) + '">' + esc(STATE_TEXT[s.state] || s.state) + '</div>' +
+        (s.login_state && s.login_state !== 'unknown'
+          ? '<div class="svc-login">登录：' + esc(LOGIN_TEXT[s.login_state] || s.login_state) + (s.login_detail ? ' · ' + esc(s.login_detail) : '') + '</div>'
+          : '') +
+        (s.state_since
+          ? '<div class="svc-check dim">该状态已持续 ' + esc(fmtUptime(Math.max(0, Math.floor(Date.now() / 1000 - s.state_since)))) + '</div>'
+          : '') +
         (s.pid ? '<div class="svc-check">pid ' + esc(String(s.pid)) + ' · 运行 ' + esc(fmtUptime(s.uptime_sec || 0)) + '</div>' : '') +
         (s.error ? '<div class="svc-check" style="color:#ff8a8a">' + esc(s.error) + '</div>' : '') +
         (s.note ? '<div class="svc-check dim">' + esc(s.note) + '</div>' : '') +
