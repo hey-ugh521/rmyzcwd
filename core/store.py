@@ -32,6 +32,14 @@ try:
     CFG = _paths.expand_config(CFG)
 except Exception:  # noqa: BLE001
     pass
+
+# 密钥 SSOT：secrets.json 是唯一编辑源，启动时覆盖到已展开配置
+try:
+    from . import secrets as _secrets
+
+    _secrets.apply_to_config(CFG, BASE)
+except Exception:  # noqa: BLE001
+    pass
 DB_PATH = (BASE / CFG.get("db", "data/mobius.db")).resolve()
 # 阶段 3：存储后端可切换（sqlite 默认；pg 走 PostgreSQL）
 DB_BACKEND = str(os.environ.get("CORE_DB_BACKEND") or CFG.get("db_backend") or "sqlite").lower()

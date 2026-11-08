@@ -183,7 +183,7 @@ if ($SelfSign -or $SignThumbprint) {
 # ---------------------------------------------------------------- 发布前安全扫描（硬闸门）
 Step "发布前安全扫描"
 $scanner = Join-Path $repo 'ops\l3\secret_scan.py'
-& $pyinstallerEnv $scanner --dir $repo --exclude .git release launcher logs tests ops/probe media_gateway/data media_gateway/tts_output media_gateway/uploads docs/archive config.json data
+& $pyinstallerEnv $scanner --dir $repo --exclude .git release launcher logs tests ops/probe media_gateway/data media_gateway/tts_output media_gateway/uploads docs/archive config.json data secrets.json backups
 if ($LASTEXITCODE -ne 0) { Fail "仓库文件安全扫描未通过，禁止发布" }
 foreach ($c in $components) {
     $pack = Join-Path $ComponentDir ("{0}-{1}.7z" -f $c.Id, $c.Version)

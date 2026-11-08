@@ -1,7 +1,7 @@
 """凭据读取：真实密钥一律不进仓库。
 
-取值顺序：环境变量 → D:/AI/mobius/.env（仓库外的本地环境文件）→ 仓库 config.json（已被 .gitignore 排除）。
-三处都拿不到时直接抛错，不提供硬编码兜底——兜底字符串本身就是泄露面。
+取值顺序：环境变量 → secrets.json（SSOT 单一编辑源）→ D:/AI/mobius/.env → 仓库 config.json。
+都拿不到时直接抛错，不提供硬编码兜底——兜底字符串本身就是泄露面。
 """
 
 from __future__ import annotations
@@ -58,12 +58,23 @@ def _cfg_value(*path: str) -> str:
     return node if isinstance(node, str) else ""
 
 
+def _ssot(*keys: str) -> str:
+    """从密钥 SSOT（secrets.json）取值；导入失败返回空串。"""
+    try:
+        sys.path.insert(0, _REPO_ROOT)
+        from core import secrets as _secrets
+
+        return _secrets.get(*keys)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _lookup(name: str, *config_path: str) -> str:
     return os.environ.get(name) or _env_file().get(name) or _cfg_value(*config_path)
 
 
 def pg_password() -> str:
-    pw = _lookup("PG_PASSWORD")
+    pw = os.environ.get("PG_PASSWORD") or _ssot("pg", "password") or _env_file().get("PG_PASSWORD")
     if not pw:
         dsn = _cfg_value("db_dsn")
         if dsn:
@@ -110,14 +121,19 @@ def redis_url(db: int = 0) -> str:
 
 
 def langbot_api_key() -> str:
-    key = _lookup("LANGBOT_API_KEY", "integrations", "langbot", "api_key")
+    key = (os.environ.get("LANGBOT_API_KEY")
+           or _ssot("langbot", "integration_api_key")
+           or _ssot("langbot", "global_api_key")
+           or _lookup("LANGBOT_API_KEY", "integrations", "langbot", "api_key"))
     if not key:
         raise RuntimeError(f"缺少 LangBot API Key：见 {CONFIG_FILE} 的 integrations.langbot.api_key")
     return key
 
 
 def deepseek_api_key() -> str:
-    key = _lookup("MOBIUS_DEEPSEEK_KEY", "llm", "api_key")
+    key = (os.environ.get("MOBIUS_DEEPSEEK_KEY")
+           or _ssot("deepseek", "api_key")
+           or _lookup("MOBIUS_DEEPSEEK_KEY", "llm", "api_key"))
     if not key:
         raise RuntimeError(f"缺少 DeepSeek Key：见 {CONFIG_FILE} 的 llm.api_key")
     return key

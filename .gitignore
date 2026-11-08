@@ -66,3 +66,9 @@ installer/*.log
 
 # L3 发布产物
 release/
+
+# 密钥 SSOT（仅本地）
+secrets.json
+**/secrets.json
+!ops/secrets/secrets.example.json
+backups/security/
