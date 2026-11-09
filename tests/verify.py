@@ -25,10 +25,22 @@ sys.path.insert(0, str(BASE))
 from core import store  # noqa: E402
 
 CORE = os.environ.get("MOBIUS_CORE", "http://127.0.0.1:8900")
-COMFY_OUTPUT = Path(r"D:\AI\comic\ComfyUI_windows_portable\ComfyUI\output")
-TTS_OUTPUT = Path(r"D:\AI\qqbot-mcp\tts_output")
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 RESULT: list[dict] = []
+
+
+def _gateway_token() -> str:
+    """与网关同口径：env MOBIUS_GATEWAY_TOKEN → secrets.json gateway.token。"""
+    tok = os.environ.get("MOBIUS_GATEWAY_TOKEN", "").strip()
+    if tok:
+        return tok
+    try:
+        from core import secrets as _secrets
+
+        return _secrets.get("gateway", "token")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def rec(cid: str, name: str, ok: bool, detail: str = "", skipped: bool = False) -> None:
@@ -46,7 +58,8 @@ async def poll_gateway_task(client: httpx.AsyncClient, gw: str, task_id: str,
         r = await client.get(f"{gw}/api/tasks/{task_id}")
         last = r.json()
         obj = last.get("task") or last
-        if obj.get("status") in ("succeeded", "failed", "canceled"):
+        # ADR-002 状态词（completed/cancelled 双写 l；submission_unknown 也是终态）
+        if obj.get("status") in ("completed", "failed", "cancelled", "submission_unknown"):
             return obj
         await asyncio.sleep(2)
     return last.get("task") or last
@@ -59,7 +72,9 @@ async def main() -> int:
     ap.add_argument("--timeout", type=float, default=300)
     args = ap.parse_args()
 
-    async with httpx.AsyncClient(timeout=30) as client:
+    tok = _gateway_token()
+    headers = {"Authorization": f"Bearer {tok}"} if tok else {}
+    async with httpx.AsyncClient(timeout=30, headers=headers) as client:
         # ---------- A0 连通性 ----------
         try:
             r = await client.get(f"{CORE}/health")
@@ -111,7 +126,6 @@ async def main() -> int:
             rec("A1c", "checkpoint 枚举", False, str(e))
 
         # ---------- A1 直接网关生图（带角色 LoRA） ----------
-        before = set(os.listdir(COMFY_OUTPUT)) if COMFY_OUTPUT.exists() else set()
         if args.quick:
             rec("A1", "网关生图（bronya + LoRA）", True, "quick 模式跳过", skipped=True)
         else:
@@ -127,13 +141,17 @@ async def main() -> int:
                     tid = j["task_id"]
                     print(f"       · 网关任务 {tid} 已提交，LoRA={[l['name'] for l in j.get('loras', [])]}", flush=True)
                     out = await poll_gateway_task(client, gw, tid, args.timeout)
-                    ok = out.get("status") == "succeeded"
+                    ok = out.get("status") == "completed"
                     res = out.get("result") or {}
                     detail = f"{out.get('status')} {res.get('filename')} {round(time.time()-t0,1)}s"
                     if ok:
-                        p = COMFY_OUTPUT / res.get("filename", "")
-                        ok = p.exists() and p.stat().st_size > 50_000
-                        detail += f" {p.stat().st_size // 1024}KB" if p.exists() else " 文件缺失"
+                        # 经网关媒体代理下载校验，不依赖 ComfyUI 本机输出目录
+                        r_img = await client.get(f"{gw}{res.get('path')}", timeout=60)
+                        img = r_img.content
+                        ok = (r_img.status_code == 200
+                              and img.startswith(PNG_SIGNATURE) and len(img) > 50_000)
+                        detail += (f" {len(img) // 1024}KB" if ok else
+                                   f" 下载校验失败 HTTP {r_img.status_code} {len(img)}B")
                     else:
                         detail += f" error={out.get('error')}"
                     rec("A1", "网关生图（bronya + LoRA）", ok, detail)
@@ -179,10 +197,13 @@ async def main() -> int:
                 j = r.json()
                 ok = bool(j.get("ok") and j.get("audio_url"))
                 fn = j.get("filename") or ""
-                p = TTS_OUTPUT / fn if fn else None
-                if ok and p and p.exists():
-                    ok = p.stat().st_size > 8000
-                    detail = f"{fn} {p.stat().st_size // 1024}KB"
+                if ok and j.get("path"):
+                    # 经网关媒体代理下载校验，不依赖 tts_output 本机目录
+                    r_audio = await client.get(f"{gw}{j['path']}", timeout=60)
+                    audio = r_audio.content
+                    ok = r_audio.status_code == 200 and len(audio) > 8000
+                    detail = (f"{fn} {len(audio) // 1024}KB" if ok else
+                              f"{fn} 下载校验失败 HTTP {r_audio.status_code} {len(audio)}B")
                 else:
                     detail = str(j)[:200]
                 rec("A3", "TTS 合成", ok, detail)
@@ -257,7 +278,7 @@ async def main() -> int:
                 await asyncio.sleep(1)
                 rc = (await client.post(f"{gw}/api/tasks/{victim}/cancel")).json()
                 st = (rc.get("task") or {}).get("status") or rc.get("status")
-                rec("A4c", "任务取消", st == "canceled", f"{victim} -> {st}")
+                rec("A4c", "任务取消", st == "cancelled", f"{victim} -> {st}")
             except Exception as e:
                 rec("A4c", "任务取消", False, str(e))
 

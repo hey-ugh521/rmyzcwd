@@ -71,6 +71,31 @@ def get(*keys: str, default: str = "", data: dict | None = None) -> str:
     return str(node) if isinstance(node, str) and node else default
 
 
+def set_value(*keys: str, value: str, root: Path | None = None) -> Path:
+    """向 SSOT 写入一个层级键（原子写）。文件已存在但损坏时抛错，拒绝覆盖。"""
+    if not keys:
+        raise ValueError("set_value 至少需要一个键")
+    path = secrets_path(root)
+    data: dict = {}
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"secrets.json 不是 JSON 对象: {path}")
+    node = data
+    for key in keys[:-1]:
+        child = node.get(key)
+        if not isinstance(child, dict):
+            child = {}
+            node[key] = child
+        node = child
+    node[keys[-1]] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+    return path
+
+
 def _with_password(dsn: str, password: str) -> str:
     """替换 DSN 中的口令（保留其它部分）。"""
     try:

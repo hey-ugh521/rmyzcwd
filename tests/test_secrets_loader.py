@@ -82,7 +82,15 @@ def main() -> int:
         check("db_dsn 口令覆盖", "pgnew" in cfg["db_dsn"], cfg["db_dsn"])
         check("gateway DSN 覆盖", "pgnew" in cfg["services"]["gateway"]["env"]["MOBIUS_TASK_DSN"])
         os.environ.pop("MOBIUS_SECRETS_FILE", None)
-        check("无 secrets 文件回退", sec.apply_to_config({"core": {}}, tmp / "nope") is False)
+        # 真正隔离「无 secrets 文件」场景：把最终回退 DEFAULT_FALLBACK 也指向不存在的
+        # 临时路径。否则本机若存在 D:\AI\mobius\secrets.json，回退链会命中它、load 返回
+        # 真实密钥、apply_to_config 返回 True —— 那是环境副作用，与本断言意图无关。
+        _saved_fallback = sec.DEFAULT_FALLBACK
+        sec.DEFAULT_FALLBACK = tmp / "nope" / "absent-fallback.json"
+        try:
+            check("无 secrets 文件回退", sec.apply_to_config({"core": {}}, tmp / "nope") is False)
+        finally:
+            sec.DEFAULT_FALLBACK = _saved_fallback
     finally:
         for k, v in old_env.items():
             if v is None:

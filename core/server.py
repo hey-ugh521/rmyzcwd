@@ -141,7 +141,7 @@ async def _sync_tasks() -> None:
             continue
         obj = r.get("task") or r
         st = obj.get("status")
-        if st in ("succeeded", "failed", "canceled"):
+        if st in ("succeeded", "failed", "canceled", "submission_unknown"):
             result = obj.get("result") or {}
             store.task_update(t["id"], status=st, result=result,
                               error=obj.get("error"), finished_at=store.now())
@@ -428,12 +428,13 @@ async def api_task_event(request: Request):
     try:
         body = await request.json()
     except Exception:
-        return {"ok": False, "error": "invalid_json"}
+        return JSONResponse({"ok": False, "error": "invalid_json"}, status_code=400)
     try:
         res = store.task_apply_event(body if isinstance(body, dict) else {})
         return {"ok": True, **res}
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+                            status_code=500)
 
 @app.get("/api/tasks")
 async def api_tasks(limit: int = 50, status: str | None = None, source: str | None = None):
@@ -454,7 +455,7 @@ async def api_task_cancel(task_id: str):
     t = store.task_get(task_id)
     if not t:
         raise HTTPException(404, "task not found")
-    if t["status"] in ("succeeded", "failed", "canceled"):
+    if t["status"] in ("succeeded", "failed", "canceled", "submission_unknown"):
         return {"ok": True, "task": t, "note": "已结束，无需取消"}
     if t.get("remote_id"):
         with contextlib.suppress(Exception):

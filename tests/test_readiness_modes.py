@@ -3,20 +3,21 @@
 背景 bug（2026-11-08）：
   NapCat 登录成功后才同时监听 3000/3001；旧逻辑只要 extra_ports 里任一端口
   open 就算 ready，于是「3000 开着、QQ 未登录」也会谎报就绪。新增配置字段
-  ready_when 让每个服务声明自己的就绪判据，NapCat 用 ports_all（两个端口都监听
-  才算登录完成）。
+  ready_when 让每个服务声明自己的就绪判据。NapCat 现用 login_probe（直接探测
+  QQ 登录接口 /get_login_info，比「两端口都监听」更贴近「已登录」语义；缺 url
+  时回退 ports_all / port）。
 
 运行：
   D:\\Anaconda3\\envs\\open-webui\\python.exe tests\\test_readiness_modes.py
 
 覆盖：
-  1. ready_when = health / ports_all / ports_any / port 的模式解析
+  1. ready_when = health / ports_all / ports_any / port / login_probe 的模式解析
   2. 大小写与空白容错
-  3. health 缺 health_url 时回退单端口
+  3. health 缺 health_url、login_probe 缺 url 时回退单端口/全端口
   4. 未配置时保持旧默认（health_url > extra_ports 任一 > 单端口）
   5. 未知值回退旧默认
   6. 端口列表解析（额外端口优先、无效值过滤、单端口回退、空配置）
-  7. config.example.json 里 napcat 已声明 ready_when=ports_all
+  7. config.example.json 里 napcat 已声明 ready_when=login_probe
 """
 
 from __future__ import annotations
@@ -56,7 +57,8 @@ def expect_ports(name: str, cfg, want: list[int]) -> None:
 
 def test_mode_parsing() -> None:
     print("\n[1] ready_when 模式解析")
-    check("模式取值集合固定", READY_WHEN_MODES == ("health", "ports_all", "ports_any", "port"),
+    check("模式取值集合固定",
+          READY_WHEN_MODES == ("health", "ports_all", "ports_any", "port", "login_probe"),
           str(READY_WHEN_MODES))
 
     # 显式配置优先于其它探测字段
@@ -72,6 +74,11 @@ def test_mode_parsing() -> None:
     expect_mode("port：只测单端口",
                 {"ready_when": "port", "ports": [3000, 3001], "port": 3000},
                 "port")
+    expect_mode("login_probe：探测 QQ 登录接口",
+                {"ready_when": "login_probe",
+                 "login_probe": {"url": "http://127.0.0.1:3000/get_login_info"},
+                 "ports": [3000, 3001], "port": 3000},
+                "login_probe")
 
     # ports_all 即使配置了 health_url 也不被覆盖（显式优先）
     expect_mode("ports_all 优先于 health_url",
@@ -85,10 +92,18 @@ def test_mode_parsing() -> None:
     expect_mode("HEALTH 大写", {"ready_when": "HEALTH", "health_url": "http://x/health"}, "health")
     expect_mode("port 带空白", {"ready_when": " port ", "port": 8903}, "port")
 
-    print("\n[3] health 缺 health_url 回退单端口")
+    print("\n[3] health 缺 health_url / login_probe 缺 url 回退")
     expect_mode("health 无 health_url → port", {"ready_when": "health", "port": 8903}, "port")
     expect_mode("health 的 health_url 为空白 → port",
                 {"ready_when": "health", "health_url": "   ", "port": 8903}, "port")
+    expect_mode("login_probe 无 url + 有额外端口 → ports_all",
+                {"ready_when": "login_probe", "ports": [3000, 3001], "port": 3000}, "ports_all")
+    expect_mode("login_probe 无 url + 无额外端口 → port",
+                {"ready_when": "login_probe", "port": 3000}, "port")
+    # 注意：login_probe.url 不做 strip（与 health_url 不同），空白串视为已配置 → 仍 login_probe
+    expect_mode("login_probe 的 url 为空白（不 strip）→ 仍 login_probe",
+                {"ready_when": "login_probe", "login_probe": {"url": "  "},
+                 "ports": [3000, 3001]}, "login_probe")
 
 
 def test_default_fallback() -> None:
@@ -128,14 +143,17 @@ def test_ports_parsing() -> None:
 
 
 def test_example_config() -> None:
-    print("\n[7] config.example.json：napcat 使用 ports_all")
+    print("\n[7] config.example.json：napcat 使用 login_probe")
     cfg = json.loads((ROOT / "config.example.json").read_text(encoding="utf-8"))
     napcat = ((cfg.get("services") or {}).get("napcat") or {})
-    check("napcat 声明 ready_when=ports_all", napcat.get("ready_when") == "ports_all",
+    check("napcat 声明 ready_when=login_probe", napcat.get("ready_when") == "login_probe",
           repr(napcat.get("ready_when")))
     check("napcat 仍配置 ports=[3000,3001]", napcat.get("ports") == [3000, 3001],
           repr(napcat.get("ports")))
-    check("示例配置里 napcat 解析为 ports_all", _readiness_mode(napcat) == "ports_all",
+    check("napcat login_probe.url 已配置",
+          bool((napcat.get("login_probe") or {}).get("url")),
+          repr((napcat.get("login_probe") or {}).get("url")))
+    check("示例配置里 napcat 解析为 login_probe", _readiness_mode(napcat) == "login_probe",
           repr(_readiness_mode(napcat)))
 
 

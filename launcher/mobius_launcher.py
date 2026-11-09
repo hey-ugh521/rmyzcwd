@@ -81,6 +81,23 @@ def _load_shared_paths(root: str):
 
 _shared_paths = _load_shared_paths(ROOT)
 
+
+def _load_core_secrets(root: str):
+    """动态加载 ROOT/core/secrets.py（纯标准库）；密钥写盘只走 secrets.json SSOT。"""
+    path = os.path.join(root, "core", "secrets.py")
+    if not os.path.isfile(path):
+        raise RuntimeError(
+            "缺少密钥模块：" + path + "（安装不完整，请重新安装 Möbius）")
+    spec = importlib.util.spec_from_file_location("mobius_core_secrets", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("无法加载密钥模块：" + path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_core_secrets = _load_core_secrets(ROOT)
+
 CONFIG_PATH = os.path.join(ROOT, "config.json")
 LOG_DIR = os.path.join(ROOT, "logs")
 CORE_HEALTH = "http://127.0.0.1:8900/health"
@@ -233,7 +250,7 @@ def ensure_launcher_config(cfg: dict) -> None:
         return
     svc = cfg.get("services") or {}
     pg = svc.get("postgres") or {}
-    cfg["launcher"] = {
+    launcher = {
         "core_python": (svc.get("gateway") or {}).get("python", ""),
         "core_args": ["-m", "core.server"],
         "pg_ctl": pg.get("stop_exe") or pg.get("exe", ""),
@@ -243,8 +260,16 @@ def ensure_launcher_config(cfg: dict) -> None:
         "start_napcat": True,
         "elevate": True,
     }
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    cfg["launcher"] = launcher
+    # cfg 是展开后的视图；只把 launcher 段合并进原始文件，避免烧死 ${VAR}
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        raw = json.load(f)
+    if "launcher" not in raw:
+        raw["launcher"] = launcher
+        tmp = CONFIG_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(raw, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, CONFIG_PATH)
 
 
 # ---------------------------------------------------------------------------
@@ -497,10 +522,10 @@ def configure_llm(base_url: str, api_key: str, model: str) -> tuple[bool, str]:
     llm = cfg.setdefault("llm", {})
     if base_url:
         llm["base_url"] = base_url.rstrip("/")
-    if api_key:
-        llm["api_key"] = api_key
     if model:
         llm["model"] = model
+    if api_key:
+        _core_secrets.set_value("deepseek", "api_key", value=api_key)
     _save_raw_config(cfg)
     return test_llm()
 
@@ -511,7 +536,7 @@ def test_llm() -> tuple[bool, str]:
     cfg = _raw_config()
     llm = cfg.get("llm") or {}
     base = str(llm.get("base_url") or "").rstrip("/")
-    key = str(llm.get("api_key") or "")
+    key = _core_secrets.get("deepseek", "api_key") or str(llm.get("api_key") or "")
     model = str(llm.get("model") or "")
     if not base or not key or not model:
         return False, "LLM 配置不完整（base_url / api_key / model）"
@@ -587,16 +612,16 @@ def _mask(token: str) -> str:
 
 
 def _apply_github_token(token: str | None = None, persist: bool = False) -> None:
-    """把 token 注入环境变量；persist=True 时写入 config.json（launcher.github_token）。"""
+    """把 token 注入环境变量；persist=True 时写入 secrets.json（github.token）。"""
     cfg = _raw_config()
-    saved = str((cfg.get("launcher") or {}).get("github_token") or "")
+    saved = (_core_secrets.get("github", "token")
+             or str((cfg.get("launcher") or {}).get("github_token") or ""))
     value = (token or "").strip() or saved
     if not value:
         return
     os.environ["MOBIUS_GH_TOKEN"] = value
     if persist:
-        cfg.setdefault("launcher", {})["github_token"] = value
-        _save_raw_config(cfg)
+        _core_secrets.set_value("github", "token", value=value)
         log(f"已保存 GitHub Token（{_mask(value)}）")
 
 

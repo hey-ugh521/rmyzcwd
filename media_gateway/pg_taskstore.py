@@ -62,6 +62,11 @@ CREATE TABLE IF NOT EXISTS task_snapshot (
   error_message    TEXT,
   cancel_requested INTEGER NOT NULL DEFAULT 0,
   attempts         INTEGER NOT NULL DEFAULT 0,
+  -- version：行级乐观锁计数（每次 UPDATE +1），初值仅作基准、不承载语义。
+  -- 必须保持 DEFAULT 0：CREATE TABLE IF NOT EXISTS 不会修改已存在表的列默认值，
+  -- 改动 DEFAULT 只会让「新建库」与「既有库」初值分叉（既有 PG 库历史上即 0）。
+  -- 注：sqlite 端 taskstore.py 的 version DEFAULT 1，两端各自与其既有库自洽即可，
+  -- 不要求跨后端一致（version 不外泄、不参与跨库比较）。
   version          INTEGER NOT NULL DEFAULT 0,
   created_at       DOUBLE PRECISION NOT NULL,
   started_at       DOUBLE PRECISION,
@@ -178,24 +183,37 @@ class PgTaskStore:
                     "reference_image": spec.get("reference_image"),
                     "warnings": list(spec.get("warnings") or []),
                 }
-                cur.execute(
-                    "INSERT INTO task_snapshot("
-                    "task_id, idempotency_key, payload_hash, kind, status, source, user_id, session_id,"
-                    " character, prompt, params_json, payload_json, created_at, updated_at"
-                    ") VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                    (
-                        tid, key, payload_hash, kind, STATUS_PENDING, source or "console",
-                        user_id, session_id, spec.get("character"), spec.get("prompt", "") or "",
-                        json.dumps(params, ensure_ascii=False),
-                        json.dumps(payload, ensure_ascii=False), now, now,
-                    ),
-                )
-                self._outbox_insert(
-                    cur, tid, "task.created",
-                    {"task_id": tid, "kind": kind, "status": STATUS_PENDING,
-                     "source": source, "user_id": user_id, "session_id": session_id,
-                     "payload_hash": payload_hash, "idempotency_key": key, "created_at": now},
-                )
+                try:
+                    cur.execute(
+                        "INSERT INTO task_snapshot("
+                        "task_id, idempotency_key, payload_hash, kind, status, source, user_id, session_id,"
+                        " character, prompt, params_json, payload_json, created_at, updated_at"
+                        ") VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (
+                            tid, key, payload_hash, kind, STATUS_PENDING, source or "console",
+                            user_id, session_id, spec.get("character"), spec.get("prompt", "") or "",
+                            json.dumps(params, ensure_ascii=False),
+                            json.dumps(payload, ensure_ascii=False), now, now,
+                        ),
+                    )
+                    self._outbox_insert(
+                        cur, tid, "task.created",
+                        {"task_id": tid, "kind": kind, "status": STATUS_PENDING,
+                         "source": source, "user_id": user_id, "session_id": session_id,
+                         "payload_hash": payload_hash, "idempotency_key": key, "created_at": now},
+                    )
+                except psycopg.errors.UniqueViolation:
+                    # 并发下同 key 穿过前置 SELECT：回滚后按幂等命中/冲突处理
+                    con.rollback()
+                    row = con.execute(
+                        "SELECT task_id, payload_hash FROM task_snapshot WHERE idempotency_key=%s",
+                        (key,),
+                    ).fetchone()
+                    if row is None:
+                        raise  # task_id 主键冲突，非幂等键竞争
+                    if row["payload_hash"] == payload_hash:
+                        return self.get(row["task_id"]), True
+                    raise TaskConflict(row["task_id"])
             con.commit()
         log.info("task %s pending (%s, workflow=%s)", tid, kind, spec.get("workflow"))
         return self.get(tid), False  # type: ignore[return-value]

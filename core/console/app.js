@@ -51,6 +51,7 @@
     succeeded: '成功',
     failed: '失败',
     canceled: '已取消',
+    submission_unknown: '提交未知',
     unknown: '未知'
   };
 
@@ -185,7 +186,7 @@
 
   function statusClass(s) {
     var v = String(s || 'unknown').toLowerCase();
-    return ['queued', 'running', 'succeeded', 'failed', 'canceled'].indexOf(v) >= 0 ? v : 'canceled';
+    return ['queued', 'running', 'succeeded', 'failed', 'canceled', 'submission_unknown'].indexOf(v) >= 0 ? v : 'canceled';
   }
 
   function statusText(s) { return STATUS_TEXT[String(s || 'unknown').toLowerCase()] || String(s || '未知'); }

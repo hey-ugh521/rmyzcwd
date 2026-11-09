@@ -39,13 +39,14 @@ NEW_TOOLS = {
     "comfyui_task_submit",
     "comfyui_task_status",
     "comfyui_task_cancel",
-    "comfyui_queue_status",
     "tts_list_voices",
     "media_status",
     "media_wake",
     "media_sleep",
     "media_set_mode",
 }
+# ADR-002 状态词（completed/cancelled 双写 l；submission_unknown 也是终态）
+TERMINAL_STATUSES = ("completed", "failed", "cancelled", "submission_unknown")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 CONTEXT: dict = {}
@@ -119,7 +120,7 @@ def wait_task(client: httpx.Client, task_id: str, timeout: float = 300.0) -> dic
     while time.time() < deadline:
         data = get_json(client, f"/api/tasks/{task_id}")
         last = data.get("task") or {}
-        if last.get("status") in ("succeeded", "failed", "canceled"):
+        if last.get("status") in TERMINAL_STATUSES:
             return last
         time.sleep(1.5)
     raise AssertionError(f"等待任务 {task_id} 超时，最后状态: {_short(last)}")
@@ -287,10 +288,10 @@ def test_async_character(client: httpx.Client) -> str:
     expect(submitted.get("ok") is True, f"异步提交失败: {_short(submitted)}")
     task_id = submitted.get("task_id")
     expect(str(task_id).startswith("g_"), f"task_id 前缀异常: {task_id}")
-    expect(submitted.get("status") == "queued", f"提交状态应为 queued: {_short(submitted)}")
+    expect(submitted.get("status") == "pending", f"提交状态应为 pending: {_short(submitted)}")
     CONTEXT["async_task_id"] = task_id
     task = wait_task(client, task_id, timeout=400.0)
-    expect(task.get("status") == "succeeded", f"异步任务失败: {_short(task)}")
+    expect(task.get("status") == "completed", f"异步任务失败: {_short(task)}")
     params = task.get("params") or {}
     expect(
         params.get("checkpoint") == "Illustrious-XL-v1.0.safetensors",
@@ -310,7 +311,7 @@ def test_async_character(client: httpx.Client) -> str:
     png = fetch_image(client, task.get("result") or {})
     CONTEXT["character_task"] = task
     return (
-        f"task={task_id} status=succeeded filename={(task.get('result') or {}).get('filename')} "
+        f"task={task_id} status=completed filename={(task.get('result') or {}).get('filename')} "
         f"bytes={len(png)} checkpoint={params.get('checkpoint')} "
         f"loras={_short(loras)} 注入节点={_short(applied)} prompt 已并入画风"
     )
@@ -333,7 +334,7 @@ def test_cancel(client: httpx.Client) -> str:
         if running_task.get("status") == "running" and params.get("prompt_id"):
             break
         expect(
-            running_task.get("status") not in ("failed", "canceled"),
+            running_task.get("status") not in ("failed", "cancelled"),
             f"任务 A 提前失败: {_short(running_task)}",
         )
         time.sleep(1.0)
@@ -352,11 +353,11 @@ def test_cancel(client: httpx.Client) -> str:
     task_b = b.get("task_id")
     expect(b.get("ok") is True and task_b, f"任务 B 提交失败: {_short(b)}")
     before_b = get_json(client, f"/api/tasks/{task_b}").get("task") or {}
-    expect(before_b.get("status") == "queued", f"任务 B 应为 queued: {_short(before_b)}")
+    expect(before_b.get("status") == "pending", f"任务 B 应为 pending: {_short(before_b)}")
     cancel_b = post_json(client, f"/api/tasks/{task_b}/cancel")
     expect(cancel_b.get("ok") is True, f"取消排队任务失败: {_short(cancel_b)}")
     expect(cancel_b.get("action") == "removed_from_queue", f"取消排队动作异常: {_short(cancel_b)}")
-    expect((cancel_b.get("task") or {}).get("status") == "canceled", f"B 状态未变 canceled: {_short(cancel_b)}")
+    expect((cancel_b.get("task") or {}).get("status") == "cancelled", f"B 状态未变 cancelled: {_short(cancel_b)}")
 
     # 取消运行中的 A（应由网关中断 ComfyUI）
     cancel_a = post_json(client, f"/api/tasks/{task_a}/cancel")
@@ -367,7 +368,7 @@ def test_cancel(client: httpx.Client) -> str:
     )
     time.sleep(3.0)
     after_a = get_json(client, f"/api/tasks/{task_a}").get("task") or {}
-    expect(after_a.get("status") == "canceled", f"A 取消后状态不对: {_short(after_a)}")
+    expect(after_a.get("status") == "cancelled", f"A 取消后状态不对: {_short(after_a)}")
     expect(after_a.get("result") is None, f"取消的 A 不应有结果: {_short(after_a)}")
 
     # ComfyUI 队列应最终清空（取消真的生效，而不只是标记）
@@ -388,7 +389,7 @@ def test_cancel(client: httpx.Client) -> str:
     CONTEXT["cancel"] = {"task_a": task_a, "task_b": task_b, "remote_id": remote_id}
     return (
         f"A({task_a}) running+remote_id={remote_id} 取消 -> {cancel_a.get('action')}；"
-        f"B({task_b}) queued 取消 -> removed_from_queue；ComfyUI 队列已清空"
+        f"B({task_b}) pending 取消 -> removed_from_queue；ComfyUI 队列已清空"
     )
 
 
@@ -443,9 +444,9 @@ def test_tasks_list(client: httpx.Client) -> str:
     tasks = data.get("tasks") or []
     expect(bool(tasks), "任务列表为空")
     statuses = {task.get("status") for task in tasks}
-    canceled = get_json(client, "/api/tasks?status=canceled").get("tasks") or []
-    expect(bool(canceled), f"按 status=canceled 过滤为空（statuses={statuses}）")
-    return f"{len(tasks)} 个任务，statuses={sorted(statuses)}，canceled={len(canceled)}"
+    canceled = get_json(client, "/api/tasks?status=cancelled").get("tasks") or []
+    expect(bool(canceled), f"按 status=cancelled 过滤为空（statuses={statuses}）")
+    return f"{len(tasks)} 个任务，statuses={sorted(statuses)}，cancelled={len(canceled)}"
 
 
 def test_wake(client: httpx.Client) -> str:
@@ -474,22 +475,18 @@ def _mcp_sync(base: str) -> str:
             expect(model_data.get("ok") is True, f"comfyui_list_models 失败: {model_text[:300]}")
             expect(len(model_data.get("models") or []) >= 5, "MCP 列模型数量过少")
 
-            queue = await client.call_tool("comfyui_queue_status", {})
-            queue_data = json.loads(queue.content[0].text)  # type: ignore[attr-defined]
-            expect(queue_data.get("ok") is True, f"comfyui_queue_status 失败: {short(queue_data)}")
-
             task_id = CONTEXT.get("async_task_id")
             if task_id:
                 task = await client.call_tool("comfyui_task_status", {"task_id": task_id})
                 task_data = json.loads(task.content[0].text)  # type: ignore[attr-defined]
                 expect(task_data.get("ok") is True, f"comfyui_task_status 失败: {short(task_data)}")
                 expect(
-                    (task_data.get("task") or {}).get("status") == "succeeded",
+                    (task_data.get("task") or {}).get("status") == "completed",
                     f"MCP 查到的任务状态异常: {short(task_data)}",
                 )
             return (
                 f"{len(names)} 个工具，旧工具 {sorted(LEGACY_TOOLS)} 全部保留；"
-                f"MCP 列模型 {len(model_data.get('models') or [])} 个；队列状态 ok"
+                f"MCP 列模型 {len(model_data.get('models') or [])} 个"
             )
 
     return asyncio.run(runner())
@@ -502,6 +499,27 @@ def short(value: object) -> str:
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
+
+
+def _resolve_token() -> str:
+    """与网关同口径：env MOBIUS_GATEWAY_TOKEN → secrets.json gateway.token。"""
+    tok = os.environ.get("MOBIUS_GATEWAY_TOKEN", "").strip()
+    if tok:
+        return tok
+    try:
+        import importlib.util
+
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "mobius_test_secrets", os.path.join(root, "core", "secrets.py")
+        )
+        if spec is None or spec.loader is None:
+            return ""
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return str(module.get("gateway", "token") or "")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def main() -> int:
@@ -522,9 +540,14 @@ def main() -> int:
     _print(f"time={time.strftime('%Y-%m-%d %H:%M:%S')}")
     _print("=" * 78)
 
+    token = _resolve_token()
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    if token:
+        _print("已检测到 gateway token，REST 请求将携带 Authorization: Bearer")
     client = httpx.Client(
         base_url=base,
         timeout=httpx.Timeout(args.timeout, connect=10.0),
+        headers=headers,
     )
     try:
         try:

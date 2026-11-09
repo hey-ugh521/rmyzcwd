@@ -359,10 +359,22 @@ class Supervisor:
             CFG["core"]["idle_sleep_sec"] = max(60, int(idle_sleep_sec))
         if prewarm_on_start is not None:
             CFG["core"]["prewarm_on_start"] = bool(prewarm_on_start)
+        # CFG 已展开 ${VAR} 并叠加密钥，整体 dump 会泄密且烧死路径；
+        # 只把这两个键写回原始文件，原子替换。
         try:
             import json
-            with open(store.CONFIG_PATH, "w", encoding="utf-8") as f:
-                json.dump(CFG, f, ensure_ascii=False, indent=2)
+            path = str(store.CONFIG_PATH)
+            with open(path, encoding="utf-8") as f:
+                raw = json.load(f)
+            core = raw.setdefault("core", {})
+            if idle_sleep_sec is not None:
+                core["idle_sleep_sec"] = CFG["core"]["idle_sleep_sec"]
+            if prewarm_on_start is not None:
+                core["prewarm_on_start"] = CFG["core"]["prewarm_on_start"]
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(raw, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
         except Exception:
             pass
         store.audit("console", "media.update_config", self.config(), source="console")
@@ -995,11 +1007,17 @@ class GatewayClient:
         g = CFG.get("gateway", {})
         self.base = (base_url or g.get("url") or "http://127.0.0.1:8899").rstrip("/")
         self.timeout = float(timeout or g.get("timeout_sec") or 30)
+        # 与网关同一口径：env 优先，其次密钥 SSOT secrets.json gateway.token
+        from . import secrets as _secrets
+        self.token = os.environ.get("MOBIUS_GATEWAY_TOKEN") or _secrets.get("gateway", "token")
 
     async def _request(self, method: str, path: str, timeout: float | None = None, **kw) -> dict:
         url = f"{self.base}{path}"
+        headers = dict(kw.pop("headers", None) or {})
+        if self.token and "Authorization" not in headers:
+            headers["Authorization"] = "Bearer " + self.token
         async with httpx.AsyncClient(timeout=timeout or self.timeout) as c:
-            r = await c.request(method, url, **kw)
+            r = await c.request(method, url, headers=headers, **kw)
         if r.status_code >= 400:
             try:
                 body = r.json()
@@ -1032,7 +1050,11 @@ class GatewayClient:
         return await self._request("POST", "/api/generate", json=payload, timeout=300)
 
     async def task(self, task_id: str) -> dict:
-        return await self._request("GET", f"/api/tasks/{task_id}")
+        r = await self._request("GET", f"/api/tasks/{task_id}")
+        obj = r.get("task")
+        if isinstance(obj, dict) and "status" in obj:
+            obj["status"] = store.map_gateway_status(obj["status"])
+        return r
 
     async def cancel(self, task_id: str) -> dict:
         return await self._request("POST", f"/api/tasks/{task_id}/cancel")
@@ -1050,7 +1072,7 @@ class GatewayClient:
         while now() < deadline:
             last = await self.task(task_id)
             st = (last.get("task") or last).get("status")
-            if st in ("succeeded", "failed", "canceled"):
+            if st in ("succeeded", "failed", "canceled", "submission_unknown"):
                 return last.get("task") or last
             await asyncio.sleep(interval)
         return last.get("task") or {"status": "timeout", "id": task_id}

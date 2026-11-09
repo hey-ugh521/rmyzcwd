@@ -22,6 +22,8 @@ import asyncio
 import copy
 import functools
 import hashlib
+import hmac
+import importlib.util
 import io
 import json
 import logging
@@ -140,6 +142,23 @@ def _env(name: str, default: Any = "") -> Any:
     return value if value not in (None, "") else default
 
 
+def _secret_gateway_token() -> str:
+    """从密钥 SSOT（core/secrets.py → secrets.json）读 gateway.token。
+
+    core/secrets.py 是纯标准库模块，动态加载避免依赖包导入路径。
+    """
+    try:
+        path = os.path.join(MOBIUS_ROOT, "core", "secrets.py")
+        spec = importlib.util.spec_from_file_location("mobius_gateway_secrets", path)
+        if spec is None or spec.loader is None:
+            return ""
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return str(module.get("gateway", "token") or "")
+    except Exception:  # noqa: BLE001 - 密钥缺失不应阻断启动（未配 token = 不鉴权）
+        return ""
+
+
 class Settings:
     """网关配置。默认值 + mobius/config.json + 环境变量。"""
 
@@ -166,7 +185,8 @@ class Settings:
         kokoro = services.get("kokoro") or {}
         f5 = services.get("f5") or {}
 
-        self.host = str(_env("MOBIUS_GATEWAY_HOST", gw.get("host", "0.0.0.0")))
+        # 默认只监听回环：局域网暴露必须显式配置 host 并设置 token
+        self.host = str(_env("MOBIUS_GATEWAY_HOST", gw.get("host", "127.0.0.1")))
         self.port = int(_env("MOBIUS_GATEWAY_PORT", gw.get("port", 8899)))
         self.comfy_url = str(
             _env(
@@ -187,6 +207,8 @@ class Settings:
             _env("MOBIUS_CORE_URL", f"http://{core_host}:{int(core.get('port', 8900))}")
         ).rstrip("/")
         self.core_api_key = str(_env("MOBIUS_CORE_API_KEY", core.get("api_key", "<REDACTED>")))
+        # /api/* 的 Bearer token（/api/pulse 心跳豁免）；未配置则不鉴权
+        self.gateway_token = str(_env("MOBIUS_GATEWAY_TOKEN", _secret_gateway_token()))
 
         self.workflows_dir = str(_env("MOBIUS_WORKFLOWS_DIR", DEFAULT_WORKFLOWS_DIR))
         self.checkpoints_dir = str(_env("MOBIUS_CHECKPOINTS_DIR", DEFAULT_CHECKPOINTS_DIR))
@@ -1395,7 +1417,11 @@ class TaskStore(DurableTaskStore):
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(url, json=item)
-            return resp.status_code < 300
+            if resp.status_code >= 300:
+                return False
+            # Core 应用失败时必须保留重试，不能只看 HTTP 状态
+            body = resp.json()
+            return bool(body.get("ok"))
         except Exception as exc:  # noqa: BLE001
             log.warning("上报 Core 失败（保留重试）：%s", exc)
             return False
@@ -1731,6 +1757,7 @@ if os.environ.get("MOBIUS_TASK_STORE", "sqlite").lower() == "pg":
             self._worker = None
             self._outbox_task = None
             self._submitted = {}
+            self.active_id: str | None = None
             super().__init__(dsn, outbox_limit=outbox_limit)
 
     # 把 TaskStore 上的网关层方法（不含 __init__）挂到 PG 版本
@@ -1753,26 +1780,27 @@ else:
 
 
 async def resolve_reference_bytes(cfg: Settings, reference: str) -> tuple[bytes, str]:
-    """把 upload_id / 文件名 / 绝对路径 / http URL 解析成 (bytes, filename)。"""
+    """把 upload_id / 上传目录内文件名解析成 (bytes, filename)。
+
+    安全边界：不接受任何 URL（SSRF）与任何路径形式（绝对路径 / 盘符 /
+    分隔符 / .. 穿越），参考图必须先 POST /api/upload 落到 uploads_dir。
+    """
     reference = str(reference or "").strip()
     if not reference:
         raise ApiError("reference_image_missing", "reference_image 为空")
-    if reference.startswith(("http://", "https://")):
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.get(reference)
-        if resp.status_code != 200:
-            raise ApiError(
-                "reference_image_fetch_failed",
-                f"下载参考图失败: HTTP {resp.status_code}",
-                400,
-            )
-        filename = os.path.basename(urllib.parse.urlsplit(reference).path) or "reference.png"
-        return resp.content, filename
-    # upload_id（up_xxx）或直接文件名
-    candidates: list[str] = []
-    if os.path.isabs(reference) and os.path.isfile(reference):
-        candidates.append(reference)
-    candidates.append(os.path.join(cfg.uploads_dir, reference))
+    if "://" in reference or reference.lower().startswith(("http:", "https:")):
+        raise ApiError(
+            "reference_image_url_forbidden",
+            "参考图不接受 URL，请先 POST /api/upload 拿 upload_id",
+            400,
+        )
+    if os.path.isabs(reference) or any(c in reference for c in ("/", "\\", ":", "..")):
+        raise ApiError(
+            "reference_image_path_forbidden",
+            "参考图只接受 upload_id 或上传目录内的文件名，不接受路径",
+            400,
+        )
+    candidates: list[str] = [os.path.join(cfg.uploads_dir, reference)]
     if os.path.isdir(cfg.uploads_dir):
         for filename in os.listdir(cfg.uploads_dir):
             if filename.startswith(reference + ".") and not filename.endswith(".meta.json"):
@@ -2356,6 +2384,21 @@ def api_route(path: str, methods: list[str], name: str | None = None):
         @functools.wraps(func)
         async def endpoint(request: Request) -> Response:
             try:
+                # watchdog 只探 /api/pulse，必须豁免；其余 /api/* 配置 token 后强制鉴权
+                if (
+                    settings.gateway_token
+                    and request.url.path.startswith("/api/")
+                    and request.url.path != "/api/pulse"
+                ):
+                    scheme, _, cred = request.headers.get("authorization", "").partition(" ")
+                    if scheme.lower() != "bearer" or not hmac.compare_digest(
+                        cred.encode("utf-8"), settings.gateway_token.encode("utf-8")
+                    ):
+                        return JSONResponse(
+                            {"ok": False, "error": "unauthorized",
+                             "hint": "需要 Authorization: Bearer <gateway token>"},
+                            status_code=401,
+                        )
                 return await func(request)
             except ApiError as exc:
                 return JSONResponse(_error_payload(exc), status_code=exc.status)
@@ -2774,7 +2817,8 @@ async def comfyui_generate(
                    （仅 anime_illustrious 这类支持角色的模型有效）
         loras: LoRA 数组，如 [{"name":"xxx.safetensors","weight":0.75}]；
                也接受 JSON 字符串或 "name:0.75,name2:0.6"（character 留空时才需要自己传）
-        reference_image_url: 上传后的 upload_id 或 URL（upscale/removebg 用）
+        reference_image_url: 上传后的 upload_id（upscale/removebg 用；不接受 URL，
+                             需先 POST /api/upload 上传）
     """
     try:
         result = await submit_generate(
@@ -3127,7 +3171,8 @@ class _AppWithWorker:
 
 _mcp_app = server.streamable_http_app(
     streamable_http_path="/mcp",
-    host="0.0.0.0",
+    # 跟随监听地址：回环时 mcp 库自动启用 DNS-rebinding 防护（校验 Host/Origin）
+    host=settings.host,
     json_response=False,
     # stateless：每次请求独立处理，不依赖长连接会话。
     # 这样网关重启后 LangBot 不需要重建 MCP 会话，也不会积累僵尸会话
@@ -3135,6 +3180,9 @@ _mcp_app = server.streamable_http_app(
     stateless_http=True,
     session_idle_timeout=None,
 )
+# 注意：/mcp 不做 token 鉴权（与 /api/* 不同）。唯一消费方 LangBot 无法注入 Authorization
+# 头，且 ADR-004 否决改 LangBot。鉴权边界靠「回环默认 + DNS-rebinding 防护 + 非回环时
+# _enforce_bind_security 强制 token」补偿。详见 docs/adr/ADR-006-gateway-auth-boundary.md。
 app = _AppWithWorker(_mcp_app)
 
 
@@ -3169,10 +3217,48 @@ def _acquire_instance_lock(port: int) -> bool:
         return True
 
 
+def _is_loopback_host(host: str) -> bool:
+    """监听地址是否仅回环（不对其它机器暴露）。
+
+    回环：127.0.0.0/8 全体、::1、localhost。
+    非回环：0.0.0.0 / :: / 空串（绑定全部网卡）、任何局域网/公网 IP、任何主机名。
+    """
+    h = str(host or "").strip().lower()
+    if h in ("localhost", "::1"):
+        return True
+    if h.startswith("127."):
+        return True
+    return False
+
+
+def _enforce_bind_security(st: "Settings") -> None:
+    """非回环监听必须已配置 gateway token，否则拒绝启动（fail-fast）。
+
+    动机：/api/* 仅在配置 token 后鉴权；/mcp 为兼容 LangBot 始终开放（见 ADR-006）。
+    把网关绑到非回环地址＝对网络暴露，此时若 /api/* 还裸奔（无 token）风险过高，
+    因此启动即失败，逼操作者二选一：改回回环（默认拓扑）或显式配置 token。
+    """
+    if _is_loopback_host(st.host):
+        return
+    if st.gateway_token:
+        log.warning(
+            "网关监听非回环地址 %s：/api/* 已强制 token 鉴权；/mcp 仍开放，"
+            "只应由同机 LangBot 访问，勿直接暴露公网（ADR-006）", st.host,
+        )
+        return
+    raise SystemExit(
+        f"拒绝启动：监听地址 {st.host!r} 非回环，但未配置 gateway token。\n"
+        "  二选一：\n"
+        "    1) 改回回环（默认）：MOBIUS_GATEWAY_HOST=127.0.0.1 或 config gateway.host=127.0.0.1\n"
+        "    2) 配置 token：secrets.json 的 gateway.token，或环境变量 MOBIUS_GATEWAY_TOKEN\n"
+        "  说明：/api/* 有 token 才鉴权；/mcp 为兼容 LangBot 保持开放（ADR-006）。"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Möbius Media Gateway v2 (MCP + REST + proxy)")
     parser.add_argument("--port", type=int, default=None, help="监听端口（默认取配置，8899）")
-    parser.add_argument("--host", default=None, help="监听地址（默认 0.0.0.0）")
+    parser.add_argument("--host", default=None, help="监听地址（默认 127.0.0.1）")
     args = parser.parse_args()
     _host = os.environ.get("MOBIUS_GATEWAY_HOST", "127.0.0.1")
     if _port_in_use(_host, args.port):
@@ -3184,6 +3270,7 @@ def main() -> None:
         settings.apply_port(args.port)
     if args.host:
         settings.host = args.host
+    _enforce_bind_security(settings)
     settings.ensure_dirs()
     log.info("Möbius Media Gateway v%s 启动于 http://%s:%s", VERSION, settings.host, settings.port)
     log.info("tts_output 落盘目录: %s", settings.tts_dir)

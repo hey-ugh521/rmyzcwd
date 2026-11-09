@@ -654,8 +654,15 @@ _GW_STATUS = {
     "pending": "queued", "running": "running",
     "completed": "succeeded", "failed": "failed",
     "cancelled": "canceled", "canceled": "canceled",
-    "submission_unknown": "failed",
+    # ADR-002：submission_unknown 是独立终态，需人工确认，不得当作可重试的 failed
+    "submission_unknown": "submission_unknown",
 }
+
+
+def map_gateway_status(status: str) -> str:
+    """网关(ADR-002) → Core 状态词；未知词原样保留，便于排查而非静默吞掉。"""
+    s = str(status or "")
+    return _GW_STATUS.get(s, s)
 
 
 def task_apply_event(event: dict) -> dict:

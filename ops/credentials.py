@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from urllib.parse import urlsplit
 
 ENV_FILE = os.environ.get("MOBIUS_ENV_FILE", r"D:/AI/mobius/.env")

@@ -58,7 +58,8 @@ async def main(url: str) -> int:
                     except Exception:
                         d = {}
                     obj = d.get("task") or d
-                    if obj.get("status") in ("succeeded", "failed", "canceled"):
+                    if obj.get("status") in ("completed", "failed", "cancelled",
+                                             "submission_unknown"):
                         print("task final:", json.dumps(obj, ensure_ascii=False)[:500])
                         break
                     await asyncio.sleep(2)

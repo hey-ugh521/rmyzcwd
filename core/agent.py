@@ -250,6 +250,14 @@ class Agent:
                                    session_id=ctx["session_id"])
                 return {"ok": True, "task_id": task["id"], "status": "succeeded",
                         "note": "图片会自动附在回复末尾，不要自己写链接"}
+            if status == "submission_unknown":
+                store.task_update(task["id"], status="submission_unknown",
+                                  error="gateway_submission_unknown", finished_at=store.now())
+                store.audit(ctx["user_id"], "image.generate", {"prompt": prompt},
+                            result="unknown", task_id=task["id"],
+                            character=char_id, source=ctx["source"])
+                return {"ok": False, "error": "submission_unknown",
+                        "hint": "提交结果未知，请到 Console 人工确认后再决定是否重试"}
             err = final.get("error") or status or "unknown"
             store.task_update(task["id"], status="failed", error=str(err), finished_at=store.now())
             store.audit(ctx["user_id"], "image.generate", {"prompt": prompt},
