@@ -96,7 +96,7 @@
 
 ### T7 任务状态单一 owner = Core（#6，D1=B 已定）
 
-**先给设计再动代码**（影响面大，先交 1 页变更方案给 Lead 确认）。
+**设计稿已提交：`docs/adr/ADR-007-task-ownership.md`（Proposed，2026-11-10）**；待 PM/Lead 评审确认后再动代码。
 
 设计约束：
 - Core 是任务状态的唯一权威：创建、状态流转、终态、查询都以 Core 为准（`core/store.py` tasks 表 + API）。
