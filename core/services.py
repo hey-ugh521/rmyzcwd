@@ -1025,7 +1025,9 @@ class GatewayClient:
         self.timeout = float(timeout or g.get("timeout_sec") or 30)
         # 与网关同一口径：env 优先，其次密钥 SSOT secrets.json gateway.token
         from . import secrets as _secrets
-        self.token = os.environ.get("MOBIUS_GATEWAY_TOKEN") or _secrets.get("gateway", "token")
+        self.token = (os.environ.get("MOBIUS_GATEWAY_TOKEN")
+                      or _secrets.get("gateway", "token")
+                      or _secrets.get("core", "api_key"))
 
     async def _request(self, method: str, path: str, timeout: float | None = None, **kw) -> dict:
         url = f"{self.base}{path}"

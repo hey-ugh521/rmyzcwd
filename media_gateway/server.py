@@ -170,7 +170,8 @@ def _secret_gateway_token() -> str:
             return ""
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        return str(module.get("gateway", "token") or "")
+        # M3a：未单独配 gateway.token 时回退 Core API key，保证回环 /api/* 也有统一 token。
+        return str(module.get("gateway", "token") or module.get("core", "api_key") or "")
     except Exception:  # noqa: BLE001 - 密钥缺失不应阻断启动（未配 token = 不鉴权）
         return ""
 

@@ -176,11 +176,21 @@ def port_open(port: int, timeout: float = 1.0) -> bool:
         return False
 
 
+def _core_auth_headers() -> dict:
+    """M3a：本机变更 API 使用 Core API key；只读也附带无副作用。"""
+    try:
+        key = _core_secrets.get("core", "api_key") or ""
+    except Exception:  # noqa: BLE001
+        key = ""
+    return {"Authorization": f"Bearer {key}"} if key else {}
+
+
 def http_json(path: str, method: str = "GET", body: dict | None = None, timeout: float = 10.0) -> dict:
     data = json.dumps(body).encode("utf-8") if body is not None else None
+    headers = {"Content-Type": "application/json", **_core_auth_headers()}
     req = urllib.request.Request(
         CORE_API + path, data=data, method=method,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8") or "{}")

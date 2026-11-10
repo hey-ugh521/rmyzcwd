@@ -1,6 +1,6 @@
 # ADR-009：安装、升级、备份、恢复、卸载与安全边界（M3）
 
-- 状态：**Proposed（设计评审中，未实现）**
+- 状态：**Proposed（M3a 安全边界已实现并验收；M3b/M3c 待实现）**
 - 日期：2026-11-11
 - 关联：`PRODUCT-BOUNDARY.md`（PB-03/04/06）、`ARCHITECTURE-GAP.md`（G-06/G-11，M3）、`ADR-006`（网关鉴权）、`ADR-007`（任务 owner）、`ADR-008`（Provider）
 - 目标：让 Möbius 从"开发者机器可运行"变成"**干净 Windows 可安装、可升级、可备份、可卸载**"；安全边界可验收。
@@ -93,6 +93,16 @@ mobius lifecycle uninstall [--remove-data]
 - 安全清单实测：未授权/越权/CSRF 路径、secrets ACL、日志脱敏、卸载残留检查。
 - 所有路径来自 config/向导；`grep D:\AI` 在安装产物中无运行依赖（文档可保留示例并标注）。
 - 版本矩阵与安装 manifest 可读、可校验。
+
+## 4a. M3a 实现状态（2026-11-11）
+
+- Core：回环只读保持开放；变更类 `/api`、`/v1` 需 `Authorization: Bearer <core.api_key>` 或 `/console` 同源 HttpOnly+SameSite=Strict cookie；非回环仍必须 Bearer；非回环 `/console` 直接 401（避免 cookie 泄露 key）。
+- Console：首屏下发 cookie，同源 fetch 自动携带；无需把 token 写进前端代码。
+- Launcher：`http_json()` 自动附加 Core API key（GUI/CLI 共用）。
+- Gateway：未单独配 `gateway.token` 时回退 `core.api_key`；Core `GatewayClient` 同源回退，保证内部 `/api/*` 调用带 token；`/api/pulse` 豁免，`/mcp` 按 ADR-006 开放。
+- secrets：`harden_acl()` + `ops/secrets/harden_acl.py`（Windows icacls / 其它 0600）；写 secrets 时自动收紧。
+- 测试：`tests/test_m3_security.py` **19/19**；Core/Gateway/M1/M2 回归全过。
+- 身份边界：变更请求已由 token 保护，`user_id` 仅受信本机客户端可传；完整身份模型留给 M4/后续（记录残余）。
 
 ## 5. 待 PM 确认
 

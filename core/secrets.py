@@ -71,6 +71,30 @@ def get(*keys: str, default: str = "", data: dict | None = None) -> str:
     return str(node) if isinstance(node, str) and node else default
 
 
+def harden_acl(path: Path | None = None) -> bool:
+    """M3a：把 secrets.json 权限收紧到当前用户（Windows: icacls；其它: 0600）。
+
+    失败不阻断主流程；安装器/首次运行可单独调用并告警。
+    """
+    p = Path(path) if path is not None else secrets_path()
+    if not p.is_file():
+        return False
+    try:
+        if os.name == "nt":
+            import getpass
+            import subprocess
+            user = os.environ.get("USERNAME") or getpass.getuser()
+            r = subprocess.run(
+                ["icacls", str(p), "/inheritance:r", "/grant:r", f"{user}:F"],
+                capture_output=True, text=True, timeout=10,
+            )
+            return r.returncode == 0
+        os.chmod(p, 0o600)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def set_value(*keys: str, value: str, root: Path | None = None) -> Path:
     """向 SSOT 写入一个层级键（原子写）。文件已存在但损坏时抛错，拒绝覆盖。"""
     if not keys:
@@ -93,6 +117,7 @@ def set_value(*keys: str, value: str, root: Path | None = None) -> Path:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, path)
+    harden_acl(path)
     return path
 
 

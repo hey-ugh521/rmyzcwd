@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 import json
 import os
 import re
@@ -49,18 +50,59 @@ _BACKGROUND: set = set()
 # ---------------------------------------------------------------- 鉴权
 
 LOOPBACK = {"127.0.0.1", "::1", "localhost", "testclient"}
+MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+LOCAL_TOKEN_COOKIE = "mobius_local_token"
+
+
+def _bearer_ok(request: Request) -> bool:
+    if not API_KEY:
+        return False
+    auth = request.headers.get("authorization", "")
+    scheme, _, credential = auth.partition(" ")
+    return scheme.lower() == "bearer" and hmac.compare_digest(
+        credential.encode("utf-8"), API_KEY.encode("utf-8")
+    )
+
+
+def _local_cookie_ok(request: Request) -> bool:
+    if not API_KEY:
+        return False
+    token = request.cookies.get(LOCAL_TOKEN_COOKIE, "")
+    return bool(token) and hmac.compare_digest(
+        token.encode("utf-8"), API_KEY.encode("utf-8")
+    )
 
 
 @app.middleware("http")
 async def auth_mw(request: Request, call_next):
+    """M3a 本机边界：
+    - 回环：只读保持免鉴权；变更类 /api、/v1 需 Bearer API_KEY 或 Console 同源 HttpOnly cookie。
+    - 非回环：所有 /api、/v1 需 Bearer API_KEY。
+    - /mcp 属网关，不在 Core 此中间件范围。
+    """
     path = request.url.path
+    host = request.client.host if request.client else ""
+    if path.rstrip("/") == "/console" and host not in LOOPBACK:
+        # 不允许网络客户端打开 Console（否则同源 cookie 会泄露 API key）
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     if path.startswith("/v1") or path.startswith("/api"):
-        host = request.client.host if request.client else ""
-        if host not in LOOPBACK:
-            auth = request.headers.get("authorization", "")
-            if not API_KEY or auth != f"Bearer {API_KEY}":
+        if host in LOOPBACK:
+            if API_KEY and request.method.upper() in MUTATING_METHODS:
+                if not (_bearer_ok(request) or _local_cookie_ok(request)):
+                    return JSONResponse({"error": "unauthorized",
+                                         "hint": "本机变更接口需要 Authorization: Bearer <api_key> 或 /console 同源会话"},
+                                        status_code=401)
+        else:
+            if not _bearer_ok(request):
                 return JSONResponse({"error": "unauthorized"}, status_code=401)
-    return await call_next(request)
+    response = await call_next(request)
+    # Console 首屏下发 HttpOnly + SameSite=Strict cookie，供同源 fetch 自动携带；
+    # 跨站页面无法读取该 cookie，普通跨站表单也不会在 SameSite=Strict 下携带。
+    if API_KEY and host in LOOPBACK and path.rstrip("/") == "/console":
+        response.set_cookie(
+            LOCAL_TOKEN_COOKIE, API_KEY, httponly=True, samesite="strict", path="/"
+        )
+    return response
 
 
 # ---------------------------------------------------------------- 生命周期
