@@ -1326,6 +1326,151 @@ class _CancelView:
         return rec.status if rec is not None else STATUS_CANCELLED
 
 
+# ---------------------------------------------------------------------------
+# M1b：Gateway → Core 权威任务客户端（ADR-007）
+# ---------------------------------------------------------------------------
+# 回滚开关 MOBIUS_TASK_OWNER：
+#   core（默认）——task_id 由 Core 分配、业务状态只写 Core、查询代理 Core、Core 不可用 fail closed；
+#   gateway     ——回退到旧的网关本地权威（task_snapshot 自持状态），用于紧急回滚/灰度。
+# 部署顺序：本模式要求 Core 已具备 M1a 的 /v1/tasks* API（先升级 Core，再升级 Gateway）。
+
+
+def task_owner_mode() -> str:
+    return str(os.environ.get("MOBIUS_TASK_OWNER", "core")).strip().lower() or "core"
+
+
+class CoreUnavailable(RuntimeError):
+    """Core 权威任务 API 不可达/异常（fail closed，不落本地业务状态）。"""
+
+
+class CoreTaskConflict(RuntimeError):
+    """Core 判定幂等键冲突（同 key 异 payload，409）。"""
+
+    def __init__(self, task_id: str) -> None:
+        super().__init__(f"Core 幂等冲突：任务 {task_id}")
+        self.task_id = task_id
+
+
+class CoreTaskClient:
+    """调用 Core /v1/tasks* 权威 API。回环调用，仍带 Bearer（非回环时 Core 要求）。"""
+
+    def __init__(self, cfg: "Settings") -> None:
+        self.base = str(cfg.core_url or "").rstrip("/")
+        self.token = str(cfg.core_api_key or "")
+        self.timeout = float(os.environ.get("MOBIUS_CORE_TASK_TIMEOUT", "10"))
+
+    def _headers(self) -> dict[str, str]:
+        h = {"Content-Type": "application/json"}
+        if self.token and self.token != "<unset>":
+            h["Authorization"] = f"Bearer {self.token}"
+        return h
+
+    async def create_task(self, *, kind: str, payload: dict, idempotency_key: str,
+                          source: str, user_id=None, session_id=None,
+                          character=None, prompt: str = "") -> dict:
+        """POST /v1/tasks → {task_id,status,idempotent_hit}。冲突抛 CoreTaskConflict，不可用抛 CoreUnavailable。"""
+        body = {"kind": kind, "payload": payload, "idempotency_key": idempotency_key,
+                "source": source, "user_id": user_id, "session_id": session_id,
+                "character": character, "prompt": prompt}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(f"{self.base}/v1/tasks", json=body, headers=self._headers())
+        except Exception as exc:  # noqa: BLE001
+            raise CoreUnavailable(f"连接 Core 失败：{exc}") from exc
+        if r.status_code == 409:
+            try:
+                tid = str((r.json() or {}).get("task_id") or "")
+            except Exception:  # noqa: BLE001
+                tid = ""
+            raise CoreTaskConflict(tid)
+        if r.status_code >= 300:
+            raise CoreUnavailable(f"Core HTTP {r.status_code}: {r.text[:160]}")
+        try:
+            data = r.json() or {}
+        except Exception as exc:  # noqa: BLE001
+            raise CoreUnavailable(f"Core 响应非 JSON：{exc}") from exc
+        if not data.get("task_id"):
+            raise CoreUnavailable("Core 未返回 task_id")
+        return data
+
+    async def send_event(self, task_id: str, *, event: str, seq: int = 0,
+                         execution_id=None, result=None, error_code=None,
+                         error_message=None) -> bool:
+        """POST /v1/tasks/{id}/events。成功/去重返回 True；失败返回 False（outbox 保留重试）。"""
+        body = {"event": event, "seq": int(seq or 0), "execution_id": execution_id,
+                "result": result, "error_code": error_code, "error_message": error_message}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(f"{self.base}/v1/tasks/{task_id}/events",
+                                      json=body, headers=self._headers())
+            if r.status_code >= 300:
+                log.warning("上报 Core 事件 HTTP %s（保留重试）task=%s", r.status_code, task_id)
+                return False
+            data = r.json() or {}
+            return bool(data.get("ok") or data.get("duplicate"))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("上报 Core 事件失败（保留重试）task=%s：%s", task_id, exc)
+            return False
+
+    async def get_task(self, task_id: str) -> dict | None:
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.get(f"{self.base}/v1/tasks/{task_id}", headers=self._headers())
+            if r.status_code == 404:
+                return None
+            if r.status_code >= 300:
+                raise CoreUnavailable(f"Core HTTP {r.status_code}")
+            return r.json()
+        except CoreUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise CoreUnavailable(f"查询 Core 任务失败：{exc}") from exc
+
+    async def list_tasks(self, limit: int = 50, status: str | None = None,
+                         source: str | None = None) -> list[dict]:
+        params: dict[str, Any] = {"limit": int(limit)}
+        if status:
+            params["status"] = status
+        if source:
+            params["source"] = source
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.get(f"{self.base}/v1/tasks", params=params, headers=self._headers())
+            if r.status_code >= 300:
+                raise CoreUnavailable(f"Core HTTP {r.status_code}")
+            return list((r.json() or {}).get("tasks") or [])
+        except CoreUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise CoreUnavailable(f"查询 Core 任务列表失败：{exc}") from exc
+
+    async def request_cancel(self, task_id: str) -> dict:
+        """POST /v1/tasks/{id}/cancel：Core 记 cancel_requested（终态由执行确认）。"""
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(f"{self.base}/v1/tasks/{task_id}/cancel",
+                                      headers=self._headers())
+            if r.status_code == 404:
+                return {"ok": False, "error": "task_not_found"}
+            if r.status_code >= 300:
+                raise CoreUnavailable(f"Core HTTP {r.status_code}")
+            return r.json() or {}
+        except CoreUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise CoreUnavailable(f"请求 Core 取消失败：{exc}") from exc
+
+
+_CORE_TASKS: "CoreTaskClient | None" = None
+
+
+def core_tasks(cfg: "Settings") -> CoreTaskClient:
+    global _CORE_TASKS
+    if _CORE_TASKS is None:
+        _CORE_TASKS = CoreTaskClient(cfg)
+    return _CORE_TASKS
+
+
 class TaskStore(DurableTaskStore):
     """持久化任务队列（SQLite，并发 1）。
 
@@ -1407,10 +1552,27 @@ class TaskStore(DurableTaskStore):
             await asyncio.sleep(5)
 
     async def _send_core_event(self, item: dict[str, Any]) -> bool:
-        """把任务事实上报 Core。
+        """把任务事实上报 Core。失败返回 False，outbox 保留重试（不丢事件）。
 
-        Core 侧接口在 P0.4 才授权添加；未配置时保留在 outbox（不丢、不阻塞）。
+        M1b（MOBIUS_TASK_OWNER=core，默认）：投 Core 权威事件 API /v1/tasks/{id}/events，
+        Core 是唯一业务状态写入者；execution_id 用本地执行账本的 remote_id（Comfy prompt_id）。
+        回滚开关 =gateway：走旧 MOBIUS_CORE_TASK_EVENT_URL 投影（保留一个 release）。
         """
+        payload = item.get("payload") or {}
+        task_id = str(item.get("task_id") or payload.get("task_id") or "")
+        status = str(payload.get("status") or "")
+        seq = int(item.get("seq") or 0)
+        if task_owner_mode() == "core":
+            if not task_id or not status:
+                return False
+            rec = self.get(task_id)
+            execution_id = (rec.remote_id if rec is not None else None) or payload.get("remote_id")
+            return await core_tasks(self.cfg).send_event(
+                task_id, event=status, seq=seq, execution_id=execution_id,
+                result=payload.get("result"),
+                error_code=payload.get("error_code"),
+                error_message=payload.get("error_message") or payload.get("error"),
+            )
         url = os.environ.get("MOBIUS_CORE_TASK_EVENT_URL", "").strip()
         if not url:
             return False
@@ -2203,19 +2365,62 @@ async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool)
     await require_comfy(cfg)  # 契约 §5.1：不可达先 ensure，失败立即返回错误
     # 幂等 key：显式优先，漏传时用 message_id/session+user 等上下文派生（见 derive_idempotency_key）
     idem, idem_derived = derive_idempotency_key(body)
+    payload = {
+        key: value for key, value in body.items()
+        if key not in ("source", "user_id", "session_id")
+    }
+    source = str(body.get("source") or "console")
+
+    # M1b：Core 权威分配 task_id（fail closed）；回滚开关 MOBIUS_TASK_OWNER=gateway 时本地分配。
+    core_task_id: str | None = None
+    core_hit = False
+    if task_owner_mode() == "core":
+        try:
+            core_res = await core_tasks(cfg).create_task(
+                kind="image", payload=payload, idempotency_key=idem, source=source,
+                user_id=body.get("user_id"), session_id=body.get("session_id"),
+                character=spec.get("character"), prompt=str(body.get("prompt") or ""),
+            )
+        except CoreTaskConflict as exc:
+            raise ApiError(
+                "idempotency_conflict",
+                f"幂等键已被任务 {exc.task_id} 使用，但请求内容不同", 409,
+                existing_task_id=exc.task_id,
+            ) from exc
+        except CoreUnavailable as exc:
+            # fail closed：Core 不可用时拒绝提交，绝不落本地业务状态（避免又变双源）
+            raise ApiError(
+                "core_unavailable",
+                f"Core 权威任务服务不可用，拒绝提交：{exc}", 503,
+            ) from exc
+        core_task_id = str(core_res["task_id"])
+        core_hit = bool(core_res.get("idempotent_hit"))
+        if core_hit:
+            # 幂等命中：以 Core 状态为准；已在执行/已结束则不重复建本地账本（防重启后重跑）
+            try:
+                ct = await core_tasks(cfg).get_task(core_task_id) or {}
+            except CoreUnavailable:
+                ct = {}
+            cst = str(ct.get("status") or "pending")
+            if cst != "pending":
+                return {
+                    "ok": True, "task_id": core_task_id, "status": cst,
+                    "idempotent_hit": True, "idempotency_key": idem,
+                    "idempotency_derived": idem_derived, "workflow": spec["workflow"],
+                    "checkpoint": spec["checkpoint"], "loras": spec["loras"],
+                    "warnings": spec["warnings"], "result": ct.get("result"),
+                }
+
     try:
         task, idempotent_hit = store.submit(
             kind="image",
-            payload={
-                key: value
-                for key, value in body.items()
-                if key not in ("source", "user_id", "session_id")
-            },
+            payload=payload,
             spec=spec,
-            source=str(body.get("source") or "console"),
+            source=source,
             user_id=body.get("user_id"),
             session_id=body.get("session_id"),
             idempotency_key=idem,
+            task_id=core_task_id,
         )
     except TaskConflict as exc:
         raise ApiError(
@@ -2224,6 +2429,8 @@ async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool)
             409,
             existing_task_id=exc.task_id,
         ) from exc
+    if core_task_id is not None:
+        idempotent_hit = core_hit  # 幂等命中以 Core 为准（ADR-007 §2.6）
     if async_mode:
         return {
             "ok": True,
@@ -2615,12 +2822,45 @@ async def route_upload(request: Request) -> Response:
 # ---- 任务中心 --------------------------------------------------------------
 
 
+def _core_task_to_public(ct: dict) -> dict[str, Any]:
+    """把 Core /v1/tasks 的任务对象映射为网关历史 public() 结构（保持 LangBot/Console 兼容）。"""
+    status = str(ct.get("status") or "")
+    out = {
+        "id": ct.get("id"), "task_id": ct.get("id"), "kind": ct.get("kind"),
+        "status": status, "source": ct.get("source"), "user_id": ct.get("user_id"),
+        "session_id": ct.get("session_id"), "character": ct.get("character"),
+        "prompt": ct.get("prompt"), "params": ct.get("params") or {}, "result": ct.get("result"),
+        "error": ct.get("error"),
+        "remote_id": ct.get("execution_id") or ct.get("remote_id"),
+        "created_at": ct.get("created_at"), "started_at": ct.get("started_at"),
+        "finished_at": ct.get("finished_at"),
+        "cancel_requested": bool(ct.get("cancel_requested")),
+        "attempts": ct.get("attempts") or 0, "version": ct.get("version") or 0,
+    }
+    if ct.get("error_code"):
+        out["error_code"] = ct["error_code"]
+    if status == STATUS_UNKNOWN:
+        out["hint"] = (
+            "恢复时无法确认该任务是否执行过；为避免重复消耗 GPU，不会自动重新提交，"
+            "请人工确认后取消或重新提交。"
+        )
+    return out
+
+
 @api_route("/api/tasks", ["GET"])
 async def route_tasks(request: Request) -> Response:
+    # deprecated（ADR-007 §2.3）：迁移期代理 Core；保留 1 个 release 后移除。
     params = request.query_params
     limit = _as_int(params.get("limit")) or 50
     status = params.get("status") or None
     source = params.get("source") or None
+    if task_owner_mode() == "core":
+        try:
+            tasks = await core_tasks(settings).list_tasks(limit=limit, status=status, source=source)
+            return JSONResponse({"ok": True, "tasks": [_core_task_to_public(t) for t in tasks],
+                                 "count": len(tasks), "owner": "core", "deprecated": True})
+        except CoreUnavailable as exc:
+            log.warning("/api/tasks 代理 Core 失败，迁移期回退本地执行账本：%s", exc)
     tasks = store.list(limit=limit, status=status, source=source)
     return JSONResponse(
         {"ok": True, "tasks": [task.public() for task in tasks], "count": len(tasks)}
@@ -2629,7 +2869,17 @@ async def route_tasks(request: Request) -> Response:
 
 @api_route("/api/tasks/{task_id}", ["GET"])
 async def route_task(request: Request) -> Response:
+    # deprecated（ADR-007 §2.3）：迁移期代理 Core。
     task_id = request.path_params.get("task_id", "")
+    if task_owner_mode() == "core":
+        try:
+            ct = await core_tasks(settings).get_task(task_id)
+            if ct is None:
+                raise ApiError("unknown_task", f"未知任务 {task_id}", 404)
+            return JSONResponse({"ok": True, "task": _core_task_to_public(ct),
+                                 "owner": "core", "deprecated": True})
+        except CoreUnavailable as exc:
+            log.warning("/api/tasks/%s 代理 Core 失败，迁移期回退本地账本：%s", task_id, exc)
     task = store.get(task_id)
     if task is None:
         raise ApiError("unknown_task", f"未知任务 {task_id}", 404)
@@ -2639,6 +2889,13 @@ async def route_task(request: Request) -> Response:
 @api_route("/api/tasks/{task_id}/cancel", ["POST"])
 async def route_task_cancel(request: Request) -> Response:
     task_id = request.path_params.get("task_id", "")
+    if task_owner_mode() == "core":
+        # Core 记 cancel_requested（权威）；随后网关中断执行，终态经事件回写 Core（ADR-007 §2.4）
+        try:
+            await core_tasks(settings).request_cancel(task_id)
+        except CoreUnavailable as exc:
+            return JSONResponse({"ok": False, "error": "core_unavailable",
+                                 "hint": f"Core 不可用，无法登记取消：{exc}"}, status_code=503)
     result = await store.cancel(task_id)
     status_code = 200 if result.get("ok") else 409
     return JSONResponse(result, status_code=status_code)
@@ -2918,6 +3175,21 @@ async def comfyui_task_submit(
 )
 async def comfyui_task_status(task_id: str) -> str:
     try:
+        if task_owner_mode() == "core":
+            pub = None
+            try:
+                ct = await core_tasks(settings).get_task(task_id)
+                if ct is None:
+                    return _json({"ok": False, "error": "unknown_task", "task_id": task_id})
+                pub = _core_task_to_public(ct)
+            except CoreUnavailable as exc:
+                log.warning("comfyui_task_status 代理 Core 失败，迁移期回退本地账本：%s", exc)
+            if pub is not None:
+                throttled = _poll_gate(task_id, pub["status"])
+                if throttled is not None:
+                    return _json(throttled)
+                return _json({"ok": True, "task": pub, "poll": _poll_stats(task_id),
+                              "owner": "core"})
         task = store.get(task_id)
         if task is None:
             return _json({"ok": False, "error": "unknown_task", "task_id": task_id})
@@ -2932,6 +3204,11 @@ async def comfyui_task_status(task_id: str) -> str:
 @server.tool(name="comfyui_task_cancel", description="取消网关异步任务（排队中直接删，已提交 ComfyUI 的会被中断）。")
 async def comfyui_task_cancel(task_id: str) -> str:
     try:
+        if task_owner_mode() == "core":
+            try:
+                await core_tasks(settings).request_cancel(task_id)
+            except CoreUnavailable as exc:
+                return _json({"ok": False, "error": "core_unavailable", "hint": str(exc)})
         return _json(await store.cancel(task_id))
     except Exception as exc:  # noqa: BLE001
         return _tool_error(exc)
