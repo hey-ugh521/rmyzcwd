@@ -1,6 +1,6 @@
 # ADR-007：任务状态唯一 owner = Core（Gateway 不自存业务状态）
 
-- 状态：**Proposed（设计评审中，未实现）**
+- 状态：**Accepted（设计评审通过，2026-11-10；未实现，M1 执行）**
 - 日期：2026-11-10
 - 决策人：产品经理（D1=B，2026-11-10）
 - 关联：`ARCHITECTURE-v1.1.md`、`ADR-002`（状态词汇）、`ADR-003`（PG 迁移）、`ADR-006`（网关鉴权边界）
@@ -124,9 +124,11 @@ POST /v1/tasks/{task_id}/events
 - 迁移期需要兼容双读；必须设 kill switch/回滚 release。
 - LangBot MCP 工具响应结构需保持兼容（task_id/status 字段），避免用户侧行为变化。
 
-## 9. 待实现前确认
+## 9. 已确认参数（PM 2026-11-10）
 
-1. `task_id` 由 Core 分配（本 ADR 建议）还是允许调用方提议 id？
-2. 租约时长/续约策略（默认建议 60s 租约 + 30s 续约，具体按执行器）。
-3. `submission_unknown` 的自动恢复策略（保留人工确认 vs 超时转 failed）。
-4. 迁移期 Gateway 查询代理的 deprecation 窗口。
+1. **task_id 由 Core 分配**；调用方只提供 `idempotency_key` 与业务 payload。
+2. **租约**：默认 60s，执行器每 30s 续约；过期由 Core 置 `failed`（error_code=`lease_expired`），Gateway 重启后按 execution_id 探测并上报。
+3. **submission_unknown**：保留人工确认；超过 24h 未确认自动转 `failed`（error_code=`submission_unknown_timeout`），Console/审计保留原因。
+4. **deprecation 窗口**：Gateway 旧任务查询接口代理 Core，保留 1 个 release（约 2 周）后移除。
+
+> 实现任务：`docs/reports/QODER-M1-20261110.md`。

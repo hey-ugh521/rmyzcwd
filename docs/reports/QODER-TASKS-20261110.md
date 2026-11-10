@@ -94,9 +94,9 @@
 
 ## 3. 第二批（依赖 D1/D2/D3 决策）
 
-### T7 任务状态单一 owner = Core（#6，D1=B 已定）
+### T7 任务状态单一 owner = Core（#6，D1=B）——✅ 设计完成（ADR-007 Accepted）
 
-**设计稿已提交：`docs/adr/ADR-007-task-ownership.md`（Proposed，2026-11-10）**；待 PM/Lead 评审确认后再动代码。
+**设计已定稿：`docs/adr/ADR-007-task-ownership.md`（Accepted，2026-11-10）**；实现任务见 `docs/reports/QODER-M1-20261110.md`。
 
 设计约束：
 - Core 是任务状态的唯一权威：创建、状态流转、终态、查询都以 Core 为准（`core/store.py` tasks 表 + API）。
@@ -108,7 +108,7 @@
 
 验收：设计文档经 Lead 确认；实现后任务状态只有一处可写；新增契约测试覆盖创建/流转/终态/查询全部走 Core。
 
-### T8 legacy 退役（#7，D2=删 已定）
+### T8 legacy 退役（#7，D2=删）——✅ 已完成（2026-11-10）
 
 步骤：
 1. 全仓搜索 `scripts/boot-mobius.ps1`、`ops/watchdog/`、`watchdog.py`、`Write-BootVerdict` 的引用（文档/脚本/安装器/计划任务），把清单交 Lead。
@@ -118,7 +118,7 @@
 - 卸载项补：`secrets.json`、`config.json`、`data/`、`logs/` 的清理策略（删除前提示/保留选项）。
 - 版本号统一（安装器 0.2.0 / 构建产物一致），build 闸门接 `ops/l3/secret_scan.py`。
 
-### T9 隐私文件处置（#4，D3=移出仓库/本地留存）
+### T9 隐私文件处置（#4，D3=移出仓库/本地留存）——✅ 已完成（2026-11-10）
 
 步骤：
 1. 把 `config/account_profiles.json` 复制到仓库外安全位置（如 `D:\AI\backups\private\account_profiles.json`），确认副本可读。

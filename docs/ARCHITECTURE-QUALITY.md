@@ -11,7 +11,7 @@
 
 | 域 | Owner | 说明 |
 |---|---|---|
-| 媒体任务 | PG `task_snapshot` | 提交/状态/结果唯一持久源 |
+| 媒体任务 | PG `task_snapshot`（迁移期） | 当前执行态持久源；**目标态见 `docs/adr/ADR-007-task-ownership.md`：Core 为业务状态唯一 owner** |
 | 会话消息 | LangBot PG | 对话与消息 |
 | 审计/上下文 | Core（`mobius_core`） | 审计、turns |
 | 角色卡 | `data/characters/*.json` | Gateway/Core 共读 |

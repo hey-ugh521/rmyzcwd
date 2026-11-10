@@ -27,7 +27,7 @@
 |---|---|---|---|---|
 | G-01 | **开发副本 ≠ 安装副本**：当前运行来自开发目录，安装副本代码落后 | P0 | AS-IS §1；`D:\AI\Mobius` 无 `map_gateway_status` | 安装器产物与仓库 main 同源；干净机器安装=当前代码；发布流程强制 |
 | G-02 | **双大脑 / 双记忆**：QQ 走 LangBot + memory MCP，Web/Console 走 Core；跨入口人格/记忆/审计不统一 | P0 | AS-IS §3/§4；STATUS §2/§5 | 身份、会话、记忆的权威归属明确；只有一个写入者；跨入口验证通过 |
-| G-03 | **任务状态双写**：Gateway `task_snapshot` 与 Core `tasks` 并存；D1 已定 Core owner，代码未收敛 | P0 | AS-IS §4；ADR-002 / T1 映射只是兼容；**设计草案 `docs/adr/ADR-007-task-ownership.md`（Proposed）** | ADR-007 评审通过并实现（Gateway 只留执行队列/outbox，Core 唯一状态源）；契约测试全绿 |
+| G-03 | **任务状态双写**：Gateway `task_snapshot` 与 Core `tasks` 并存；D1 已定 Core owner，代码未收敛 | P0 | AS-IS §4；ADR-002 / T1 映射只是兼容；**设计已定稿 `docs/adr/ADR-007-task-ownership.md`（Accepted）** | ADR-007 评审通过并实现（Gateway 只留执行队列/outbox，Core 唯一状态源）；契约测试全绿 |
 | G-04 | **桌面应用入口缺失**：当前是 launcher GUI + 浏览器 Console；PB-01 要求桌面应用为主 | P0 | AS-IS §3.1；launcher 打开 `/console` | 桌面应用内嵌控制台/任务/诊断；用户不需要手动开浏览器 |
 | G-05 | **Open WebUI 入口断开**：Pipe 在仓库，进程/端口不存在 | P1 | AS-IS §3.3；STATUS §20 | 要么纳入 Integration Manager 可诊断启动，要么从 v1.0 范围移除并文档标注 |
 | G-06 | **安装器与开发者环境耦合**：README/文档出现 `D:\AI`、Anaconda、本机 ComfyUI、计划任务；安装器未验证干净机器 | P0 | README L41/L59/L89；AS-IS §1/§5 | Möbius Installer 独立；干净 Windows 安装/卸载/升级演练通过；路径/端口全部来自配置/向导 |
