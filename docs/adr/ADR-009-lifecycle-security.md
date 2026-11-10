@@ -1,6 +1,6 @@
 # ADR-009：安装、升级、备份、恢复、卸载与安全边界（M3）
 
-- 状态：**Proposed（M3a 安全边界已实现并验收；M3b/M3c 待实现）**
+- 状态：**Proposed（M3a 安全边界、M3b 备份/恢复已实现；M3c 安装器/升级执行器待实现）**
 - 日期：2026-11-11
 - 关联：`PRODUCT-BOUNDARY.md`（PB-03/04/06）、`ARCHITECTURE-GAP.md`（G-06/G-11，M3）、`ADR-006`（网关鉴权）、`ADR-007`（任务 owner）、`ADR-008`（Provider）
 - 目标：让 Möbius 从"开发者机器可运行"变成"**干净 Windows 可安装、可升级、可备份、可卸载**"；安全边界可验收。
@@ -103,6 +103,15 @@ mobius lifecycle uninstall [--remove-data]
 - secrets：`harden_acl()` + `ops/secrets/harden_acl.py`（Windows icacls / 其它 0600）；写 secrets 时自动收紧。
 - 测试：`tests/test_m3_security.py` **19/19**；Core/Gateway/M1/M2 回归全过。
 - 身份边界：变更请求已由 token 保护，`user_id` 仅受信本机客户端可传；完整身份模型留给 M4/后续（记录残余）。
+
+## 4b. M3b 实现状态（2026-11-11）
+
+- `shared/lifecycle.py`：status / backup / restore --scratch / upgrade plan+journal / uninstall dry-run。
+- 原生便携 PG（pg_dump/pg_restore/createdb/dropdb/psql），不再依赖 Docker；PGPASSWORD 仅传子进程。
+- 备份目录含 config/secrets、各 DB dump、manifest、SHA256SUMS；目录 ACL 收紧。
+- `restore --scratch` 创建临时库、pg_restore、校验表数后 drop；真实覆盖留到 M3c 停服/回滚接通。
+- 实测：生产备份 → scratch 恢复 `mobius_core 10 表 / mobius 6 表 / langbot 52 表`，临时库已清理；`tests/test_m3_lifecycle.py` 19/19。
+- 原 Docker 口径 `ops/pg_backup.py` 不再作为 M3 入口；M3c 删除/标注。
 
 ## 5. 待 PM 确认
 
