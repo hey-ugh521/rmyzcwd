@@ -119,16 +119,18 @@ Console 网页 / Open WebUI Pipe
 | | `memory_candidates` | 候选记忆（模型只能写这里）| 模型 → 人工审批 |
 | | `timeline` | 事件/剧情时间线 | Core 自动 |
 | | `turns` | 临时工作记忆（按会话，可过期）| Core 自动 |
-| | `tasks` | 统一任务（**六态** + 远程 id + 结果）| Core |
+| | `tasks` | 统一任务（**六态** + 幂等键 + 租约 + execution_id + 结果）| Core（**业务状态唯一 owner**，ADR-007 M1）|
 | | `audit` | 谁在哪个入口、用了什么、耗时、成败 | Core |
 | | `kv` | 媒体模式等全局状态 | Core/Console |
 | | `identities` | Web 身份 ↔ QQ 身份绑定 | Console（人工）|
 | `mobius` | `memory_facts` / `memory_candidates` / `memory_events` | **QQ 侧长期记忆** | memory MCP（LangBot 调）|
-| | 任务快照 + outbox | 网关任务持久化 | 网关 |
+| | 任务快照 + outbox | 网关**执行私有账本**（队列/Comfy prompt_id/重试）+ 事件传输；业务状态权威已归 Core | 网关 |
 | `langbot` | pipeline / monitoring_messages / agent_run 等 | QQ 平台数据 | LangBot |
 
 - 六态词表（含 `submission_unknown`）见 `docs/adr/ADR-002-state-vocabulary.md`。
 - PG 迁移与分域见 `docs/adr/ADR-003-postgres-migration.md`。
+- **任务状态唯一 owner = Core**（消灭 task_snapshot/tasks 双写）见 `docs/adr/ADR-007-task-ownership.md`；
+  M1a/b/c 已实现于分支 `m1-task-owner`，回滚开关 `MOBIUS_TASK_OWNER=gateway`。
 - 角色档案是**文件**：`data/characters/*.json`（热生效，Core 与网关共用同一份），
   当前 **12 个**。
 - `config.json` 已 `db_backend: "pg"`，旧的 `data/mobius.db` 不再使用（代码里仍有残留默认值）。

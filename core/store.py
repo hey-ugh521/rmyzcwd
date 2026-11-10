@@ -1054,3 +1054,28 @@ def task_expire_stale_leases(grace_sec: float = 0.0) -> list[str]:
         except (IllegalTransitionError, KeyError):
             continue
     return expired
+
+
+def task_expire_stale_unknown(max_age_sec: float = 24 * 3600) -> list[str]:
+    """submission_unknown 超过 max_age_sec 未人工确认 → failed(submission_unknown_timeout)。
+
+    ADR-007 §9.3：保留人工确认窗口；超时自动收敛，Console/审计保留原因。返回被收敛的 task_id。
+    """
+    cutoff = now() - float(max_age_sec)
+    stale: list[str] = []
+    with conn() as c:
+        rows = c.execute(
+            "SELECT id FROM tasks WHERE status=? AND COALESCE(updated_at, created_at) < ?",
+            (TASK_UNKNOWN, cutoff),
+        ).fetchall()
+        for r in rows:
+            stale.append(r["id"])
+    for tid in stale:
+        try:
+            task_apply_authoritative_event(
+                tid, event=TASK_FAILED, error_code="submission_unknown_timeout",
+                error_message="submission_unknown 超过 24h 未人工确认，自动收敛为 failed",
+            )
+        except (IllegalTransitionError, KeyError):
+            continue
+    return stale

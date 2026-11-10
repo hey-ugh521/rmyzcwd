@@ -1339,6 +1339,11 @@ def task_owner_mode() -> str:
     return str(os.environ.get("MOBIUS_TASK_OWNER", "core")).strip().lower() or "core"
 
 
+def _gateway_identity() -> str:
+    """执行租约的 owner 标识（区分重启前后的网关进程）。"""
+    return f"gateway:{os.getpid()}"
+
+
 class CoreUnavailable(RuntimeError):
     """Core 权威任务 API 不可达/异常（fail closed，不落本地业务状态）。"""
 
@@ -1395,10 +1400,11 @@ class CoreTaskClient:
 
     async def send_event(self, task_id: str, *, event: str, seq: int = 0,
                          execution_id=None, result=None, error_code=None,
-                         error_message=None) -> bool:
+                         error_message=None, lease_owner=None, lease_expires_at=None) -> bool:
         """POST /v1/tasks/{id}/events。成功/去重返回 True；失败返回 False（outbox 保留重试）。"""
         body = {"event": event, "seq": int(seq or 0), "execution_id": execution_id,
-                "result": result, "error_code": error_code, "error_message": error_message}
+                "result": result, "error_code": error_code, "error_message": error_message,
+                "lease_owner": lease_owner, "lease_expires_at": lease_expires_at}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 r = await client.post(f"{self.base}/v1/tasks/{task_id}/events",
@@ -1506,6 +1512,9 @@ class TaskStore(DurableTaskStore):
             asyncio.create_task(self._resume_running(task))
         if running:
             log.info("已重新接管 %d 个运行中的任务", len(running))
+
+        # M1c：对账 Core 的 running 孤儿任务（core 模式；失败交给 Core 租约过期收敛）
+        asyncio.create_task(self._reconcile_core_running())
 
         self.ensure_worker()
         if self._outbox_task is None or self._outbox_task.done():
@@ -1647,6 +1656,7 @@ class TaskStore(DurableTaskStore):
                 continue
 
             self.active_id = task.id
+            lease_task = self._spawn_lease_renewal(task.id)
             try:
                 if task.cancel_requested:
                     self.finish(task.id, status=STATUS_CANCELLED)
@@ -1692,10 +1702,75 @@ class TaskStore(DurableTaskStore):
                 )
                 log.exception("task %s failed", task.id)
             finally:
+                if lease_task is not None:
+                    lease_task.cancel()
                 # 任务结束也是一次「活动」：只在提交时记账会让 Core 误判闲置，
                 # 一次 90s 的生图就可能把刚出完图的 ComfyUI 睡掉。
                 touch_activity()
                 self.active_id = None
+
+    # -- M1c：执行租约续约（ADR-007 §9.2）---------------------------------
+    def _spawn_lease_renewal(self, task_id: str) -> "asyncio.Task | None":
+        """core 模式下为运行中任务拉起续约协程；gateway 回滚模式返回 None。"""
+        if task_owner_mode() != "core":
+            return None
+        return asyncio.create_task(self._lease_renewal_loop(task_id))
+
+    async def _lease_renewal_loop(self, task_id: str) -> None:
+        """每 MOBIUS_LEASE_RENEW_SEC(默认30) 向 Core 续约，租约 TTL 默认 60s。
+
+        网关崩溃/断网时 Core 收不到续约 → 租约过期 → Core 置 failed(lease_expired)，
+        禁止永久 running。任务进入终态后本协程自然退出（也会被 worker 取消）。
+        """
+        renew = float(os.environ.get("MOBIUS_LEASE_RENEW_SEC", "30"))
+        ttl = float(os.environ.get("MOBIUS_LEASE_TTL_SEC", "60"))
+        owner = _gateway_identity()
+        try:
+            while True:
+                rec = self.get(task_id)
+                if rec is None or rec.status in TERMINAL:
+                    return
+                await core_tasks(self.cfg).send_event(
+                    task_id, event="lease", lease_owner=owner,
+                    lease_expires_at=time.time() + ttl,
+                )
+                await asyncio.sleep(renew)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            log.warning("租约续约循环结束 task=%s：%s", task_id, exc)
+
+    async def _reconcile_core_running(self) -> None:
+        """M1c 恢复（ADR-007 §2.5）：对账 Core 的 running 任务。
+
+        - 有本地执行账本的 → 由 _resume_running 重新接管（不在此处理）；
+        - 网关无账本的孤儿（如网关换库/丢失快照）→ 按 execution_id 探测 ComfyUI：
+          有产物则上报 completed（回收迟到结果），ComfyUI 无记录则 submission_unknown（人工确认），
+          仍在跑/未知则交给 Core 租约过期收敛（禁止永久 running）。
+        """
+        if task_owner_mode() != "core":
+            return
+        try:
+            running = await core_tasks(self.cfg).list_tasks(limit=200, status="running")
+        except CoreUnavailable as exc:
+            log.warning("恢复：查询 Core running 失败（交给租约过期收敛）：%s", exc)
+            return
+        for ct in running:
+            tid = str(ct.get("id") or "")
+            exec_id = ct.get("execution_id")
+            if not tid or self.get(tid) is not None or not exec_id:
+                continue
+            state, result = await self._probe_comfy(str(exec_id))
+            if state == "completed" and result:
+                await core_tasks(self.cfg).send_event(tid, event="completed",
+                                                      result=result, execution_id=str(exec_id))
+                log.info("恢复：Core running 任务 %s 探测到产物，上报 completed", tid)
+            elif state == "absent":
+                await core_tasks(self.cfg).send_event(
+                    tid, event="submission_unknown", execution_id=str(exec_id),
+                    error_code="submission_unknown",
+                    error_message="恢复期 ComfyUI 无此 prompt 记录，无法确认是否执行过")
+                log.warning("恢复：Core running 任务 %s ComfyUI 无记录 → submission_unknown", tid)
 
     # -- 兼容旧接口 -------------------------------------------------------
     async def wait(self, task_id: str, timeout: float) -> TaskRecord:

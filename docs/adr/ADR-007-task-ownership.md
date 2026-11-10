@@ -1,6 +1,6 @@
 # ADR-007：任务状态唯一 owner = Core（Gateway 不自存业务状态）
 
-- 状态：**Accepted（设计评审通过，2026-11-10；未实现，M1 执行）**
+- 状态：**Accepted & Implemented（设计评审通过 2026-11-10；M1a/b/c 已实现于分支 `m1-task-owner`，见 §10）**
 - 日期：2026-11-10
 - 决策人：产品经理（D1=B，2026-11-10）
 - 关联：`ARCHITECTURE-v1.1.md`、`ADR-002`（状态词汇）、`ADR-003`（PG 迁移）、`ADR-006`（网关鉴权边界）
@@ -132,3 +132,25 @@ POST /v1/tasks/{task_id}/events
 4. **deprecation 窗口**：Gateway 旧任务查询接口代理 Core，保留 1 个 release（约 2 周）后移除。
 
 > 实现任务：`docs/reports/QODER-M1-20261110.md`。
+
+## 10. 实现状态（M1a/b/c，分支 `m1-task-owner`，2026-11-10）
+
+| 阶段 | 落地 | 证据 |
+|---|---|---|
+| M1a | Core 权威 schema v2（幂等键唯一索引/租约/执行/版本列，sqlite+PG 幂等 ALTER 迁移，schema_meta.schema_version=2）；`/v1/tasks`、`/v1/tasks/{id}/events`、`GET /v1/tasks[/{id}]`、`/v1/tasks/{id}/cancel`；ADR-002 规范词状态机（`normalize_task_status`/`can_transition`，submission_unknown 独立终态、仅 24h→failed） | `core/store.py`、`core/server.py`、`core/migrations/001_task_owner.sql`、`tests/test_m1_task_owner.py`（sqlite 46/46、scratch PG 42/42） |
+| M1b | Gateway 提交经 Core 分配 task_id（fail closed）；`_send_core_event` 投权威事件 API；`/api/tasks*` 与 MCP `comfyui_task_status` 代理 Core 并映射回历史 `public()` 结构（标 deprecated）；回滚开关 `MOBIUS_TASK_OWNER=core\|gateway` | `media_gateway/server.py`（`CoreTaskClient`/`task_owner_mode`/`_core_task_to_public`）、`tests/test_m1_gateway_proxy.py`（28/28） |
+| M1c | 执行租约续约（网关 30s→Core，TTL 60s）；Core 收敛循环（`_task_convergence_loop`：租约过期→failed(lease_expired)、submission_unknown 24h→failed）；恢复对账（`_reconcile_core_running`：孤儿 running 按 execution_id 探测 ComfyUI，回收迟到产物或转 submission_unknown）；取消竞态单终态 | `core/store.py`（`task_expire_stale_leases`/`task_expire_stale_unknown`）、`core/server.py`、`media_gateway/server.py`、`tests/test_m1_recovery.py`（17/17） |
+
+**双写消除口径**：core 模式下 Core 是任务业务状态**唯一权威**——Gateway 查询一律代理 Core、
+执行进展只经事件 API 写 Core；`task_snapshot` 降级为**执行私有账本**（worker 队列/Comfy prompt_id/
+重试计数），不再对外提供状态。物理删除 `task_snapshot` 业务列/整表按 §4 Phase 3 在 deprecation
+窗口（1 个 release）后进行，避免破坏执行引擎的队列语义；当前保留 outbox 作传输。
+
+**部署顺序（硬性）**：先升级 Core（具备 M1a 的 `/v1/tasks*`）再升级 Gateway（M1b core 模式）；
+否则 Gateway 提交 fail closed（503）。**回滚**：`MOBIUS_TASK_OWNER=gateway` 即恢复网关本地权威
+（旧 `/v1/tasks/events` 投影路径保留），无需回退代码。
+
+**未决/后续**：① `task_snapshot` 业务列物理清理（Phase 3，窗口后）；② Console/审计读取口径统一到
+规范词（当前经 `normalize_task_status` 读时归一，历史行仍存旧词）；③ 跨进程端到端（真 Core+真网关+
+ComfyUI）由 Lead 隔离验收执行（本仓测试受 gateway/Core 分属不同 venv 限制，采用两端对同一
+`/v1/tasks` 契约的隔离验证 + 单进程 store↔client 迷你集成）。

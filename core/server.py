@@ -65,10 +65,36 @@ async def auth_mw(request: Request, call_next):
 
 # ---------------------------------------------------------------- 生命周期
 
+async def _task_convergence_loop() -> None:
+    """M1c：Core 作为任务唯一 owner 的收敛循环（ADR-007 §9），禁止永久 running/unknown。
+
+    - 租约过期的 running → failed(lease_expired)
+    - submission_unknown 超 24h 未人工确认 → failed(submission_unknown_timeout)
+    间隔 core.task_convergence_interval_sec（默认 30s）；MOBIUS_TASK_OWNER=gateway 回滚时跳过。
+    """
+    interval = float(CORE.get("task_convergence_interval_sec", 30))
+    while True:
+        try:
+            if os.environ.get("MOBIUS_TASK_OWNER", "core").strip().lower() != "gateway":
+                expired = store.task_expire_stale_leases()
+                if expired:
+                    store.audit("core", "task.lease_expired",
+                                {"count": len(expired), "task_ids": expired[:20]})
+                stale = store.task_expire_stale_unknown()
+                if stale:
+                    store.audit("core", "task.submission_unknown_timeout",
+                                {"count": len(stale), "task_ids": stale[:20]})
+        except Exception as exc:  # noqa: BLE001
+            with contextlib.suppress(Exception):
+                store.audit("core", "task.converge.error", {"error": str(exc)}, result="fail")
+        await asyncio.sleep(interval)
+
+
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI):
     store.audit("core", "core.start", {"port": CORE.get("port")})
     task = asyncio.create_task(sup.idle_loop())
+    converge = asyncio.create_task(_task_convergence_loop())
     # 网关是轻进程（不占显存）：无论什么媒体模式都随 Core 起来，
     # 否则 LangBot 开机时连不上 MCP，要等它自己重连（实测会一直连不上）。
     asyncio.create_task(_boot())
@@ -76,8 +102,11 @@ async def lifespan(_: FastAPI):
         yield
     finally:
         task.cancel()
+        converge.cancel()
         with contextlib.suppress(Exception):
             await task
+        with contextlib.suppress(Exception):
+            await converge
         # L2 P1：Core 退出时优雅停掉自己拉起的全部服务（外部实例会被跳过）
         with contextlib.suppress(Exception):
             await asyncio.wait_for(sup.stop_all(), timeout=30)
