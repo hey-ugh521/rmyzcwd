@@ -1076,6 +1076,12 @@ class GatewayClient:
     async def cancel(self, task_id: str) -> dict:
         return await self._request("POST", f"/api/tasks/{task_id}/cancel")
 
+    async def providers(self) -> dict:
+        return await self._request("GET", "/api/providers")
+
+    async def resources(self) -> dict:
+        return await self._request("GET", "/api/resources")
+
     async def tts(self, text: str, voice: str = "", engine: str = "kokoro",
                   speed: float = 1.0) -> dict:
         return await self._request("POST", "/api/tts", json={

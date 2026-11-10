@@ -426,6 +426,24 @@ async def api_set_mode(body: dict = Body(...)):
     return {"ok": True, "mode": mode}
 
 
+@app.get("/api/media/providers")
+async def api_media_providers():
+    """M2d：Provider 能力清单（代理 Gateway 内部只读接口）。"""
+    try:
+        return await gw.providers()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"Gateway Provider 清单不可用：{exc}") from exc
+
+
+@app.get("/api/media/resources")
+async def api_media_resources():
+    """M2d：媒体资源租约/队列摘要（代理 Gateway）。"""
+    try:
+        return await gw.resources()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"Gateway 资源摘要不可用：{exc}") from exc
+
+
 @app.get("/api/media/config")
 async def api_media_config():
     return sup.config()

@@ -103,8 +103,8 @@ def test_comfy_adapter() -> None:
         calls["nodes"] = nodes
         return "p123"
 
-    async def wait(pid, timeout=None):
-        calls["wait"] = (pid, timeout)
+    async def wait(pid, cancel=None, timeout=None):
+        calls["wait"] = (pid, timeout, cancel)
         return {"filename": "x.png"}
 
     async def cancel(pid):
@@ -131,6 +131,9 @@ def test_comfy_adapter() -> None:
     check("health 正常", h.healthy is True and h.state == "ready")
     c = run(p.cancel("p123"))
     check("cancel 委托", c.supported and c.requested and calls["cancel"] == "p123")
+    out = run(p.wait("p123", timeout=10))
+    check("wait 委托输出", out.get("filename") == "x.png"
+          and calls["wait"][0] == "p123" and calls["wait"][1] == 10)
     q = run(p.query("p123"))
     check("query 未注入时 submission_unknown", q.state == ExecutionState.SUBMISSION_UNKNOWN
           and q.error_code == "query_not_supported")

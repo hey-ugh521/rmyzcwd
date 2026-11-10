@@ -60,9 +60,15 @@ except ImportError:  # pragma: no cover
     )
 
 try:  # M2a：Provider 契约/注册表（脚本/包两种导入方式）
-    from providers import ComfyUIProvider, ProviderRegistry
+    from providers import (
+        ComfyUIProvider, ProviderError, ProviderRegistry, ProviderRequest,
+        ProviderTimeout,
+    )
 except ImportError:  # pragma: no cover
-    from .providers import ComfyUIProvider, ProviderRegistry
+    from .providers import (
+        ComfyUIProvider, ProviderError, ProviderRegistry, ProviderRequest,
+        ProviderTimeout,
+    )
 
 try:  # M2c：资源调度
     from providers.resources import ResourceCanceled, ResourceManager, ResourceTimeout
@@ -1934,22 +1940,48 @@ class TaskStore(DurableTaskStore):
         _check_cancel(cancel_view)
 
         started = time.time()
-        try:
-            prompt_id = await comfy_submit(self.cfg, nodes)
-        except httpx.ConnectTimeout:
-            raise
-        except httpx.TimeoutException as exc:
-            raise _SubmissionUnknown(
-                f"提交 ComfyUI 超时（{type(exc).__name__}），无法确认是否已入队"
-            ) from exc
+        adapter_mode = media_provider_mode() == "adapters"
+        provider = None
+        if adapter_mode:
+            try:
+                provider = provider_registry(self.cfg).select(
+                    "image", required_modes=("text_to_image",)
+                )
+                submission = await provider.submit(ProviderRequest(
+                    task_id=task.id, kind="image",
+                    payload={"nodes": nodes}, spec=spec,
+                    timeout_sec=float(spec.get("timeout_sec") or self.cfg.task_timeout),
+                ))
+                prompt_id = submission.execution_id
+            except ProviderTimeout as exc:
+                raise _SubmissionUnknown(f"提交 Provider 超时，无法确认是否已入队：{exc}") from exc
+            except ProviderError as exc:
+                raise ApiError(exc.error_code, str(exc), exc.status) from exc
+        else:
+            try:
+                prompt_id = await comfy_submit(self.cfg, nodes)
+            except httpx.ConnectTimeout:
+                raise
+            except httpx.TimeoutException as exc:
+                raise _SubmissionUnknown(
+                    f"提交 ComfyUI 超时（{type(exc).__name__}），无法确认是否已入队"
+                ) from exc
         self.set_remote_id(task.id, prompt_id)
         self.update_params(task.id, {"prompt_id": prompt_id})
         _check_cancel(cancel_view)
 
         task_timeout = float(spec.get("timeout_sec") or self.cfg.task_timeout)
-        output = await comfy_wait_output(
-            self.cfg, prompt_id, cancel_view, timeout=task_timeout
-        )
+        if adapter_mode and provider is not None:
+            try:
+                output = await provider.wait(prompt_id, cancel_check=cancel_view, timeout=task_timeout)
+            except ProviderTimeout as exc:
+                raise ApiError("provider_timeout", f"等待 Provider 输出超时：{exc}", 504) from exc
+            except ProviderError as exc:
+                raise ApiError(exc.error_code, str(exc), exc.status) from exc
+        else:
+            output = await comfy_wait_output(
+                self.cfg, prompt_id, cancel_view, timeout=task_timeout
+            )
         seconds = round(time.time() - started, 1)
         return self._build_image_result(task, spec, prompt_id, output, seconds)
 
@@ -2871,8 +2903,8 @@ def tts_registry(cfg: Settings) -> ProviderRegistry:
 
 def media_provider_mode() -> str:
     """M2a 开关：legacy（默认，保持现有直调）| adapters（M2 后续切换）。"""
-    mode = str(os.environ.get("MOBIUS_MEDIA_PROVIDER", "legacy") or "legacy").strip().lower()
-    return mode if mode in ("legacy", "adapters") else "legacy"
+    mode = str(os.environ.get("MOBIUS_MEDIA_PROVIDER", "adapters") or "adapters").strip().lower()
+    return mode if mode in ("legacy", "adapters") else "adapters"
 
 
 def provider_registry(cfg: Settings) -> ProviderRegistry:
@@ -2884,7 +2916,7 @@ def provider_registry(cfg: Settings) -> ProviderRegistry:
         if not entries or "comfyui" in entries:
             reg.register(ComfyUIProvider(
                 submit_fn=lambda nodes: comfy_submit(cfg, nodes),
-                wait_fn=lambda pid, timeout=None: comfy_wait_output(cfg, pid, None, timeout=timeout),
+                wait_fn=lambda pid, cancel=None, timeout=None: comfy_wait_output(cfg, pid, cancel, timeout=timeout),
                 cancel_fn=lambda pid: comfy_cancel_prompt(cfg, pid),
                 query_fn=None,
             ))

@@ -1,6 +1,6 @@
 # ADR-008：媒体 Provider Adapter 与资源调度（M2）
 
-- 状态：**Proposed（M2a/M2b/M2c 已实现并验收；M2d 待实现）**
+- 状态：**Accepted（M2a–M2d 已实现并验收；2026-11-10）**
 - 日期：2026-11-10
 - 决策人：产品经理（M2 方向已定：Provider Adapter + 媒体资源调度，ComfyUI/TTS 解耦）
 - 关联：`ARCHITECTURE-v1.1.md`、`ADR-002`（状态词）、`ADR-007`（任务 owner）、`PRODUCT-BOUNDARY.md`、`ARCHITECTURE-GAP.md`（G-02/G-03/G-13）
@@ -153,6 +153,14 @@ class MediaProvider(Protocol):
 - Core：`gateway_resource_busy()` 读 pulse 的 gpu_heavy active/queued，idle 休眠前拒绝睡 ComfyUI。
 - 测试：`media_gateway/test_m2_resource_scheduler.py` **16/16**；M2a 23、M2b 19；网关 t5/t3/t4/async + Core service/readiness 回归全过。
 - 已知边界：进程内锁（单机单进程）；跨进程崩溃由 Core 租约收敛兜底；M2d 切默认 adapters 并做生产演练。
+
+## 7d. M2d 实现状态（2026-11-10）
+
+- ComfyUI Provider 接管图片执行：adapters 模式下 `_run_image_impl` 经 `provider.submit/wait`；legacy 仍可回退。
+- Core：`GatewayClient.providers/resources` + `/api/media/providers`、`/api/media/resources` 只读代理。
+- **默认切换为 adapters**；`MOBIUS_MEDIA_PROVIDER=legacy` 可一键回退。
+- 测试：M2a 24/24、M2b 19/19、M2c 16/16；M1 真 E2E 14/14、client 11/11、recovery 17/17；网关 t5/t3/t4/async 全过；Core readiness/service/t1 全过。legacy 回退路径 async 37 通过。
+- 待发布：重建安装器 + 生产备份→部署→验证→回滚演练。
 
 ## 6. 待确认决策
 

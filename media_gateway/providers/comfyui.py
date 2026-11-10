@@ -19,8 +19,10 @@ from .base import (
     ProviderCapabilities,
     ProviderExecution,
     ProviderHealth,
+    ProviderError,
     ProviderRequest,
     ProviderSubmission,
+    ProviderTimeout,
     ProviderUnavailable,
     ResourceClass,
 )
@@ -76,11 +78,28 @@ class ComfyUIProvider:
         nodes = self._nodes(req)
         try:
             prompt_id = await self._submit(nodes)
+        except ProviderError:
+            raise
         except Exception as exc:  # noqa: BLE001
+            if "Timeout" in type(exc).__name__:
+                raise ProviderTimeout(f"ComfyUI 提交超时: {exc}") from exc
             raise ProviderUnavailable(f"ComfyUI 提交失败: {exc}") from exc
         if not prompt_id:
             raise ProviderUnavailable("ComfyUI 未返回 prompt_id")
         return ProviderSubmission(execution_id=str(prompt_id), provider_meta={"provider": self.id})
+
+    async def wait(self, execution_id: str, *, cancel_check=None, timeout: float | None = None):
+        """等待执行输出（M2d）；取消异常原样抛出，超时映射 ProviderTimeout。"""
+        if self._wait is None:
+            raise ProviderUnavailable("ComfyUIProvider.wait 未注入")
+        try:
+            return await self._wait(execution_id, cancel=cancel_check, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001
+            if "Canceled" in type(exc).__name__ or "Cancel" in type(exc).__name__:
+                raise
+            if isinstance(exc, TimeoutError) or "Timeout" in type(exc).__name__:
+                raise ProviderTimeout(f"ComfyUI 等待超时: {exc}") from exc
+            raise ProviderError("comfyui_wait_failed", str(exc), 502) from exc
 
     async def query(self, execution_id: str) -> ProviderExecution:
         if self._query is None:
