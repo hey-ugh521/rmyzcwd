@@ -307,6 +307,11 @@
         "gsv"
       ]
     },
-    "mode": "legacy"
+    "mode": "legacy",
+    "resources": {
+      "gpu_heavy": 1,
+      "gpu_light": 1,
+      "cpu": 2
+    }
   }
 }

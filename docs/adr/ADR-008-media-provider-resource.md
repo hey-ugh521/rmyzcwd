@@ -1,6 +1,6 @@
 # ADR-008：媒体 Provider Adapter 与资源调度（M2）
 
-- 状态：**Proposed（M2a/M2b 已实现并验收；M2c/M2d 待实现）**
+- 状态：**Proposed（M2a/M2b/M2c 已实现并验收；M2d 待实现）**
 - 日期：2026-11-10
 - 决策人：产品经理（M2 方向已定：Provider Adapter + 媒体资源调度，ComfyUI/TTS 解耦）
 - 关联：`ARCHITECTURE-v1.1.md`、`ADR-002`（状态词）、`ADR-007`（任务 owner）、`PRODUCT-BOUNDARY.md`、`ARCHITECTURE-GAP.md`（G-02/G-03/G-13）
@@ -145,6 +145,14 @@ class MediaProvider(Protocol):
 - `synth_tts`：`MOBIUS_MEDIA_PROVIDER=adapters` 时按 engine→Provider 路由并回退 kokoro（仅健康/服务端失败）；默认 legacy 行为不变。
 - `/api/providers` 已列出 comfyui/kokoro/gsv/f5 的能力/资源/并发。
 - 测试：`media_gateway/test_m2_tts_providers.py` **19/19**；adapters 路径实测可落盘并返回 `audio_url`；M2a 23/23；网关回归 t5 40、t3 9、t4 9、async 37 全过。
+
+## 7c. M2c 实现状态（2026-11-10）
+
+- `media_gateway/providers/resources.py`：`ResourceManager`（gpu_heavy 独占、cpu 共享、FIFO 队列、lease/过期回收、取消感知等待、快照）。
+- Gateway 接入：图片 worker `_run_image`、恢复 `_resume_running`、TTS `do_tts` 均 acquire/release；`/api/pulse` 与 `/api/resources` 暴露租约/队列。
+- Core：`gateway_resource_busy()` 读 pulse 的 gpu_heavy active/queued，idle 休眠前拒绝睡 ComfyUI。
+- 测试：`media_gateway/test_m2_resource_scheduler.py` **16/16**；M2a 23、M2b 19；网关 t5/t3/t4/async + Core service/readiness 回归全过。
+- 已知边界：进程内锁（单机单进程）；跨进程崩溃由 Core 租约收敛兜底；M2d 切默认 adapters 并做生产演练。
 
 ## 6. 待确认决策
 

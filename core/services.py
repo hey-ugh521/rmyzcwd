@@ -899,6 +899,19 @@ class Supervisor:
         except Exception:
             return 0, 0.0
 
+    async def gateway_resource_busy(self) -> bool:
+        """M2c：读网关 /api/pulse 的资源租约，GPU heavy 忙/排队时禁止睡 ComfyUI。"""
+        gw = self.services.get("gateway")
+        port = gw.port if gw else 8899
+        try:
+            async with httpx.AsyncClient(timeout=2.5) as c:
+                r = await c.get(f"http://127.0.0.1:{port}/api/pulse")
+            d = r.json() or {}
+            gpu = (d.get("resources") or {}).get("gpu_heavy") or {}
+            return bool(int(gpu.get("active") or 0) or int(gpu.get("queued") or 0))
+        except Exception:
+            return False
+
     async def comfy_busy(self) -> bool:
         """ComfyUI 自己的队列是否还有任务——最可靠的「正在生成」信号。"""
         s = self.services.get("comfyui")
@@ -948,6 +961,9 @@ class Supervisor:
                     continue
                 gw_active, gw_last = await self.gateway_activity()
                 if gw_active > 0:
+                    self._comfy_freed = False
+                    continue
+                if await self.gateway_resource_busy():
                     self._comfy_freed = False
                     continue
                 if await self.comfy_busy():

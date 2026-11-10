@@ -64,6 +64,11 @@ try:  # M2a：Provider 契约/注册表（脚本/包两种导入方式）
 except ImportError:  # pragma: no cover
     from .providers import ComfyUIProvider, ProviderRegistry
 
+try:  # M2c：资源调度
+    from providers.resources import ResourceCanceled, ResourceManager, ResourceTimeout
+except ImportError:  # pragma: no cover
+    from .providers.resources import ResourceCanceled, ResourceManager, ResourceTimeout
+
 # ---------------------------------------------------------------------------
 # 常量 / 路径
 # ---------------------------------------------------------------------------
@@ -256,6 +261,17 @@ class Settings:
 
 
 settings = Settings()
+
+def _resource_capacity(cfg: Settings) -> dict[str, int]:
+    raw = (cfg.raw.get("media") or {}).get("resources") or {}
+    return {
+        "gpu_heavy": int(raw.get("gpu_heavy", 1)),
+        "gpu_light": int(raw.get("gpu_light", 1)),
+        "cpu": int(raw.get("cpu", 2)),
+    }
+
+
+RESOURCES = ResourceManager(_resource_capacity(settings))
 
 
 def _setup_logging(cfg: Settings) -> None:
@@ -1526,6 +1542,21 @@ class TaskStore(DurableTaskStore):
             self._outbox_task = asyncio.create_task(self._outbox_loop())
 
     async def _resume_running(self, task: TaskRecord) -> None:
+        """M2c：恢复中的 ComfyUI 任务同样占用 GPU heavy lease。"""
+        try:
+            lease = await RESOURCES.acquire(
+                "gpu_heavy", owner=f"resume:{task.id}",
+                timeout=float(os.environ.get("MOBIUS_RESOURCE_WAIT_TIMEOUT", "300")),
+            )
+        except ResourceTimeout as exc:
+            log.warning("恢复任务 %s 等待 GPU 超时：%s", task.id, exc)
+            return
+        try:
+            await self._resume_running_impl(task)
+        finally:
+            RESOURCES.release(lease)
+
+    async def _resume_running_impl(self, task: TaskRecord) -> None:
         """重启后接管一个已在 ComfyUI 执行的图片任务。"""
         prompt_id = task.remote_id
         if not prompt_id or task.kind != "image":
@@ -1856,6 +1887,24 @@ class TaskStore(DurableTaskStore):
         self.update_params(task_id, {"warnings": warnings})
 
     async def _run_image(self, task: TaskRecord) -> dict[str, Any]:
+        """M2c：GPU heavy 独占 + 取消感知排队，执行结束/异常必释放。"""
+        view = _CancelView(self, task.id)
+        try:
+            resource_lease = await RESOURCES.acquire(
+                "gpu_heavy", owner=f"image:{task.id}",
+                timeout=float(os.environ.get("MOBIUS_RESOURCE_WAIT_TIMEOUT", "300")),
+                cancel_check=lambda: view.cancel_requested,
+            )
+        except ResourceCanceled:
+            raise _TaskCanceled()
+        except ResourceTimeout as exc:
+            raise ApiError("resource_busy", f"GPU 资源繁忙：{exc}", 503) from exc
+        try:
+            return await self._run_image_impl(task)
+        finally:
+            RESOURCES.release(resource_lease)
+
+    async def _run_image_impl(self, task: TaskRecord) -> dict[str, Any]:
         spec = task.spec
         cancel_view = _CancelView(self, task.id)
         _check_cancel(cancel_view)
@@ -2301,15 +2350,26 @@ async def do_tts(
         "voice": voice,
         "speed": speed,
     }
+    tts_resource = "cpu" if str(engine).strip().lower() == "kokoro" else "gpu_heavy"
     try:
-        result = await synth_tts(cfg, text=text, voice=voice, engine=engine, speed=speed)
-    except ApiError as exc:
-        store.record_voice_task(
-            spec, None, error=exc.error, source=source, user_id=user_id, session_id=session_id
+        tts_lease = await RESOURCES.acquire(
+            tts_resource, owner=f"tts:{uuid.uuid4().hex[:8]}",
+            timeout=float(os.environ.get("MOBIUS_RESOURCE_WAIT_TIMEOUT", "300")),
         )
-        await _register_voice_authoritative(cfg, body, spec, source, user_id, session_id,
-                                            character, result=None, error_code=exc.error)
-        raise
+    except ResourceTimeout as exc:
+        raise ApiError("resource_busy", f"媒体资源繁忙：{exc}", 503) from exc
+    try:
+        try:
+            result = await synth_tts(cfg, text=text, voice=voice, engine=engine, speed=speed)
+        except ApiError as exc:
+            store.record_voice_task(
+                spec, None, error=exc.error, source=source, user_id=user_id, session_id=session_id
+            )
+            await _register_voice_authoritative(cfg, body, spec, source, user_id, session_id,
+                                                character, result=None, error_code=exc.error)
+            raise
+    finally:
+        RESOURCES.release(tts_lease)
     task = store.record_voice_task(
         spec, result, source=source, user_id=user_id, session_id=session_id
     )
@@ -2862,6 +2922,7 @@ async def route_pulse(request: Request) -> Response:
             if t.status in (STATUS_PENDING, STATUS_RUNNING)
         ),
         "queue_pending": store.pending_count(),  # noqa: SLF001
+        "resources": RESOURCES.snapshot(),
     })
 
 
@@ -2874,6 +2935,12 @@ async def route_providers(request: Request) -> Response:
         "mode": media_provider_mode(),
         "providers": reg.describe(),
     })
+
+
+@api_route("/api/resources", ["GET"])
+async def route_resources(request: Request) -> Response:
+    """M2c：资源/租约/队列只读摘要（内部）。"""
+    return JSONResponse({"ok": True, **RESOURCES.snapshot()})
 
 
 @api_route("/api/models", ["GET"])
