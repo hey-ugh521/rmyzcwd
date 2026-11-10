@@ -2264,7 +2264,7 @@ async def synth_tts(
             resp, _target = await _post_tts(engine)
         if resp.status_code != 200:
             raise ApiError("tts_failed", f"TTS 引擎 {engine} 返回 HTTP {resp.status_code}: {resp.text[:300]}", 502)
-    return _finalize_tts(cfg, audio, engine, voice, speed)
+    return _finalize_tts(cfg, resp.content, engine, voice, speed)
 
 
 async def do_tts(

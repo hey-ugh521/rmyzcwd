@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
+import tempfile
+import threading
 from pathlib import Path
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from types import SimpleNamespace
 
 HERE = Path(__file__).resolve().parent
@@ -138,6 +142,65 @@ def test_fallback() -> None:
         check("kokoro 失败不回退", True)
 
 
+def test_synth_tts_paths() -> None:
+    """legacy 与 adapters 两条 synth_tts 路径都实际落盘。"""
+    print("\n[synth paths]")
+    import server
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            body = b"RIFF" + b"0" * 200
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/wav")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        def log_message(self, *args):
+            pass
+
+    httpd = HTTPServer(("127.0.0.1", 0), H)
+    port = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    tmp = Path(tempfile.mkdtemp(prefix="m2b-synth-"))
+    cfg = SimpleNamespace(kokoro_url=f"http://127.0.0.1:{port}", f5_url=f"http://127.0.0.1:{port}",
+                          tts_timeout=5.0, max_voice_bytes=8 * 1024 * 1024,
+                          tts_dir=str(tmp), public_base="http://x")
+    old_mode, old_reg = server.media_provider_mode, server.tts_registry
+    old_env = os.environ.get("MOBIUS_MEDIA_PROVIDER")
+    try:
+        os.environ["MOBIUS_MEDIA_PROVIDER"] = "legacy"
+        out = run(server.synth_tts(cfg, "你好", engine="kokoro", speed=1.1))
+        check("legacy synth 落盘/URL", out.get("ok") is True and out.get("bytes") == 204
+              and Path(out.get("local_path", "")).is_file(), str(out)[:120])
+
+        from providers.tts import TTSAudio
+
+        class FakeProvider:
+            async def synthesize(self, req):
+                return TTSAudio(audio=b"RIFF" + b"1" * 100, engine="kokoro",
+                                voice="zf_xiaobei", speed=1.0)
+
+        class FakeReg:
+            def select(self, kind, preferred=None):
+                return FakeProvider()
+
+        server.media_provider_mode = lambda: "adapters"
+        server.tts_registry = lambda cfg: FakeReg()
+        out2 = run(server.synth_tts(cfg, "你好", engine="kokoro"))
+        check("adapters synth 落盘/URL", out2.get("ok") is True and out2.get("bytes") == 104
+              and Path(out2.get("local_path", "")).is_file(), str(out2)[:120])
+    finally:
+        server.media_provider_mode, server.tts_registry = old_mode, old_reg
+        if old_env is None:
+            os.environ.pop("MOBIUS_MEDIA_PROVIDER", None)
+        else:
+            os.environ["MOBIUS_MEDIA_PROVIDER"] = old_env
+        httpd.shutdown()
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_static() -> None:
     print("\n[static wiring]")
     srv = (HERE / "server.py").read_text(encoding="utf-8")
@@ -152,6 +215,7 @@ def test_static() -> None:
 def main() -> int:
     test_providers()
     test_fallback()
+    test_synth_tts_paths()
     test_static()
     print(f"\n结果: {len(PASSED)}/{len(PASSED) + len(FAILED)} 通过")
     if FAILED:

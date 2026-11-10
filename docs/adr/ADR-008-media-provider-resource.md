@@ -144,7 +144,7 @@ class MediaProvider(Protocol):
 - `media_gateway/providers/tts.py`：Kokoro（CPU，tts）、GSV（GPU heavy，tts/voice_clone）、F5（GPU heavy，voice_clone）Provider；`synthesize` 返回音频字节，落盘/URL 由 `_finalize_tts` 统一处理。
 - `synth_tts`：`MOBIUS_MEDIA_PROVIDER=adapters` 时按 engine→Provider 路由并回退 kokoro（仅健康/服务端失败）；默认 legacy 行为不变。
 - `/api/providers` 已列出 comfyui/kokoro/gsv/f5 的能力/资源/并发。
-- 测试：`media_gateway/test_m2_tts_providers.py` **17/17**；adapters 路径实测可落盘并返回 `audio_url`；M2a 23/23；网关回归 t5 40、t3 9、t4 9、async 37 全过。
+- 测试：`media_gateway/test_m2_tts_providers.py` **19/19**；adapters 路径实测可落盘并返回 `audio_url`；M2a 23/23；网关回归 t5 40、t3 9、t4 9、async 37 全过。
 
 ## 6. 待确认决策
 
