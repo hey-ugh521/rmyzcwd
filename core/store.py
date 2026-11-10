@@ -215,6 +215,8 @@ def _migrate_tasks(c) -> None:
     have = _table_columns(c, "tasks")
     for col, decl in TASKS_MIGRATION_COLS:
         if col not in have:
+            if DB_BACKEND == "pg":
+                decl = decl.replace("REAL", "DOUBLE PRECISION")  # 见 init_db：float4 会失真 epoch 比较
             c.execute(f"ALTER TABLE tasks ADD COLUMN {col} {decl}")
     # 幂等键唯一索引：既有行 idempotency_key 为 NULL，PG/sqlite 唯一索引均允许多个 NULL，不冲突。
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_tasks_idem_key ON tasks(idempotency_key)")
@@ -233,6 +235,9 @@ def init_db() -> None:
             script = SCHEMA
             if DB_BACKEND == "pg":
                 script = script.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
+                # PG REAL=float4（单精度），epoch 秒在 1.7e9 处 ulp≈128s，租约/时间比较会失真；
+                # sqlite REAL 本就是 float8，故 PG 统一升为 DOUBLE PRECISION 保持跨后端一致。
+                script = script.replace("REAL", "DOUBLE PRECISION")
             c.executescript(script)
             _migrate_tasks(c)
             c.commit()
