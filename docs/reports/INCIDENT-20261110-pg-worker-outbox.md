@@ -35,7 +35,7 @@
 
 - 修复后生产测试图 `t_652e75b1` 完成：`mobius_qwen_00051_.png`；Core 状态 completed。
 - 原卡死任务 `t_2a807099`：Core/local 均 failed(worker_lost_before_submit)，outbox 清空。
-- 生产热补丁文件已加载；安装器随后重建。
+- 生产热补丁文件已加载；修复版安装器 `8f6dffdc27c6a22887ce90a62dab00eaa83e39d4bf2d70ad8ea181a8a44ab5eb` 已重建上传。
 
 ## 遗留
 

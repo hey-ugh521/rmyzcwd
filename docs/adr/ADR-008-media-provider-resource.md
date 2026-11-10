@@ -160,7 +160,7 @@ class MediaProvider(Protocol):
 - Core：`GatewayClient.providers/resources` + `/api/media/providers`、`/api/media/resources` 只读代理。
 - **默认切换为 adapters**；`MOBIUS_MEDIA_PROVIDER=legacy` 可一键回退。
 - 测试：M2a 24/24、M2b 19/19、M2c 16/16；M1 真 E2E 14/14、client 11/11、recovery 17/17；网关 t5/t3/t4/async 全过；Core readiness/service/t1 全过。legacy 回退路径 async 37 通过。
-- **生产部署（2026-11-10）**：安装器 `59516e15b7b6f5f4f67d143cef5154f6bcc3127b620625574706abfcc2044c3f` 已安装；`/api/providers` 返回 mode=adapters；真实 Kokoro TTS 经 adapters 路径成功（task `t_422e0bb1` completed，音频 126044 bytes）；资源租约清零。回滚：`MOBIUS_MEDIA_PROVIDER=legacy`（Gateway 环境）+ 重启网关。备份：`D:\AI\backups\m2-deploy-20261110-232013`。
+- **生产部署（2026-11-10）**：安装器 `8f6dffdc27c6a22887ce90a62dab00eaa83e39d4bf2d70ad8ea181a8a44ab5eb` 已安装；`/api/providers` 返回 mode=adapters；真实 Kokoro TTS 经 adapters 路径成功（task `t_422e0bb1` completed，音频 126044 bytes）；资源租约清零。回滚：`MOBIUS_MEDIA_PROVIDER=legacy`（Gateway 环境）+ 重启网关。备份：`D:\AI\backups\m2-deploy-20261110-232013`。
 
 ## 7e. 生产事故修复（2026-11-10，M2 上线后）
 
