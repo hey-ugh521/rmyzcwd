@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import Any, AsyncIterator
 
@@ -9,6 +10,11 @@ import httpx
 
 from . import store
 from .services import GatewayClient, MediaDisabled, ServiceError, Supervisor
+
+def _legacy_task_owner() -> bool:
+    """回滚开关：MOBIUS_TASK_OWNER=gateway 时恢复 Agent 本地任务记录。"""
+    return str(os.environ.get("MOBIUS_TASK_OWNER", "core")).strip().lower() == "gateway"
+
 
 TOOLS = [
     {
@@ -214,9 +220,17 @@ class Agent:
         except ServiceError as e:
             return {"ok": False, "error": "comfyui_unavailable", "hint": str(e)}
 
-        # ADR-007 / B1 修复：Agent 不再预建本地任务。任务由网关经 Core /v1/tasks 创建
-        # （core 模式）或网关本地创建（gateway 回滚模式），Agent 只消费返回的权威 task_id、
-        # 读规范状态词，避免「一次生图两行任务」与「用旧词 succeeded 误判规范词 completed」。
+        # ADR-007 / B1：core 模式任务由网关经 Core 创建；gateway 回滚模式恢复旧行为
+        # （Agent 在 Core 本地预建任务，网关本地 task 作为 remote）。两种模式都只消费网关返回的 task_id。
+        legacy = _legacy_task_owner()
+        legacy_task = None
+        if legacy:
+            legacy_task = store.task_create(
+                "image", ctx["source"], ctx["user_id"], ctx["session_id"], char_id, prompt,
+                params={"workflow": (ch or {}).get("workflow", "portrait")}, status="running")
+            store.task_update(legacy_task["id"], started_at=store.now())
+            ctx["task_ids"].append(legacy_task["id"])
+            ctx["pending_events"].append(legacy_task)
         ctx["image_done"] = True
         try:
             resp = await self.gw.generate(
@@ -226,13 +240,23 @@ class Agent:
             )
             task_id = resp.get("task_id") or resp.get("id")
             if not task_id:
+                if legacy_task is not None:
+                    store.task_update(legacy_task["id"], status="failed",
+                                      error="网关未返回 task_id", finished_at=store.now())
                 store.audit(ctx["user_id"], "image.generate", {"prompt": prompt},
                             result="fail", error="网关未返回 task_id", source=ctx["source"])
                 return {"ok": False, "error": "gateway_error", "hint": "网关未返回任务 id"}
-            ctx["task_ids"].append(task_id)
-            ctx.setdefault("pending_events", []).append(
-                store.task_get(task_id)
-                or {"id": task_id, "kind": "image", "status": resp.get("status", "pending")})
+            if legacy_task is not None:
+                store.task_update(legacy_task["id"], remote_id=task_id)
+                audit_tid = legacy_task["id"]
+                result_tid = legacy_task["id"]
+            else:
+                ctx["task_ids"].append(task_id)
+                ctx.setdefault("pending_events", []).append(
+                    store.task_get(task_id)
+                    or {"id": task_id, "kind": "image", "status": resp.get("status", "pending")})
+                audit_tid = task_id
+                result_tid = task_id
             final = await self.gw.wait_task(task_id, timeout=240)
             status = store.normalize_task_status((final or {}).get("status"))
             if status == store.TASK_COMPLETED:
@@ -240,28 +264,40 @@ class Agent:
                 url = result.get("url") or final.get("url")
                 result["url"] = url
                 ctx["images"].append({"character": char_id, "url": url})
+                if legacy_task is not None:
+                    store.task_update(legacy_task["id"], status="succeeded", result=result,
+                                      finished_at=store.now())
                 store.audit(ctx["user_id"], "image.generate",
                             {"character": char_id, "prompt": prompt,
                              "loras": (ch or {}).get("loras"),
                              "seconds": result.get("seconds")},
-                            task_id=task_id, character=char_id, source=ctx["source"])
+                            task_id=audit_tid, character=char_id, source=ctx["source"])
                 store.timeline_add(ctx["user_id"], f"生成了 {char_id} 的图片：{prompt}",
                                    kind="media", character=char_id,
                                    session_id=ctx["session_id"])
-                return {"ok": True, "task_id": task_id, "status": "completed",
+                return {"ok": True, "task_id": result_tid, "status": "completed",
                         "note": "图片会自动附在回复末尾，不要自己写链接"}
             if status == store.TASK_UNKNOWN:
+                if legacy_task is not None:
+                    store.task_update(legacy_task["id"], status="submission_unknown",
+                                      error="gateway_submission_unknown", finished_at=store.now())
                 store.audit(ctx["user_id"], "image.generate", {"prompt": prompt},
-                            result="unknown", task_id=task_id,
+                            result="unknown", task_id=audit_tid,
                             character=char_id, source=ctx["source"])
                 return {"ok": False, "error": "submission_unknown",
                         "hint": "提交结果未知，请到 Console 人工确认后再决定是否重试"}
             err = final.get("error") or status or "unknown"
+            if legacy_task is not None:
+                store.task_update(legacy_task["id"], status="failed", error=str(err),
+                                  finished_at=store.now())
             store.audit(ctx["user_id"], "image.generate", {"prompt": prompt},
-                        result="fail", error=str(err), task_id=task_id,
+                        result="fail", error=str(err), task_id=audit_tid,
                         character=char_id, source=ctx["source"])
             return {"ok": False, "error": "generate_failed", "hint": str(err)}
         except Exception as e:
+            if legacy_task is not None:
+                store.task_update(legacy_task["id"], status="failed", error=str(e),
+                                  finished_at=store.now())
             store.audit(ctx["user_id"], "image.generate", {"prompt": prompt},
                         result="fail", error=str(e), source=ctx["source"])
             return {"ok": False, "error": "gateway_error", "hint": str(e)}
@@ -282,8 +318,17 @@ class Agent:
             return {"ok": False, "error": "media_off", "hint": "媒体能力已关闭"}
         except ServiceError as e:
             return {"ok": False, "error": "tts_unavailable", "hint": str(e)}
-        # ADR-007 / B2 修复：语音不再由 Agent 预建本地任务；权威任务由网关 /api/tts 在
-        # core 模式创建（kind=speech）并回传 task_id，Agent 只消费与审计。
+        # ADR-007 / B2：core 模式由网关登记 Core 权威 speech 任务；
+        # gateway 回滚模式恢复 Agent 本地任务记录（gateway 本地不产 Core 任务）。
+        legacy = _legacy_task_owner()
+        legacy_task = None
+        if legacy:
+            legacy_task = store.task_create(
+                "voice", ctx["source"], ctx["user_id"], ctx["session_id"], ch.get("id"), text,
+                params={"voice": voice, "engine": engine}, status="running")
+            store.task_update(legacy_task["id"], started_at=store.now())
+            ctx["task_ids"].append(legacy_task["id"])
+            ctx["pending_events"].append(legacy_task)
         ctx["voice_done"] = True
         try:
             resp = await self.gw.tts(text, voice=voice, engine=engine,
@@ -292,15 +337,26 @@ class Agent:
                 raise ServiceError(resp.get("error") or "tts failed")
             url = resp.get("audio_url")
             task_id = resp.get("task_id")
-            if task_id:
-                ctx["task_ids"].append(task_id)
+            if legacy_task is not None:
+                store.task_update(legacy_task["id"], status="succeeded",
+                                  result={"url": url, "filename": resp.get("filename"),
+                                          "seconds": resp.get("seconds")},
+                                  finished_at=store.now())
+                audit_tid = legacy_task["id"]
+            else:
+                if task_id:
+                    ctx["task_ids"].append(task_id)
+                audit_tid = task_id
             ctx["audio"].append(url)
             store.audit(ctx["user_id"], "voice.synthesize",
                         {"engine": engine, "voice": voice, "chars": len(text)},
-                        task_id=task_id, character=ch.get("id"), source=ctx["source"])
-            return {"ok": True, "task_id": task_id, "status": "completed",
+                        task_id=audit_tid, character=ch.get("id"), source=ctx["source"])
+            return {"ok": True, "task_id": audit_tid, "status": "completed",
                     "note": "语音会自动附在回复最后一行，不要自己写链接"}
         except Exception as e:
+            if legacy_task is not None:
+                store.task_update(legacy_task["id"], status="failed", error=str(e),
+                                  finished_at=store.now())
             store.audit(ctx["user_id"], "voice.synthesize", {"engine": engine},
                         result="fail", error=str(e), source=ctx["source"])
             return {"ok": False, "error": "tts_error", "hint": str(e)}

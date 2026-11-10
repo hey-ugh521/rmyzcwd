@@ -141,6 +141,15 @@ POST /v1/tasks/{task_id}/events
 | M1b | Gateway 提交经 Core 分配 task_id（fail closed）；`_send_core_event` 投权威事件 API；`/api/tasks*` 与 MCP `comfyui_task_status` 代理 Core 并映射回历史 `public()` 结构（标 deprecated）；回滚开关 `MOBIUS_TASK_OWNER=core\|gateway` | `media_gateway/server.py`（`CoreTaskClient`/`task_owner_mode`/`_core_task_to_public`）、`tests/test_m1_gateway_proxy.py`（28/28） |
 | M1c | 执行租约续约（网关 30s→Core，TTL 60s）；Core 收敛循环（`_task_convergence_loop`：租约过期→failed(lease_expired)、submission_unknown 24h→failed）；恢复对账（`_reconcile_core_running`：孤儿 running 按 execution_id 探测 ComfyUI，回收迟到产物或转 submission_unknown）；取消竞态单终态 | `core/store.py`（`task_expire_stale_leases`/`task_expire_stale_unknown`）、`core/server.py`、`media_gateway/server.py`、`tests/test_m1_recovery.py`（17/17） |
 
+**P1 返工补丁（2026-11-10）**：
+
+- Agent 生图/语音在 **gateway 回滚模式**（`MOBIUS_TASK_OWNER=gateway`）恢复 Core 本地任务记录；
+  core 模式下仍只消费 Core 权威 task_id。回滚需在 **Core 与 Gateway 两端**同时设置该环境变量。
+- Gateway 在 Core 已创建任务、但本地执行账本 `store.submit` 失败时，向 Core 发送
+  `failed(gateway_local_submit_failed)` 补偿，避免 pending 孤儿（`media_gateway/server.py`）。
+- 新增测试：`tests/test_m1_agent_rollback.py`（9/9）、`tests/test_m1_gateway_proxy.py` 补偿用例（31/31）。
+- 语音在 Core 不可用时仍 fail-open（已合成音频可返回，但无权威 task），列为已知边界。
+
 **双写消除口径**：core 模式下 Core 是任务业务状态**唯一权威**——Gateway 查询一律代理 Core、
 执行进展只经事件 API 写 Core；`task_snapshot` 降级为**执行私有账本**（worker 队列/Comfy prompt_id/
 重试计数），不再对外提供状态。物理删除 `task_snapshot` 业务列/整表按 §4 Phase 3 在 deprecation

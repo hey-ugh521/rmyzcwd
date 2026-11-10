@@ -216,6 +216,7 @@ class _FakeCore:
         self.tasks = {}
         self.created = []
         self.cancelled = []
+        self.events = []
         self.unavailable = False
 
     async def create_task(self, **kw):
@@ -248,6 +249,7 @@ class _FakeCore:
         return {"ok": True, "cancel_requested": True}
 
     async def send_event(self, task_id, **kw):
+        self.events.append((task_id, kw))
         return True
 
 
@@ -336,6 +338,32 @@ def test_submit_fail_closed() -> None:
         check("create_task 收到 idempotency_key/payload/source",
               fake.created and fake.created[0]["idempotency_key"] == "k1"
               and fake.created[0]["source"] == "qq")
+
+        # P1：Core 已建任务但本地账本失败 → 补偿 Core failed
+        class _FailingStore:
+            def submit(self, **kw):
+                raise RuntimeError("sqlite write down")
+
+        fake.events.clear()
+        prev_store = gw.store
+        gw.store = _FailingStore()
+        try:
+            try:
+                run(gw.submit_generate(gw.settings, {"prompt": "comp", "idempotency_key": "k-comp"},
+                                       True))
+                check("本地落账失败 → 抛错", False, "未抛")
+            except gw.ApiError as exc:
+                check("本地落账失败 → gateway_local_submit_failed 503",
+                      exc.error == "gateway_local_submit_failed" and exc.status == 503,
+                      f"{exc.error}/{exc.status}")
+            failed = [e for e in fake.events if (e[1] or {}).get("event") == "failed"]
+            check("本地落账失败 → Core 收到 failed 补偿", len(failed) == 1, str(fake.events)[:160])
+            if failed:
+                check("补偿 error_code=gateway_local_submit_failed",
+                      failed[0][1].get("error_code") == "gateway_local_submit_failed",
+                      str(failed[0][1]))
+        finally:
+            gw.store = prev_store
 
         # Core 不可用 → fail closed(503)，且不落本地
         fake.unavailable = True

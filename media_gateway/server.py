@@ -2540,6 +2540,20 @@ async def submit_generate(cfg: Settings, body: dict[str, Any], async_mode: bool)
             409,
             existing_task_id=exc.task_id,
         ) from exc
+    except Exception as exc:  # noqa: BLE001
+        # P1：Core 任务已创建但本地执行账本落账失败 → 补偿 Core 置 failed，避免 pending 孤儿
+        if core_task_id is not None:
+            try:
+                await core_tasks(cfg).send_event(
+                    core_task_id, event="failed",
+                    error_code="gateway_local_submit_failed",
+                    error_message=str(exc)[:500])
+            except Exception:  # noqa: BLE001
+                log.warning("Core 任务补偿失败（保留 Core pending 供收敛/审计）：task_id=%s", core_task_id)
+        raise ApiError(
+            "gateway_local_submit_failed",
+            f"本地执行账本创建失败，已补偿 Core 任务：{exc}", 503,
+        ) from exc
     if core_task_id is not None:
         idempotent_hit = core_hit  # 幂等命中以 Core 为准（ADR-007 §2.6）
     if async_mode:
