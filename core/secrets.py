@@ -39,6 +39,11 @@ def secrets_path(root: Path | None = None) -> Path:
     cfg_file = _config_file(root)
     try:
         cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
+        try:  # M3c：支持 ${DATA}/${LOCALAPPDATA} 等外部数据目录
+            from shared import paths as _shared_paths
+            cfg = _shared_paths.expand_config(cfg, root)
+        except Exception:  # noqa: BLE001
+            pass
         rel = str(cfg.get("secrets_file") or "").strip()
         if rel:
             p = Path(rel)

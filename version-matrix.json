@@ -1,0 +1,59 @@
+{
+  "mobius": "0.2.0",
+  "generated_at": "2026-11-11T00:19:24",
+  "schema": {
+    "core_tasks": "2"
+  },
+  "components": {
+    "comfyui-runtime": {
+      "version": "20261108",
+      "required": false,
+      "size": 3586265882
+    },
+    "gsv-runtime": {
+      "version": "20261108",
+      "required": false,
+      "size": 8312481693
+    },
+    "langbot": {
+      "version": "20261108",
+      "required": true,
+      "size": 9319540
+    },
+    "napcat-code": {
+      "version": "4.18.42-20261108",
+      "required": true,
+      "size": 21056030
+    },
+    "postgres": {
+      "version": "18.6-20261108",
+      "required": true,
+      "size": 224588177
+    },
+    "python-core": {
+      "version": "3.12-20261108",
+      "required": true,
+      "size": 6523656
+    },
+    "python-gateway": {
+      "version": "3.12-20261108",
+      "required": true,
+      "size": 15464581
+    },
+    "python-kokoro": {
+      "version": "3.12-20261108",
+      "required": false,
+      "size": 152123526
+    },
+    "python-langbot": {
+      "version": "3.12-20261108",
+      "required": true,
+      "size": 143961502
+    },
+    "python-memory": {
+      "version": "3.12-20261108",
+      "required": true,
+      "size": 147997837
+    }
+  }
+}

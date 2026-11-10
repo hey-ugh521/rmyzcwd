@@ -57,6 +57,7 @@ Source: "{#SourceRoot}\ops\l3\licenses\THIRD-PARTY.md"; DestDir: "{app}\licenses
 Source: "{#SourceRoot}\ops\l3\licenses\licenses.json"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "{#SourceRoot}\ops\l3\licenses\texts\*"; DestDir: "{app}\licenses\texts"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\config.example.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceRoot}\version-matrix.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}\docs\STATUS.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#SourceRoot}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 ; 环境检查脚本
@@ -75,6 +76,11 @@ Name: "{autodesktop}\Möbius"; Filename: "{app}\Mobius.exe"; WorkingDir: "{app}"
 Filename: "{app}\MobiusCLI.exe"; Parameters: "--headless bootstrap"; WorkingDir: "{app}"; Description: "初始化 Möbius 运行时"; Flags: postinstall runascurrentuser waituntilterminated skipifsilent
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\preflight.ps1"""; WorkingDir: "{app}"; Description: "运行环境检查"; Flags: postinstall nowait skipifsilent
 Filename: "{app}\Mobius.exe"; WorkingDir: "{app}"; Description: "启动 Möbius"; Flags: postinstall nowait skipifsilent
+
+[UninstallRun]
+; M3c：先停服务、清 autostart；用户数据目录（%LOCALAPPDATA%\Mobius\data）默认保留
+Filename: "{app}\MobiusCLI.exe"; Parameters: "--headless stop"; Flags: runhidden waituntilterminated
+Filename: "schtasks.exe"; Parameters: "/Delete /TN ""Mobius Boot"" /F"; Flags: runhidden
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\logs"

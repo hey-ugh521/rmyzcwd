@@ -1,6 +1,6 @@
 # ADR-009：安装、升级、备份、恢复、卸载与安全边界（M3）
 
-- 状态：**Proposed（M3a/M3b 已实现；M3c 安装器可移植化+首次 bootstrap 已实现，干净机器演练待 M3d）**
+- 状态：**Proposed（M3a/M3b 已实现；M3c 安装器可移植化/首启 bootstrap/数据外置/版本矩阵已实现；干净机器演练与升级执行器待 M3d）**
 - 日期：2026-11-11
 - 关联：`PRODUCT-BOUNDARY.md`（PB-03/04/06）、`ARCHITECTURE-GAP.md`（G-06/G-11，M3）、`ADR-006`（网关鉴权）、`ADR-007`（任务 owner）、`ADR-008`（Provider）
 - 目标：让 Möbius 从"开发者机器可运行"变成"**干净 Windows 可安装、可升级、可备份、可卸载**"；安全边界可验收。
@@ -124,6 +124,13 @@ mobius lifecycle uninstall [--remove-data]
 - `preflight.ps1` 改为配置驱动，无 `D:\AI`/Anaconda 硬编码；检查 launcher/core_python、gateway、pg_ctl、可选媒体组件。
 - `config.example.json` 对齐 runtime 组件路径（langbot/memory）。
 - 实测：便携 PG `initdb`→建库在临时端口 55433 通过；未做干净 Windows Sandbox/VM 演练（M3d）。
+
+### M3c 补充（2026-11-11）
+
+- 可变数据外置到 `%LOCALAPPDATA%\Mobius\data`（PG data/secrets/backups/sqlite）；安装目录只放程序/组件。
+- `config.example` 对齐组件归档根目录（langbot/comfyui/gsv）；`version-matrix.json` 随安装包分发。
+- 卸载钩子：先 `MobiusCLI --headless stop`，再清 `Mobius Boot` 计划任务；数据目录默认保留。
+- 安装器已本地编译通过（per-user 目录、bootstrap、preflight、版本矩阵）；未上传/未部署。
 
 ## 5. 待 PM 确认
 

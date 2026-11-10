@@ -21,8 +21,8 @@
   "services": {
     "comfyui": {
       "enabled": true,
-      "python": "${AI}\\comic\\ComfyUI_windows_portable\\python_embeded\\python.exe",
-      "cwd": "${AI}\\comic\\ComfyUI_windows_portable",
+      "python": "${RUNTIME}/comfyui/ComfyUI_windows_portable/python_embeded/python.exe",
+      "cwd": "${RUNTIME}/comfyui/ComfyUI_windows_portable",
       "args": [
         "-s",
         "ComfyUI\\main.py",
@@ -98,8 +98,8 @@
     },
     "gsv": {
       "enabled": true,
-      "python": "${AI}\\GPT-SoVITS-v4\\GPT-SoVITS-v4-20250529-nvidia50\\runtime\\python.exe",
-      "cwd": "${AI}\\GPT-SoVITS-v4\\GPT-SoVITS-v4-20250529-nvidia50",
+      "python": "${RUNTIME}/gsv/GPT-SoVITS-v4-20250529-nvidia50/runtime/python.exe",
+      "cwd": "${RUNTIME}/gsv/GPT-SoVITS-v4-20250529-nvidia50",
       "args": [
         "${AI}\\gsv_supervisor.py"
       ],
@@ -172,7 +172,7 @@
     "langbot": {
       "enabled": true,
       "autostart": true,
-      "cwd": "${RUNTIME}/langbot",
+      "cwd": "${RUNTIME}/langbot/langbot-native",
       "port": 5300,
       "health_url": "http://127.0.0.1:5300/healthz",
       "start_timeout_sec": 240,
@@ -230,17 +230,17 @@
       "exe": "${RUNTIME}/postgres/pgsql/bin/pg_ctl.exe",
       "args": [
         "-D",
-        "${RUNTIME}/postgres/data",
+        "${DATA}/postgres",
         "-o",
         "-p 55432 -c listen_addresses=127.0.0.1",
         "-l",
-        "${RUNTIME}/postgres/pg.log",
+        "${DATA}/postgres/pg.log",
         "start"
       ],
       "stop_exe": "${RUNTIME}/postgres/pgsql/bin/pg_ctl.exe",
       "stop_args": [
         "-D",
-        "${RUNTIME}/postgres/data",
+        "${DATA}/postgres",
         "stop",
         "-m",
         "fast"
@@ -251,7 +251,7 @@
     }
   },
   "characters_dir": "data/characters",
-  "db": "data/mobius.db",
+  "db": "${DATA}/mobius.db",
   "default_character": "bronya",
   "integrations": {
     "langbot": {
@@ -271,8 +271,8 @@
       "core.server"
     ],
     "pg_ctl": "${RUNTIME}/postgres/pgsql/bin/pg_ctl.exe",
-    "pg_data": "${RUNTIME}/postgres/data",
-    "pg_log": "${RUNTIME}/postgres/pg.log",
+    "pg_data": "${DATA}/postgres",
+    "pg_log": "${DATA}/postgres/pg.log",
     "pg_port": 55432,
     "start_napcat": true,
     "elevate": true
@@ -283,10 +283,11 @@
     "HOME": "${USERPROFILE}",
     "TTS_WS": "${RUNTIME}",
     "LEGACY_LB": "${ROOT}/data/legacy-langbot",
-    "RUNTIME": "${ROOT}/runtime"
+    "RUNTIME": "${ROOT}/runtime",
+    "DATA": "${LOCALAPPDATA}/Mobius/data"
   },
   "_comment": "示例配置：${VAR} 由启动器/Core 展开。paths 为外部运行时根目录，安装器会按实际布局写入。",
-  "secrets_file": "data/secrets.json",
+  "secrets_file": "${DATA}/secrets.json",
   "media": {
     "providers": {
       "comfyui": {
@@ -313,5 +314,13 @@
       "gpu_light": 1,
       "cpu": 2
     }
+  },
+  "lifecycle": {
+    "backup_dir": "${DATA}/backups",
+    "backup_dbs": [
+      "mobius_core",
+      "mobius",
+      "langbot"
+    ]
   }
 }
