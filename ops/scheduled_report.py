@@ -70,7 +70,6 @@ def _mcp_tools() -> dict | None:
                     out["pg"] = await safe("pg_health")
                     out["tasks"] = await safe("task_list", limit=10)
                     out["messages"] = await safe("message_state", limit=5)
-                    out["watchdog"] = await safe("log_tail", name="watchdog", lines=30)
         except Exception as exc:  # noqa: BLE001
             out["_error"] = f"{type(exc).__name__}: {exc}"
         return out
@@ -148,8 +147,6 @@ def build_report(mode: str, with_dsh: bool) -> str:
         lines += ["## 最近消息轨迹", f"- 条数：{len(msgs)}"]
         for m in msgs[:3]:
             lines.append(f"  - {m.get('msg_id')} phase={m.get('phase')} ts={m.get('phase_ts')} nodes={len(m.get('nodes') or [])}")
-        lines += ["", "## watchdog 最近日志", "```",
-                  "\n".join((data.get("watchdog") or {}).get("tail", [])[-15:]), "```", ""]
     else:
         fb = _fallback_status()
         lines += ["## 系统状态（降级采集：MCP 不可用）", "", "```json",

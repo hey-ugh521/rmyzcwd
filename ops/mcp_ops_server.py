@@ -37,8 +37,6 @@ LOG_ALLOWLIST = {
     "gateway": MOBIUS / "media_gateway" / "logs" / "gateway.log",
     "comfyui": MOBIUS / "logs" / "comfyui.log",
     "core": MOBIUS / "logs" / "core.out.log",
-    "watchdog": QQBOT / "watchdog.run.log",
-    "boot": MOBIUS / "logs" / "boot.log",
 }
 
 _APP = None
@@ -196,7 +194,7 @@ def message_state(msg_id: str = "", limit: int = 5) -> str:
     return json.dumps(out, ensure_ascii=False)
 
 
-@mcp.tool(name="log_tail", description="查看白名单日志的尾部（gateway/comfyui/core/watchdog/boot）。")
+@mcp.tool(name="log_tail", description="查看白名单日志的尾部（gateway/comfyui/core）。")
 def log_tail(name: str = "gateway", lines: int = 40) -> str:
     lines = max(1, min(int(lines or 40), 200))
     path = LOG_ALLOWLIST.get(name)

@@ -86,7 +86,7 @@ Console 网页 / Open WebUI Pipe
 | **核心** | **Möbius Core** | 8900 | 记忆、任务、审计、媒体模式、Agent 循环 | **Web 侧事实来源** |
 | 媒体网关 | Media Gateway | 8899 | MCP 面 + REST 面、多底模路由、LoRA 注入、任务队列、媒体代理 | 在线，**stateless**（执行器）|
 | 记忆网关 | memory MCP | 8902 | QQ 侧长期记忆 remember/recall/forget/候选/统计 | 在线（**第二套记忆**）|
-| 向量基建 | bge-m3 | 8903 | 嵌入（watchdog 拉起）| 在线，**仅 Graphiti 冒烟用** |
+| 向量基建 | bge-m3 | 8903 | 嵌入（Core Supervisor 拉起）| 在线，**仅 Graphiti 冒烟用** |
 | 向量基建 | FalkorDB | 63790 | 图记忆 | **未接入生产** |
 | 后端 | ComfyUI | 8188 | 生图 | **常驻**（prewarm）|
 | 后端 | Kokoro | 7870 | 28 音色 TTS | 在线 |
@@ -94,7 +94,7 @@ Console 网页 / Open WebUI Pipe
 | 存储 | PostgreSQL | 55432 | `langbot` / `mobius` / `mobius_core` | 在线 |
 | 存储 | Redis | 56379 | 轮询节流（仅瞬时状态）| 在线 |
 | 画像 | PowerContext | 8000 | 按 QQ 号独立画像 | 在线 |
-| 运维 | watchdog.py | — | 容器/服务/提示词监督 + 自愈 + DSH 只读诊断 | 在线 |
+| 运维 | watchdog.py | — | 已退役（T8，2026-11-10）；Core Supervisor 统一监管 | 无 |
 | 运维 | 计划任务 Mobius Boot | — | 开机自启 | 在位 |
 
 **设计铁律**（契约见 `docs/ARCHITECTURE-v1.1.md`）：

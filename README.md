@@ -1,13 +1,13 @@
 # Möbius —— 统一 Agent 核心（MVP）
 
-> **文档状态（2026-11-10）**：本 README 部分内容仍描述历史运行方式（Docker/boot/watchdog、on_demand 默认、旧安装路径），
+> **文档状态（2026-11-10）**：本 README 部分内容仍描述历史运行方式（已退役的 Docker/boot/watchdog、旧默认值、旧安装路径），
 > 与当前代码/运行值不完全一致。产品边界、实际架构与差距以以下三份为准：
 > - `docs/PRODUCT-BOUNDARY.md`（v1.0 交付边界）
 > - `docs/ARCHITECTURE-AS-IS.md`（实际运行架构）
 > - `docs/ARCHITECTURE-GAP.md`（目标 vs 实际 / 收敛计划）
 >
 > 当前事实速记：数据库 PostgreSQL（`db_backend=pg`）；媒体运行值 `prewarm`；启动以 launcher + Core Supervisor 为准；
-> Docker/boot/watchdog 属于待退役的 legacy 面；QQ 为可选接入。
+> Docker/boot/watchdog 已退役（T8）；启动统一走 launcher + Core Supervisor；QQ 为可选接入。
 
 
 把「QQ 群友 ↔ 角色 ↔ 生图/语音」从一堆拼装服务收成**一个原生系统**：
@@ -41,23 +41,24 @@ Console ───────────┘        ├─ 任务中心 / 审计
 ## 快速开始
 
 ```powershell
-# 1. 起 Core（媒体按需唤醒）
-.\scripts\start-mobius.ps1
+# 1. 启动（launcher 拉起 PG/Core/Supervisor）
+#    安装版：.\Mobius.exe；开发版：.\launcher\dist\Mobius.exe
+.\launcher\dist\Mobius.exe
+
+# 或 CLI（无 GUI）
+.\launcher\dist\MobiusCLI.exe --headless start
 
 # 2. 打开控制台
 start http://127.0.0.1:8900/console
 
-# 3. 需要立刻能生图时，预热（会占显存）
-.\scripts\start-mobius.ps1 -Prewarm
-
-# 4. 停止
-.\scripts\stop-mobius.ps1 -All
+# 3. 停止
+.\launcher\dist\MobiusCLI.exe --headless stop
 ```
 
 ## 开机自启（推荐）
 
 ```powershell
-# 安装：登录后 30s 自动拉起 Core + Gateway + watchdog（ComfyUI 仍按 on_demand 不占显存）
+# 安装：登录后自动拉起 Möbius（launcher + Core Supervisor）
 .\scripts\install-autostart.ps1
 
 # 查看 / 卸载
@@ -65,18 +66,15 @@ start http://127.0.0.1:8900/console
 .\scripts\install-autostart.ps1 -Uninstall
 ```
 
-实现方式是当前用户的计划任务 `Mobius Boot`（不需要管理员权限，可在任务计划程序里停用）。
-入口脚本 `scripts\boot-mobius.ps1`：等 Docker → 起 Core（自动带起网关）→ 起 watchdog →
-自身常驻并每 2 分钟兜底检查 Core / watchdog 存活。
-
-**冷启动实测**：机器重启后 19s Core 就绪、网关 20s 后就绪，ComfyUI 保持不启动。
+实现方式是当前用户的计划任务（不需要管理员权限，可在任务计划程序里停用）。
+legacy 的 `scripts\boot-mobius.ps1` 与 watchdog 已退役（T8）；启动/保活统一由 launcher + Core Supervisor 负责。
 
 ## 媒体模式
 
 | 模式 | 含义 |
 |---|---|
 | `off` | 所有入口不可生图/语音，角色会礼貌说明 |
-| `on_demand` | 默认。收到明确请求才启动 ComfyUI，闲置 10 分钟休眠 |
+| `on_demand` | 按需（非默认）。收到明确请求才启动 ComfyUI，闲置 10 分钟休眠 |
 | `prewarm` | 开机即拉起，适合需要秒回图的时候 |
 
 模式是 **Core 的全局状态**，在控制台「概览」切换，QQ 与 Web 同时生效。

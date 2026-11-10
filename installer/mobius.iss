@@ -46,7 +46,6 @@ Source: "{#SourceRoot}\core\*"; DestDir: "{app}\core"; Flags: ignoreversion recu
 Source: "{#SourceRoot}\shared\*"; DestDir: "{app}\shared"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc"
 Source: "{#SourceRoot}\media_gateway\*"; DestDir: "{app}\media_gateway"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,tts_output,data,logs,*.db,*.db-*"
 Source: "{#SourceRoot}\ops\*"; DestDir: "{app}\ops"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.db,*.db-wal,*.db-shm,l2\requirements\*.txt,voice_eval,*.wav,*.mp3"
-Source: "{#SourceRoot}\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceRoot}\data\characters\*"; DestDir: "{app}\data\characters"; Flags: ignoreversion
 Source: "{#SourceRoot}\docs\L2-PLAN.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "{#SourceRoot}\docs\L3-PLAN.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist

@@ -10,7 +10,7 @@
 1. 第二批 T5 给媒体网关加了 Bearer token：配置 `gateway.token`（密钥 SSOT `secrets.json`）
    或环境变量 `MOBIUS_GATEWAY_TOKEN` 后，`/api/*` 强制鉴权
    （`media_gateway/server.py:2388` 的 `api_route` 守卫），`/api/pulse` 豁免
-   （`media_gateway/server.py:2391`，watchdog 唯一探针，见 `ops/watchdog/watchdog.py:78`）。
+   （`media_gateway/server.py:2391`；watchdog 已于 T8 退役，`/api/pulse` 仍为健康探针）。
    token 解析：`media_gateway/server.py:211`（env 优先，其次 `_secret_gateway_token()` 读 SSOT）。
 2. 网关默认只监听回环 `127.0.0.1`（`media_gateway/server.py:189`）；`streamable_http_app(host=settings.host)`
    （`media_gateway/server.py:3175`）在回环 host 下由 mcp 库自动启用 DNS-rebinding 防护（校验 Host/Origin）。
@@ -41,7 +41,7 @@
 4. **补偿控制（fail-fast）**：监听地址非回环且未配置 token 时，**启动直接失败**
    （`media_gateway/server.py:3231` `_enforce_bind_security`，回环判定 `:3217` `_is_loopback_host`）。
    语义＝「要把网关暴露到非回环，就必须先用 token 锁住 `/api/*`」，杜绝裸奔。
-5. **运维铁律**：生产拓扑下 LangBot / Core / watchdog 与网关同机，网关**必须保持回环监听**。
+5. **运维铁律**：生产拓扑下 LangBot / Core 与网关同机，网关**必须保持回环监听**。
    若确需非回环（跨机调试等），`/mcp` 与媒体口**必须由前置反向代理鉴权**，不得裸暴露公网。
 
 ## 影响

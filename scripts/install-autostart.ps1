@@ -35,15 +35,12 @@ if ($Uninstall) {
     return
 }
 
-$bootScript = Join-Path $root 'scripts\boot-mobius.ps1'
-if (-not (Test-Path $bootScript)) { throw "找不到 $bootScript" }
+$launcher = Join-Path $root 'Mobius.exe'
+if (-not (Test-Path $launcher)) { $launcher = Join-Path $root 'launcher\dist\Mobius.exe' }
+if (-not (Test-Path $launcher)) { throw "找不到 Mobius 启动器: $launcher" }
+Write-Host "[autostart] 使用启动器: $launcher"
 
-$pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
-if (-not $pwsh) { $pwsh = (Get-Command powershell.exe).Source }
-Write-Host "[autostart] 使用 shell: $pwsh"
-
-$action = New-ScheduledTaskAction -Execute $pwsh `
-    -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $bootScript)
+$action = New-ScheduledTaskAction -Execute $launcher
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $trigger.Delay = 'PT30S'
@@ -57,7 +54,7 @@ $settings = New-ScheduledTaskSettingsSet `
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
     -Settings $settings -RunLevel Limited -Force `
-    -Description '登录后自动启动 Möbius Core(8900) + Media Gateway(8899) + watchdog；ComfyUI 仍按媒体模式按需唤醒。' | Out-Null
+    -Description '登录后自动启动 Möbius（launcher + Core Supervisor 管理全部服务）。' | Out-Null
 
 Write-Host "[autostart] 已注册计划任务 '$taskName'（登录后 30s 触发）" -ForegroundColor Green
 Get-ScheduledTask -TaskName $taskName | Select-Object TaskName, State | Format-Table -AutoSize | Out-String | Write-Host
