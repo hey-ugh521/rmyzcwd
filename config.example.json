@@ -286,5 +286,27 @@
     "RUNTIME": "${ROOT}/runtime"
   },
   "_comment": "示例配置：${VAR} 由启动器/Core 展开。paths 为外部运行时根目录，安装器会按实际布局写入。",
-  "secrets_file": "data/secrets.json"
+  "secrets_file": "data/secrets.json",
+  "media": {
+    "providers": {
+      "comfyui": {
+        "id": "comfyui",
+        "kind": "image",
+        "resource": "gpu_heavy",
+        "max_concurrency": 1,
+        "supports_cancel": true,
+        "supports_recovery": true
+      }
+    },
+    "routing": {
+      "image": [
+        "comfyui"
+      ],
+      "speech": [
+        "kokoro",
+        "gsv"
+      ]
+    },
+    "mode": "legacy"
+  }
 }

@@ -1,6 +1,6 @@
 # ADR-008：媒体 Provider Adapter 与资源调度（M2）
 
-- 状态：**Proposed（设计评审中，未实现）**
+- 状态：**Proposed（M2a 已实现并验收；M2b/M2c 待实现）**
 - 日期：2026-11-10
 - 决策人：产品经理（M2 方向已定：Provider Adapter + 媒体资源调度，ComfyUI/TTS 解耦）
 - 关联：`ARCHITECTURE-v1.1.md`、`ADR-002`（状态词）、`ADR-007`（任务 owner）、`PRODUCT-BOUNDARY.md`、`ARCHITECTURE-GAP.md`（G-02/G-03/G-13）
@@ -130,6 +130,14 @@ class MediaProvider(Protocol):
 - 集成：M1 Core 任务事件/恢复/取消在 adapters 模式下通过；外部 API 结构不变。
 - 隔离：Core 代码 grep 不到 ComfyUI/Kokoro/GSV 特有字段；Provider 特有字段不越过 Gateway 边界。
 - 故障注入：Provider 进程挂、HTTP 超时、ComfyUI 恢复、TTS 回退、lease 泄漏。
+
+## 7. 实现状态（M2a，2026-11-10）
+
+- `media_gateway/providers/`：base 契约（能力/请求/状态/错误/Protocol）、Registry、ComfyUI Adapter。
+- `media_gateway/server.py`：`MOBIUS_MEDIA_PROVIDER=legacy|adapters`（默认 legacy，行为不变）；内部 `GET /api/providers` 只读能力清单。
+- `config.example.json`：新增 `media.providers/routing` 示例。
+- 测试：`media_gateway/test_m2_provider_contract.py` **23/23**；既有网关回归 t5 40、t3 9、t4 9、async 37 全过。
+- 未接执行路径：ComfyUI Adapter 尚未替换 legacy `_run_image`；TTS Adapter/资源调度在 M2b/M2c。
 
 ## 6. 待确认决策
 

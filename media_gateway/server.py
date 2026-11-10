@@ -59,6 +59,11 @@ except ImportError:  # pragma: no cover
         STATUS_PENDING, STATUS_RUNNING, STATUS_UNKNOWN, normalize_status,
     )
 
+try:  # M2a：Provider 契约/注册表（脚本/包两种导入方式）
+    from providers import ComfyUIProvider, ProviderRegistry
+except ImportError:  # pragma: no cover
+    from .providers import ComfyUIProvider, ProviderRegistry
+
 # ---------------------------------------------------------------------------
 # 常量 / 路径
 # ---------------------------------------------------------------------------
@@ -2773,6 +2778,32 @@ async def route_health(request: Request) -> Response:
     )
 
 
+_PROVIDER_REGISTRY: ProviderRegistry | None = None
+
+
+def media_provider_mode() -> str:
+    """M2a 开关：legacy（默认，保持现有直调）| adapters（M2 后续切换）。"""
+    mode = str(os.environ.get("MOBIUS_MEDIA_PROVIDER", "legacy") or "legacy").strip().lower()
+    return mode if mode in ("legacy", "adapters") else "legacy"
+
+
+def provider_registry(cfg: Settings) -> ProviderRegistry:
+    """构建 Provider 注册表；M2a 只做描述/能力，不接执行路径。"""
+    global _PROVIDER_REGISTRY
+    if _PROVIDER_REGISTRY is None:
+        reg = ProviderRegistry()
+        entries = ((cfg.raw.get("media") or {}).get("providers") or {})
+        if not entries or "comfyui" in entries:
+            reg.register(ComfyUIProvider(
+                submit_fn=lambda nodes: comfy_submit(cfg, nodes),
+                wait_fn=lambda pid, timeout=None: comfy_wait_output(cfg, pid, None, timeout=timeout),
+                cancel_fn=lambda pid: comfy_cancel_prompt(cfg, pid),
+                query_fn=None,
+            ))
+        _PROVIDER_REGISTRY = reg
+    return _PROVIDER_REGISTRY
+
+
 @api_route("/api/status", ["GET"])
 async def route_status(request: Request) -> Response:
     status = await collect_status(settings)
@@ -2799,6 +2830,17 @@ async def route_pulse(request: Request) -> Response:
             if t.status in (STATUS_PENDING, STATUS_RUNNING)
         ),
         "queue_pending": store.pending_count(),  # noqa: SLF001
+    })
+
+
+@api_route("/api/providers", ["GET"])
+async def route_providers(request: Request) -> Response:
+    """M2a：Provider 能力清单（内部只读；不探测后端）。"""
+    reg = provider_registry(settings)
+    return JSONResponse({
+        "ok": True,
+        "mode": media_provider_mode(),
+        "providers": reg.describe(),
     })
 
 
