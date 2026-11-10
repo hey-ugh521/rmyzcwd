@@ -25,6 +25,9 @@ os.environ["MOBIUS_TASK_DB"] = os.path.join(tmp, "tasks.db")
 os.environ["MOBIUS_COMFY_SUBMIT_TIMEOUT"] = "3"
 os.environ["MOBIUS_COMFY_START_TIMEOUT"] = "5"
 os.environ["MOBIUS_MEDIA_MODE"] = "off"  # 不走 Core 唤醒
+# 本用例验证网关本地执行账本的 P0.4 语义（store.submit / comfyui_task_status 读本地）。
+# M1(ADR-007) 后 Core 为默认 owner 且 submit 对 Core fail-closed，故显式声明 gateway 回滚模式。
+os.environ["MOBIUS_TASK_OWNER"] = "gateway"
 
 import server  # noqa: E402
 
