@@ -1,5 +1,9 @@
 # Möbius 现状全景（2026-11-06 21:45）
 
+> **2026-11-10 增补**：产品边界/AS-IS/GAP 已冻结，见 `docs/PRODUCT-BOUNDARY.md`、`docs/ARCHITECTURE-AS-IS.md`、
+> `docs/ARCHITECTURE-GAP.md`。本文继续作为「实现现状与已知问题」记录；其中旧默认值（SQLite/on_demand/Docker 启动）
+> 以那三份文档为准。
+
 > 给产品经理做规划用的「一张图 + 能力账 + 局限账」。
 > 事实来自运行中的系统与实测日志，不是设计意图。
 > 上一版是 2026-10-29；本版按 11-01 ~ 11-06 的实际改动全面重校。

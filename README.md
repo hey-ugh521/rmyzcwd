@@ -1,5 +1,15 @@
 # Möbius —— 统一 Agent 核心（MVP）
 
+> **文档状态（2026-11-10）**：本 README 部分内容仍描述历史运行方式（Docker/boot/watchdog、on_demand 默认、旧安装路径），
+> 与当前代码/运行值不完全一致。产品边界、实际架构与差距以以下三份为准：
+> - `docs/PRODUCT-BOUNDARY.md`（v1.0 交付边界）
+> - `docs/ARCHITECTURE-AS-IS.md`（实际运行架构）
+> - `docs/ARCHITECTURE-GAP.md`（目标 vs 实际 / 收敛计划）
+>
+> 当前事实速记：数据库 PostgreSQL（`db_backend=pg`）；媒体运行值 `prewarm`；启动以 launcher + Core Supervisor 为准；
+> Docker/boot/watchdog 属于待退役的 legacy 面；QQ 为可选接入。
+
+
 把「QQ 群友 ↔ 角色 ↔ 生图/语音」从一堆拼装服务收成**一个原生系统**：
 
 ```
