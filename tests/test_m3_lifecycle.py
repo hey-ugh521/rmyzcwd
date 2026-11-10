@@ -115,6 +115,23 @@ def main() -> int:
         dumped = json.dumps(st)
         check("status 不包含口令字段", "PGPASSWORD" not in dumped and '"password"' not in dumped)
         check("status 含备份清单", st["backups_dir"] == str(tmp / "backups"))
+
+        print("\n[executors]")
+        orig = (lifecycle.stop_runtime, lifecycle.start_runtime, lifecycle.run_installer)
+        calls = {}
+        lifecycle.stop_runtime = lambda ctx: calls.setdefault("stop", True)
+        lifecycle.start_runtime = lambda ctx: calls.setdefault("start", True)
+        lifecycle.run_installer = lambda ctx, inst: calls.setdefault("install", str(inst))
+        try:
+            up = lifecycle.execute_upgrade(ctx, inst, yes=True)
+            check("upgrade 执行返回 upgraded", up.get("upgraded") is True)
+            check("upgrade 调用 stop/install/start", calls.get("stop") and calls.get("install") and calls.get("start"))
+            j = json.loads((tmp / "upgrade-journal.json").read_text(encoding="utf-8"))
+            check("upgrade journal completed", j.get("phase") == "completed")
+            un = lifecycle.execute_uninstall(ctx, remove_data=False, yes=False)
+            check("uninstall 默认 dry-run", un.get("dry_run") is True and un.get("remove_data") is False)
+        finally:
+            lifecycle.stop_runtime, lifecycle.start_runtime, lifecycle.run_installer = orig
     finally:
         import shutil
         shutil.rmtree(tmp, ignore_errors=True)

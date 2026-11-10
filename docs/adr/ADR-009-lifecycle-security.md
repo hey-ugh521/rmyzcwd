@@ -1,6 +1,6 @@
 # ADR-009：安装、升级、备份、恢复、卸载与安全边界（M3）
 
-- 状态：**Proposed（M3a/M3b 已实现；M3c 安装器可移植化/首启 bootstrap/数据外置/版本矩阵已实现；干净机器演练与升级执行器待 M3d）**
+- 状态：**Proposed（M3a/M3b/M3c 代码已实现；干净机器演练/真实升级回滚待 M3d）**
 - 日期：2026-11-11
 - 关联：`PRODUCT-BOUNDARY.md`（PB-03/04/06）、`ARCHITECTURE-GAP.md`（G-06/G-11，M3）、`ADR-006`（网关鉴权）、`ADR-007`（任务 owner）、`ADR-008`（Provider）
 - 目标：让 Möbius 从"开发者机器可运行"变成"**干净 Windows 可安装、可升级、可备份、可卸载**"；安全边界可验收。
@@ -131,6 +131,14 @@ mobius lifecycle uninstall [--remove-data]
 - `config.example` 对齐组件归档根目录（langbot/comfyui/gsv）；`version-matrix.json` 随安装包分发。
 - 卸载钩子：先 `MobiusCLI --headless stop`，再清 `Mobius Boot` 计划任务；数据目录默认保留。
 - 安装器已本地编译通过（per-user 目录、bootstrap、preflight、版本矩阵）；未上传/未部署。
+
+### M3c 代码完成项（2026-11-11）
+
+- 升级执行器 `execute_upgrade`：dry-run 计划 / 备份 / journal / stop / installer / start / 健康检查；失败写 failed journal（真实回滚演练待 M3d）。
+- 卸载执行器 `execute_uninstall`：默认 dry-run；`--yes` 停服务→清 `Mobius Boot`→Inno uninstall；`--remove-data` 才删除外置数据目录。
+- 备份时间戳冲突修复；lifecycle 测试 **23/23**（含 upgrade/uninstall 执行器 fake 验证）。
+- 安装器本地编译通过；未上传/未部署。
+- 未完成：Windows Sandbox/VM 干净安装/升级/卸载演练、真实升级失败回滚、安装 manifest/autostart 可选安装。
 
 ## 5. 待 PM 确认
 

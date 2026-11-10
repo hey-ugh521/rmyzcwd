@@ -24,7 +24,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -123,6 +125,8 @@ class Context:
     dbs: list[str]
     backups_dir: Path
     version: str
+    secrets: dict = field(default_factory=dict)
+    data_dir: Path = Path(".")
 
 
 def _load_json(path: Path) -> dict:
@@ -169,10 +173,14 @@ def load_context(root: str | Path | None = None) -> Context:
                           or root / "backups")).expanduser()
     if not backups_dir.is_absolute():
         backups_dir = root / backups_dir
+    data_dir = Path(str((cfg.get("paths") or {}).get("DATA") or root / "data")).expanduser()
+    if not data_dir.is_absolute():
+        data_dir = root / data_dir
     return Context(root=root, cfg=cfg, config_path=cfg_path,
                    secrets_path=_secret_path(root, cfg), pg=PgTools(bin_dir, target),
                    dbs=dbs, backups_dir=backups_dir,
-                   version=str(cfg.get("version") or os.environ.get("MOBIUS_VERSION") or "unknown"))
+                   version=str(cfg.get("version") or os.environ.get("MOBIUS_VERSION") or "unknown"),
+                   secrets=secrets, data_dir=data_dir)
 
 
 def _sha256(path: Path) -> str:
@@ -202,6 +210,14 @@ def create_backup(ctx: Context, out_dir: str | Path | None = None) -> dict:
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     dest = Path(out_dir) if out_dir else ctx.backups_dir
     dest = dest / f"Mobius-backup-{stamp}"
+    if dest.exists():
+        n = 2
+        while True:
+            candidate = dest.with_name(dest.name + f"-{n}")
+            if not candidate.exists():
+                dest = candidate
+                break
+            n += 1
     dest.mkdir(parents=True, exist_ok=False)
     _harden_dir(dest)
     (dest / "pg").mkdir()
@@ -292,6 +308,71 @@ def restore_scratch(ctx: Context, backup: str | Path) -> dict:
     return {"ok": True, "backup": str(p), "restored": results}
 
 
+def _core_token(ctx: Context) -> str:
+    return str((ctx.secrets.get("core") or {}).get("api_key") or "")
+
+
+def _http_json(ctx: Context, method: str, path: str, body: dict | None = None,
+               timeout: float = 10.0) -> dict:
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Content-Type": "application/json"}
+    token = _core_token(ctx)
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    req = urllib.request.Request("http://127.0.0.1:8900" + path, data=data,
+                                 method=method, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8") or "{}")
+
+
+def runtime_running(ctx: Context) -> bool:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8900/health", timeout=2) as r:
+            return r.status == 200
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def stop_runtime(ctx: Context, timeout: float = 90.0) -> bool:
+    """停 Core/服务；未运行视为成功。"""
+    if not runtime_running(ctx):
+        return True
+    try:
+        _http_json(ctx, "POST", "/api/services/stop-all", {}, timeout=30)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        _http_json(ctx, "POST", "/api/shutdown", {}, timeout=15)
+    except Exception:  # noqa: BLE001
+        pass
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not runtime_running(ctx):
+            return True
+        time.sleep(1)
+    return False
+
+
+def start_runtime(ctx: Context, timeout: float = 180.0) -> bool:
+    exe = ctx.root / "MobiusCLI.exe"
+    if exe.is_file():
+        subprocess.Popen([str(exe), "--headless", "start"], cwd=str(ctx.root),
+                         creationflags=0x08000000 if os.name == "nt" else 0)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if runtime_running(ctx):
+            return True
+        time.sleep(2)
+    return False
+
+
+def run_installer(ctx: Context, installer: Path) -> None:
+    r = subprocess.run([str(installer), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+                        f"/DIR={ctx.root}"], timeout=600)
+    if r.returncode != 0:
+        raise LifecycleError(f"安装器退出码 {r.returncode}")
+
+
 def upgrade_plan(ctx: Context, installer: str | Path) -> dict:
     installer = Path(installer).resolve()
     if not installer.is_file():
@@ -329,6 +410,53 @@ def status(ctx: Context) -> dict:
     }
 
 
+def execute_upgrade(ctx: Context, installer: str | Path, *, yes: bool = False) -> dict:
+    installer = Path(installer).resolve()
+    plan = upgrade_plan(ctx, installer)
+    if not yes:
+        return {"ok": True, "dry_run": True, **plan}
+    backup = create_backup(ctx)
+    journal = write_journal(ctx, {"phase": "backup_done", "backup": backup["backup"],
+                                  "installer": plan["installer"],
+                                  "created_at": dt.datetime.now().isoformat(timespec="seconds")})
+    if not stop_runtime(ctx):
+        write_journal(ctx, {"phase": "stop_failed", "backup": backup["backup"]})
+        raise LifecycleError("停止 Möbius 运行实例超时，升级中止")
+    write_journal(ctx, {"phase": "stopped", "backup": backup["backup"],
+                        "installer": plan["installer"]})
+    try:
+        run_installer(ctx, installer)
+        if not start_runtime(ctx):
+            raise LifecycleError("升级后健康检查失败")
+        write_journal(ctx, {"phase": "completed", "backup": backup["backup"],
+                            "installer": plan["installer"]})
+        return {"ok": True, "upgraded": True, "backup": backup["backup"],
+                "journal": str(journal)}
+    except Exception as exc:  # noqa: BLE001
+        write_journal(ctx, {"phase": "failed", "backup": backup["backup"],
+                            "installer": plan["installer"], "error": str(exc)})
+        raise LifecycleError(f"升级失败（已保留备份 {backup['backup']}）：{exc}") from exc
+
+
+def execute_uninstall(ctx: Context, *, remove_data: bool = False, yes: bool = False) -> dict:
+    plan = {
+        "root": str(ctx.root), "data": str(ctx.data_dir),
+        "autostart": "Mobius Boot", "remove_data": remove_data,
+    }
+    if not yes:
+        return {"ok": True, "dry_run": True, **plan}
+    stop_runtime(ctx)
+    subprocess.run(["schtasks", "/Delete", "/TN", "Mobius Boot", "/F"],
+                   capture_output=True, timeout=30)
+    unins = sorted(ctx.root.glob("unins*.exe"))
+    if unins:
+        subprocess.run([str(unins[0]), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+                       timeout=600)
+    if remove_data and str(ctx.data_dir) and ctx.data_dir != ctx.root:
+        shutil.rmtree(ctx.data_dir, ignore_errors=True)
+    return {"ok": True, "uninstalled": True, **plan}
+
+
 def _cli() -> int:
     ap = argparse.ArgumentParser(description="Möbius lifecycle")
     ap.add_argument("--root", default="")
@@ -343,9 +471,11 @@ def _cli() -> int:
     u = sub.add_parser("upgrade")
     u.add_argument("--installer", required=True)
     u.add_argument("--dry-run", action="store_true")
+    u.add_argument("--yes", action="store_true", help="确认执行停服/安装/健康检查")
     x = sub.add_parser("uninstall")
     x.add_argument("--dry-run", action="store_true")
     x.add_argument("--remove-data", action="store_true")
+    x.add_argument("--yes", action="store_true", help="确认执行卸载")
     args = ap.parse_args()
     ctx = load_context(args.root or None)
     if args.cmd == "status":
@@ -360,21 +490,12 @@ def _cli() -> int:
         print(json.dumps(restore_scratch(ctx, args.src), ensure_ascii=False, indent=2))
         return 0
     if args.cmd == "upgrade":
-        plan = upgrade_plan(ctx, args.installer)
-        if args.dry_run:
-            print(json.dumps(plan, ensure_ascii=False, indent=2))
-            return 0
-        backup = pre_upgrade_backup(ctx)
-        journal = write_journal(ctx, {"phase": "backup_done", "backup": backup["backup"],
-                                      "installer": plan["installer"],
-                                      "created_at": dt.datetime.now().isoformat(timespec="seconds")})
-        print(json.dumps({"ok": True, "backup": backup["backup"], "journal": str(journal),
-                          "note": "停服/安装/健康检查由 M3c 安装器接通"}, ensure_ascii=False, indent=2))
+        print(json.dumps(execute_upgrade(ctx, args.installer, yes=(args.yes and not args.dry_run)),
+                         ensure_ascii=False, indent=2))
         return 0
     if args.cmd == "uninstall":
-        print(json.dumps({"ok": True, "dry_run": True, "root": str(ctx.root),
-                          "remove_data": bool(args.remove_data),
-                          "note": "卸载执行器在 M3c 与安装器/autostart 一起接通"},
+        print(json.dumps(execute_uninstall(ctx, remove_data=args.remove_data,
+                                           yes=(args.yes and not args.dry_run)),
                          ensure_ascii=False, indent=2))
         return 0
     return 2
