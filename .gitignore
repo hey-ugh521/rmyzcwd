@@ -72,3 +72,6 @@ secrets.json
 **/secrets.json
 !ops/secrets/secrets.example.json
 backups/security/
+
+# 隐私画像（本地留存，仅移出仓库跟踪）
+config/account_profiles.json
