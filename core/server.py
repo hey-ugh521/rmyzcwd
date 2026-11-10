@@ -159,7 +159,12 @@ def _sse(event: str, data: Any) -> str:
 
 
 async def _sync_tasks() -> None:
-    """把网关里已经结束、但本地还是 running 的任务同步过来。"""
+    """gateway 回滚模式：把网关里已结束、本地仍 running 的任务拉回来。
+
+    core 模式下 Core 是唯一权威、网关经 /v1/tasks/{id}/events 主动上报，无需拉取（跳过）。
+    """
+    if os.environ.get("MOBIUS_TASK_OWNER", "core").strip().lower() != "gateway":
+        return
     for t in store.tasks_active():
         rid = t.get("remote_id")
         if not rid:
@@ -169,8 +174,8 @@ async def _sync_tasks() -> None:
         except Exception:
             continue
         obj = r.get("task") or r
-        st = obj.get("status")
-        if st in ("succeeded", "failed", "canceled", "submission_unknown"):
+        st = store.normalize_task_status(obj.get("status"))
+        if st in store.TASK_TERMINAL:
             result = obj.get("result") or {}
             store.task_update(t["id"], status=st, result=result,
                               error=obj.get("error"), finished_at=store.now())
@@ -564,7 +569,10 @@ async def api_cancel_task_v1(task_id: str):
 @app.get("/api/tasks")
 async def api_tasks(limit: int = 50, status: str | None = None, source: str | None = None):
     await _sync_tasks()
-    return {"tasks": store.tasks_list(limit=limit, status=status, source=source)}
+    tasks = store.tasks_list(limit=limit, status=status, source=source)
+    for t in tasks:  # 方案A：对外统一规范词（历史行读时归一）
+        t["status"] = store.normalize_task_status(t.get("status"))
+    return {"tasks": tasks}
 
 
 @app.get("/api/tasks/{task_id}")
@@ -572,6 +580,7 @@ async def api_task(task_id: str):
     t = store.task_get(task_id)
     if not t:
         raise HTTPException(404, "task not found")
+    t["status"] = store.normalize_task_status(t.get("status"))
     return t
 
 
@@ -580,14 +589,17 @@ async def api_task_cancel(task_id: str):
     t = store.task_get(task_id)
     if not t:
         raise HTTPException(404, "task not found")
-    if t["status"] in ("succeeded", "failed", "canceled", "submission_unknown"):
-        return {"ok": True, "task": t, "note": "已结束，无需取消"}
-    if t.get("remote_id"):
+    # ADR-007 §2.4 / B3 修复：写 cancel_requested，不直接覆盖终态；通知执行端中断，
+    # 终态由执行确认（完成先到则 completed + cancel_requested=true，单一终态）。
+    res = store.task_request_cancel(task_id)
+    if store.normalize_task_status(t["status"]) not in store.TASK_TERMINAL:
         with contextlib.suppress(Exception):
-            await gw.cancel(t["remote_id"])
-    store.task_update(task_id, status="canceled", finished_at=store.now())
-    store.audit("console", "task.cancel", {}, task_id=task_id, source="console")
-    return {"ok": True, "task": store.task_get(task_id)}
+            await gw.cancel(task_id)
+    store.audit("console", "task.cancel_requested", {}, task_id=task_id, source="console")
+    out = store.task_get(task_id)
+    if out:
+        out["status"] = store.normalize_task_status(out.get("status"))
+    return {"ok": True, "task": out, "note": res.get("note")}
 
 
 # ---------------------------------------------------------------- 角色

@@ -1053,7 +1053,8 @@ class GatewayClient:
         r = await self._request("GET", f"/api/tasks/{task_id}")
         obj = r.get("task")
         if isinstance(obj, dict) and "status" in obj:
-            obj["status"] = store.map_gateway_status(obj["status"])
+            # 方案A：统一 ADR-002 规范词（completed/cancelled/pending）；兼容旧词读时归一
+            obj["status"] = store.normalize_task_status(obj["status"])
         return r
 
     async def cancel(self, task_id: str) -> dict:
@@ -1071,8 +1072,8 @@ class GatewayClient:
         last: dict = {}
         while now() < deadline:
             last = await self.task(task_id)
-            st = (last.get("task") or last).get("status")
-            if st in ("succeeded", "failed", "canceled", "submission_unknown"):
+            st = store.normalize_task_status((last.get("task") or last).get("status"))
+            if st in store.TASK_TERMINAL:
                 return last.get("task") or last
             await asyncio.sleep(interval)
         return last.get("task") or {"status": "timeout", "id": task_id}

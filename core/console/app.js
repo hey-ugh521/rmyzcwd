@@ -46,11 +46,12 @@
   };
 
   var STATUS_TEXT = {
-    queued: '排队',
+    // 方案A：ADR-002 规范词为主；保留旧词键做防御（服务端已读时归一）
+    pending: '排队', queued: '排队',
     running: '运行中',
-    succeeded: '成功',
+    completed: '成功', succeeded: '成功',
     failed: '失败',
-    canceled: '已取消',
+    cancelled: '已取消', canceled: '已取消',
     submission_unknown: '提交未知',
     unknown: '未知'
   };
@@ -184,9 +185,16 @@
     return isFinite(n) ? n : fallback;
   }
 
+  // 方案A：规范词 → 既有 CSS badge 类（completed→succeeded、cancelled→canceled、pending→queued），
+  // 复用现有样式，无需新增 CSS；旧词直接命中。
+  var STATUS_CLASS_MAP = {
+    pending: 'queued', queued: 'queued', running: 'running',
+    completed: 'succeeded', succeeded: 'succeeded', failed: 'failed',
+    cancelled: 'canceled', canceled: 'canceled', submission_unknown: 'submission_unknown'
+  };
   function statusClass(s) {
     var v = String(s || 'unknown').toLowerCase();
-    return ['queued', 'running', 'succeeded', 'failed', 'canceled', 'submission_unknown'].indexOf(v) >= 0 ? v : 'canceled';
+    return STATUS_CLASS_MAP[v] || 'canceled';
   }
 
   function statusText(s) { return STATUS_TEXT[String(s || 'unknown').toLowerCase()] || String(s || '未知'); }
@@ -440,7 +448,7 @@
     var counters = data.counters || {};
     var hasTodayKeys = Object.prototype.hasOwnProperty.call(counters, 'tasks_today');
     var running = numberOr(counters.running, 0);
-    var queued = numberOr(counters.queued, 0);
+    var queued = numberOr(counters.pending != null ? counters.pending : counters.queued, 0);
     var active = media.active_tasks !== undefined && media.active_tasks !== null
       ? numberOr(media.active_tasks, running + queued)
       : running + queued;

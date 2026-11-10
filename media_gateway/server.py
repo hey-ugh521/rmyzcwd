@@ -2289,13 +2289,49 @@ async def do_tts(
         store.record_voice_task(
             spec, None, error=exc.error, source=source, user_id=user_id, session_id=session_id
         )
+        await _register_voice_authoritative(cfg, body, spec, source, user_id, session_id,
+                                            character, result=None, error_code=exc.error)
         raise
     task = store.record_voice_task(
         spec, result, source=source, user_id=user_id, session_id=session_id
     )
     result = dict(result)
     result["task_id"] = task.id
+    auth_id = await _register_voice_authoritative(cfg, body, spec, source, user_id, session_id,
+                                                  character, result=result, error_code=None)
+    if auth_id:
+        result["task_id"] = auth_id  # B2：回传 Core 权威 task_id
     return result
+
+
+async def _register_voice_authoritative(cfg: "Settings", body: dict, spec: dict, source: str,
+                                        user_id, session_id, character, result, error_code) -> str | None:
+    """B2：core 模式为语音补记 Core 权威任务（kind=speech）并写终态；失败不阻断已合成语音。"""
+    if task_owner_mode() != "core":
+        return None
+    try:
+        ct = await core_tasks(cfg).create_task(
+            kind="speech",
+            payload={"text": spec.get("prompt"), "voice": spec.get("voice"),
+                     "engine": spec.get("engine"), "speed": spec.get("speed"),
+                     "character": (character or {}).get("id")},
+            idempotency_key=str(body.get("idempotency_key") or ""),
+            source=source, user_id=user_id, session_id=session_id,
+            character=(character or {}).get("id"), prompt=str(spec.get("prompt") or ""))
+        tid = ct["task_id"]
+        if result is not None:
+            await core_tasks(cfg).send_event(
+                tid, event="completed",
+                result={"url": result.get("audio_url"), "filename": result.get("filename"),
+                        "seconds": result.get("seconds")})
+        else:
+            await core_tasks(cfg).send_event(tid, event="failed",
+                                             error_code=str(error_code or "tts_failed"),
+                                             error_message=str(error_code or "tts failed"))
+        return tid
+    except (CoreUnavailable, CoreTaskConflict) as exc:
+        log.warning("TTS 权威任务登记失败（不阻断）：%s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------

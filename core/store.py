@@ -348,7 +348,8 @@ def tasks_list(limit: int = 50, status: str | None = None, source: str | None = 
 
 
 def tasks_active(kind: str | None = None) -> list[dict]:
-    sql = "SELECT * FROM tasks WHERE status IN ('queued','running')"
+    # 方案A：活跃 = 规范词 pending/running（兼容历史词 queued）
+    sql = "SELECT * FROM tasks WHERE status IN ('pending','queued','running')"
     args: list[Any] = []
     if kind:
         sql += " AND kind=?"
@@ -365,10 +366,13 @@ def tasks_today_counts() -> dict:
             "SELECT status, COUNT(*) n FROM tasks WHERE created_at>=? GROUP BY status",
             (midnight,),
         ).fetchall()
-    out = {"succeeded": 0, "failed": 0, "canceled": 0, "running": 0, "queued": 0}
+    # 方案A：规范词桶；历史行（succeeded/canceled/queued）读时归一到规范桶
+    out = {"completed": 0, "failed": 0, "cancelled": 0, "running": 0,
+           "pending": 0, "submission_unknown": 0}
     for r in rows:
-        out[r["status"]] = r["n"]
-    out["total"] = sum(out.values())
+        bucket = normalize_task_status(r["status"])
+        out[bucket] = out.get(bucket, 0) + int(r["n"])
+    out["total"] = sum(v for k, v in out.items() if k != "total")
     return out
 
 
@@ -794,8 +798,9 @@ _TASK_STATUS_ALIASES = {
 }
 
 # 合法转移（ADR-002 + ADR-007 §9：submission_unknown 仅经 24h 超时/人工确认转 failed）
+# 注：同步任务（如 TTS 语音）无 running 阶段，允许 pending→completed 直接终态。
 ALLOWED_TASK_TRANSITIONS = {
-    TASK_PENDING: frozenset({TASK_RUNNING, TASK_CANCELLED, TASK_FAILED, TASK_UNKNOWN}),
+    TASK_PENDING: frozenset({TASK_RUNNING, TASK_COMPLETED, TASK_CANCELLED, TASK_FAILED, TASK_UNKNOWN}),
     TASK_RUNNING: frozenset({TASK_COMPLETED, TASK_FAILED, TASK_CANCELLED, TASK_UNKNOWN}),
     TASK_COMPLETED: frozenset(),
     TASK_FAILED: frozenset(),
