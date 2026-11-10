@@ -436,6 +436,102 @@ async def api_task_event(request: Request):
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"},
                             status_code=500)
 
+
+# ------------------------------------------------- M1a：Core 权威任务 API（ADR-007）
+# 受上方 auth_mw 保护（/v1* 非回环需 Bearer API_KEY），与现有 Core 鉴权一致。
+# 状态词统一 ADR-002 规范词；历史词经 normalize_task_status 归一（读取兼容）。
+
+@app.post("/v1/tasks")
+async def api_create_task(request: Request):
+    """创建任务 / 幂等命中。task_id 由 Core 分配；调用方只带 idempotency_key + payload。
+
+    同 key 同 payload → 返回原任务（idempotent_hit=true）；同 key 异 payload → 409。
+    """
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "invalid_json"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "invalid_body"}, status_code=400)
+    kind = str(body.get("kind") or "").strip()
+    payload = body.get("payload")
+    if kind not in ("image", "speech") or not isinstance(payload, dict):
+        return JSONResponse({"ok": False, "error": "invalid_kind_or_payload",
+                             "hint": "kind ∈ image|speech，payload 必须是对象"}, status_code=400)
+    source = str(body.get("source") or "console")
+    try:
+        task, hit = store.task_create_authoritative(
+            kind=kind, payload=payload,
+            idempotency_key=str(body.get("idempotency_key") or ""),
+            source=source, user_id=body.get("user_id"), session_id=body.get("session_id"),
+            character=body.get("character"), prompt=str(body.get("prompt") or ""),
+        )
+    except store.TaskConflictError as exc:
+        return JSONResponse({"ok": False, "error": "idempotency_conflict",
+                             "task_id": exc.task_id}, status_code=409)
+    store.audit(source, "task.create", {"kind": kind, "idempotent_hit": hit},
+                task_id=task["id"], source=source)
+    return {"ok": True, "task_id": task["id"],
+            "status": store.normalize_task_status(task["status"]), "idempotent_hit": hit}
+
+
+@app.post("/v1/tasks/{task_id}/events")
+async def api_task_auth_event(task_id: str, request: Request):
+    """执行事件写入（seq 幂等 + 状态机校验）。Core 是唯一状态写入者（ADR-007 §2.2）。"""
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "invalid_json"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "invalid_body"}, status_code=400)
+    event = str(body.get("event") or "").strip()
+    if not event:
+        return JSONResponse({"ok": False, "error": "missing_event"}, status_code=400)
+    try:
+        res = store.task_apply_authoritative_event(
+            task_id, event=event, seq=int(body.get("seq") or 0),
+            execution_id=body.get("execution_id"), error_code=body.get("error_code"),
+            error_message=body.get("error_message") or body.get("error"),
+            result=body.get("result"), lease_owner=body.get("lease_owner"),
+            lease_expires_at=body.get("lease_expires_at"), attempts=body.get("attempts"),
+        )
+    except KeyError:
+        return JSONResponse({"ok": False, "error": "task_not_found"}, status_code=404)
+    except store.IllegalTransitionError as exc:
+        return JSONResponse({"ok": False, "error": "illegal_transition",
+                             "from": exc.src, "to": exc.dst}, status_code=409)
+    return {"ok": True, **res}
+
+
+@app.get("/v1/tasks")
+async def api_list_tasks_v1(limit: int = 50, status: str | None = None,
+                            source: str | None = None):
+    tasks = store.tasks_list(limit=limit, status=status, source=source)
+    for t in tasks:
+        t["status"] = store.normalize_task_status(t.get("status"))
+    return {"tasks": tasks, "count": len(tasks)}
+
+
+@app.get("/v1/tasks/{task_id}")
+async def api_get_task_v1(task_id: str):
+    t = store.task_get(task_id)
+    if not t:
+        raise HTTPException(404, "task not found")
+    t["status"] = store.normalize_task_status(t.get("status"))
+    return t
+
+
+@app.post("/v1/tasks/{task_id}/cancel")
+async def api_cancel_task_v1(task_id: str):
+    """写 cancel_requested；终态由执行端确认（ADR-007 §2.4，不引入第二终态）。"""
+    try:
+        res = store.task_request_cancel(task_id)
+    except KeyError:
+        raise HTTPException(404, "task not found")
+    store.audit("console", "task.cancel_requested", {}, task_id=task_id, source="console")
+    return res
+
+
 @app.get("/api/tasks")
 async def api_tasks(limit: int = 50, status: str | None = None, source: str | None = None):
     await _sync_tasks()

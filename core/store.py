@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -122,7 +123,10 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks(
   id TEXT PRIMARY KEY, kind TEXT, status TEXT, source TEXT, user_id TEXT, session_id TEXT,
   character TEXT, prompt TEXT, params TEXT, result TEXT, error TEXT, remote_id TEXT,
-  created_at REAL, started_at REAL, finished_at REAL, updated_at REAL
+  created_at REAL, started_at REAL, finished_at REAL, updated_at REAL,
+  idempotency_key TEXT, payload_hash TEXT, payload_json TEXT, execution_id TEXT,
+  error_code TEXT, attempts INTEGER DEFAULT 0, lease_owner TEXT, lease_expires_at REAL,
+  cancel_requested INTEGER DEFAULT 0, version INTEGER DEFAULT 0, last_event_seq INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at DESC);
 
@@ -172,6 +176,56 @@ CREATE TABLE IF NOT EXISTS identities(
 """
 
 
+# ---------------------------------------------------------------- 迁移（M1a：Core 任务权威字段）
+# v1=原始 16 列；v2=ADR-007 任务权威字段（幂等/租约/执行/版本）。
+# CREATE TABLE IF NOT EXISTS 不会给既有库补列，故用幂等 ALTER 迁移；新库由 SCHEMA 直接建全列。
+CORE_SCHEMA_VERSION = 2
+
+# (列名, 声明)——声明在 sqlite 与 PG 上均可用于 ALTER TABLE ADD COLUMN
+TASKS_MIGRATION_COLS = (
+    ("idempotency_key", "TEXT"),
+    ("payload_hash", "TEXT"),
+    ("payload_json", "TEXT"),
+    ("execution_id", "TEXT"),
+    ("error_code", "TEXT"),
+    ("attempts", "INTEGER DEFAULT 0"),
+    ("lease_owner", "TEXT"),
+    ("lease_expires_at", "REAL"),
+    ("cancel_requested", "INTEGER DEFAULT 0"),
+    ("version", "INTEGER DEFAULT 0"),
+    ("last_event_seq", "INTEGER DEFAULT 0"),
+)
+
+
+def _table_columns(c, table: str) -> set[str]:
+    """返回表的现有列名（双后端）。"""
+    if DB_BACKEND == "pg":
+        rows = c.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name=?",
+            (table,),
+        ).fetchall()
+        return {r["column_name"] for r in rows}
+    rows = c.execute(f"PRAGMA table_info({table})").fetchall()
+    return {r["name"] for r in rows}
+
+
+def _migrate_tasks(c) -> None:
+    """把 tasks 表补齐到 CORE_SCHEMA_VERSION（幂等；新库无操作，旧库 ALTER 补列）。"""
+    c.execute("CREATE TABLE IF NOT EXISTS schema_meta(k TEXT PRIMARY KEY, v TEXT)")
+    have = _table_columns(c, "tasks")
+    for col, decl in TASKS_MIGRATION_COLS:
+        if col not in have:
+            c.execute(f"ALTER TABLE tasks ADD COLUMN {col} {decl}")
+    # 幂等键唯一索引：既有行 idempotency_key 为 NULL，PG/sqlite 唯一索引均允许多个 NULL，不冲突。
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_tasks_idem_key ON tasks(idempotency_key)")
+    row = c.execute("SELECT v FROM schema_meta WHERE k='schema_version'").fetchone()
+    ver = str(CORE_SCHEMA_VERSION)
+    if row is None:
+        c.execute("INSERT INTO schema_meta(k, v) VALUES(?, ?)", ("schema_version", ver))
+    else:
+        c.execute("UPDATE schema_meta SET v=? WHERE k='schema_version'", (ver,))
+
+
 def init_db() -> None:
     with _lock:
         c = conn()
@@ -180,6 +234,7 @@ def init_db() -> None:
             if DB_BACKEND == "pg":
                 script = script.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
             c.executescript(script)
+            _migrate_tasks(c)
             c.commit()
         finally:
             c.close()
@@ -234,6 +289,8 @@ def _task_row(row) -> dict:
     d = dict(row)
     d["params"] = _loads(d.get("params"), {})
     d["result"] = _loads(d.get("result"), None)
+    if "payload_json" in d:
+        d["payload"] = _loads(d.get("payload_json"), None)
     return d
 
 
@@ -710,3 +767,290 @@ def task_apply_event(event: dict) -> dict:
     if seq:
         kv_set("gateway_outbox_last_seq", seq)
     return {"applied": True, "seq": seq, "task_id": tid, "status": status}
+
+
+# ============================================================================
+# M1a：Core 权威任务生命周期（ADR-007）
+# ----------------------------------------------------------------------------
+# Core 是任务业务状态唯一 owner。以下统一用 ADR-002 规范词；历史词（queued/succeeded/
+# canceled）经 normalize_task_status 归一，兼容既有行与旧摄入路径。旧 task_apply_event /
+# _GW_STATUS 在 M1b 切换调用方前保持不变（本阶段纯增量，不改生产链路）。
+# ============================================================================
+
+TASK_PENDING = "pending"
+TASK_RUNNING = "running"
+TASK_COMPLETED = "completed"
+TASK_FAILED = "failed"
+TASK_CANCELLED = "cancelled"
+TASK_UNKNOWN = "submission_unknown"
+TASK_STATES = (TASK_PENDING, TASK_RUNNING, TASK_COMPLETED, TASK_FAILED, TASK_CANCELLED, TASK_UNKNOWN)
+TASK_TERMINAL = frozenset({TASK_COMPLETED, TASK_FAILED, TASK_CANCELLED, TASK_UNKNOWN})
+
+# 历史/别名 → ADR-002 规范词
+_TASK_STATUS_ALIASES = {
+    "queued": TASK_PENDING, "succeeded": TASK_COMPLETED, "canceled": TASK_CANCELLED,
+    "cancelled": TASK_CANCELLED, "completed": TASK_COMPLETED, "pending": TASK_PENDING,
+    "running": TASK_RUNNING, "failed": TASK_FAILED, "submission_unknown": TASK_UNKNOWN,
+}
+
+# 合法转移（ADR-002 + ADR-007 §9：submission_unknown 仅经 24h 超时/人工确认转 failed）
+ALLOWED_TASK_TRANSITIONS = {
+    TASK_PENDING: frozenset({TASK_RUNNING, TASK_CANCELLED, TASK_FAILED, TASK_UNKNOWN}),
+    TASK_RUNNING: frozenset({TASK_COMPLETED, TASK_FAILED, TASK_CANCELLED, TASK_UNKNOWN}),
+    TASK_COMPLETED: frozenset(),
+    TASK_FAILED: frozenset(),
+    TASK_CANCELLED: frozenset(),
+    TASK_UNKNOWN: frozenset({TASK_FAILED}),
+}
+
+# 不改变业务状态、只更新执行/租约字段的事件
+_NON_STATUS_EVENTS = frozenset({"progress", "lease"})
+
+
+def normalize_task_status(status) -> str:
+    """任意历史/规范状态词 → ADR-002 规范词；未知词原样返回（便于排查，不静默吞）。"""
+    s = str(status or "").strip().lower()
+    return _TASK_STATUS_ALIASES.get(s, s)
+
+
+def can_transition(src, dst) -> bool:
+    """状态机合法性。同状态视为幂等 no-op（合法）。"""
+    src, dst = normalize_task_status(src), normalize_task_status(dst)
+    if src == dst:
+        return True
+    return dst in ALLOWED_TASK_TRANSITIONS.get(src, frozenset())
+
+
+class TaskConflictError(Exception):
+    """同 idempotency_key 但 payload 不同（→ HTTP 409）。"""
+
+    def __init__(self, task_id: str) -> None:
+        super().__init__(f"idempotency_key 冲突：已存在任务 {task_id} 且 payload 不同")
+        self.task_id = task_id
+
+
+class IllegalTransitionError(Exception):
+    """非法状态转移（拒绝写入）。"""
+
+    def __init__(self, task_id: str, src: str, dst: str) -> None:
+        super().__init__(f"任务 {task_id} 非法状态转移 {src} → {dst}")
+        self.task_id, self.src, self.dst = task_id, src, dst
+
+
+def payload_hash(payload) -> str:
+    """payload 规范化 sha256（幂等冲突判定；字段顺序无关）。"""
+    canonical = json.dumps(payload or {}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _is_unique_violation(exc: Exception) -> bool:
+    if isinstance(exc, sqlite3.IntegrityError):
+        return "UNIQUE" in str(exc).upper()
+    try:
+        import psycopg
+        return isinstance(exc, psycopg.errors.UniqueViolation)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# 权威创建/写入用的完整列（含 M1a 新字段）
+_AUTH_COLS = (
+    "id", "kind", "status", "source", "user_id", "session_id", "character", "prompt",
+    "params", "result", "error", "remote_id",
+    "created_at", "started_at", "finished_at", "updated_at",
+    "idempotency_key", "payload_hash", "payload_json", "execution_id", "error_code",
+    "attempts", "lease_owner", "lease_expires_at", "cancel_requested", "version", "last_event_seq",
+)
+
+
+def task_create_authoritative(*, kind: str, payload: dict, idempotency_key: str = "",
+                              source: str = "console", user_id: str | None = None,
+                              session_id: str | None = None, character: str | None = None,
+                              prompt: str = "") -> tuple[dict, bool]:
+    """Core 权威创建 / 幂等命中。返回 (task, idempotent_hit)。task_id 由 Core 分配。
+
+    - 同 key 同 payload_hash → 原任务，hit=True
+    - 同 key 异 payload_hash → TaskConflictError（409）
+    - 并发同 key 撞唯一索引 → 回滚重查后同上
+    """
+    phash = payload_hash(payload)
+    key = (idempotency_key or "").strip()
+    now_ts = now()
+    result_id: str | None = None
+    hit = False
+    with conn() as c:
+        if key:
+            row = c.execute(
+                "SELECT id, payload_hash FROM tasks WHERE idempotency_key=?", (key,)
+            ).fetchone()
+            if row is not None:
+                if row["payload_hash"] == phash:
+                    result_id, hit = row["id"], True
+                else:
+                    raise TaskConflictError(row["id"])
+        if result_id is None:
+            tid = uid("t")
+            rec = {
+                "id": tid, "kind": kind, "status": TASK_PENDING, "source": source,
+                "user_id": user_id, "session_id": session_id, "character": character,
+                "prompt": prompt, "params": _dumps({}), "result": None, "error": None,
+                "remote_id": None, "created_at": now_ts, "started_at": None,
+                "finished_at": None, "updated_at": now_ts,
+                "idempotency_key": key or None, "payload_hash": phash,
+                "payload_json": _dumps(payload), "execution_id": None, "error_code": None,
+                "attempts": 0, "lease_owner": None, "lease_expires_at": None,
+                "cancel_requested": 0, "version": 0, "last_event_seq": 0,
+            }
+            try:
+                c.execute(
+                    f"INSERT INTO tasks({','.join(_AUTH_COLS)}) "
+                    f"VALUES({','.join('?' * len(_AUTH_COLS))})",
+                    tuple(rec[k] for k in _AUTH_COLS),
+                )
+                result_id, hit = tid, False
+            except Exception as exc:  # noqa: BLE001
+                if key and _is_unique_violation(exc):
+                    c.rollback()
+                    row = c.execute(
+                        "SELECT id, payload_hash FROM tasks WHERE idempotency_key=?", (key,)
+                    ).fetchone()
+                    if row is not None:
+                        if row["payload_hash"] == phash:
+                            result_id, hit = row["id"], True
+                        else:
+                            raise TaskConflictError(row["id"]) from exc
+                    raise
+                raise
+    return task_get(result_id), hit
+
+
+def task_apply_authoritative_event(task_id: str, *, event: str, seq: int = 0,
+                                   execution_id: str | None = None,
+                                   error_code: str | None = None,
+                                   error_message: str | None = None,
+                                   result=None, lease_owner: str | None = None,
+                                   lease_expires_at: float | None = None,
+                                   attempts: int | None = None) -> dict:
+    """Core 权威事件写入：seq 幂等 + 状态机校验。Core 是唯一状态写入者。
+
+    event ∈ running|completed|failed|cancelled|submission_unknown|progress|lease
+    （历史词 succeeded/canceled 自动归一）。非法转移抛 IllegalTransitionError；
+    任务不存在抛 KeyError。progress/lease 不改业务状态，只更新执行/租约字段。
+    """
+    target = normalize_task_status(event)
+    now_ts = now()
+    with conn() as c:
+        row = c.execute(
+            "SELECT id, status, last_event_seq, cancel_requested FROM tasks WHERE id=?",
+            (task_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(task_id)
+        cur = normalize_task_status(row["status"])
+        last_seq = int(row["last_event_seq"] or 0)
+        if seq and seq <= last_seq:
+            return {"duplicate": True, "seq": seq, "task_id": task_id, "status": cur}
+
+        sets: list[str] = ["updated_at=?", "version=version+1"]
+        args: list[Any] = [now_ts]
+        if seq:
+            sets.append("last_event_seq=?"); args.append(seq)
+        if execution_id is not None:
+            sets.append("execution_id=?"); args.append(execution_id)
+        if attempts is not None:
+            sets.append("attempts=?"); args.append(int(attempts))
+
+        if target in _NON_STATUS_EVENTS:
+            # 进度/租约续约：不动业务状态
+            if lease_owner is not None:
+                sets.append("lease_owner=?"); args.append(lease_owner)
+            if lease_expires_at is not None:
+                sets.append("lease_expires_at=?"); args.append(lease_expires_at)
+            args.append(task_id)
+            c.execute(f"UPDATE tasks SET {','.join(sets)} WHERE id=?", tuple(args))
+            return {"ok": True, "task_id": task_id, "status": cur, "seq": seq, "progress": True}
+
+        if not can_transition(cur, target):
+            raise IllegalTransitionError(task_id, cur, target)
+
+        sets.append("status=?"); args.append(target)
+        if error_code is not None:
+            sets.append("error_code=?"); args.append(error_code)
+        if error_message is not None:
+            sets.append("error=?"); args.append(error_message)
+        if result is not None:
+            sets.append("result=?"); args.append(_dumps(result))
+        if lease_owner is not None:
+            sets.append("lease_owner=?"); args.append(lease_owner)
+        if lease_expires_at is not None:
+            sets.append("lease_expires_at=?"); args.append(lease_expires_at)
+        if target == TASK_RUNNING:
+            sets.append("started_at=COALESCE(started_at, ?)"); args.append(now_ts)
+        if target in TASK_TERMINAL:
+            sets.append("finished_at=?"); args.append(now_ts)
+            sets.append("lease_owner=NULL"); sets.append("lease_expires_at=NULL")
+        args.append(task_id)
+        c.execute(f"UPDATE tasks SET {','.join(sets)} WHERE id=?", tuple(args))
+    return {"ok": True, "task_id": task_id, "status": target, "seq": seq}
+
+
+def task_request_cancel(task_id: str) -> dict:
+    """写 cancel_requested=1（终态由执行端确认）。已是终态则 no-op。
+
+    ADR-007 §2.4：完成先于取消到达 → completed + cancel_requested=true，不引入第二终态。
+    """
+    with conn() as c:
+        row = c.execute("SELECT id, status FROM tasks WHERE id=?", (task_id,)).fetchone()
+        if row is None:
+            raise KeyError(task_id)
+        cur = normalize_task_status(row["status"])
+        if cur in TASK_TERMINAL:
+            return {"ok": True, "task_id": task_id, "status": cur, "note": "已终态，无需取消"}
+        c.execute(
+            "UPDATE tasks SET cancel_requested=1, updated_at=?, version=version+1 WHERE id=?",
+            (now(), task_id),
+        )
+    return {"ok": True, "task_id": task_id, "status": cur, "cancel_requested": True}
+
+
+def task_renew_lease(task_id: str, owner: str, ttl_sec: float) -> dict:
+    """执行器续约：仅 running 任务可续约，刷新 lease_owner/lease_expires_at。"""
+    expires = now() + float(ttl_sec)
+    with conn() as c:
+        row = c.execute("SELECT id, status FROM tasks WHERE id=?", (task_id,)).fetchone()
+        if row is None:
+            raise KeyError(task_id)
+        cur = normalize_task_status(row["status"])
+        if cur != TASK_RUNNING:
+            return {"ok": False, "task_id": task_id, "status": cur, "reason": "not_running"}
+        c.execute(
+            "UPDATE tasks SET lease_owner=?, lease_expires_at=?, updated_at=? WHERE id=?",
+            (owner, expires, now(), task_id),
+        )
+    return {"ok": True, "task_id": task_id, "lease_expires_at": expires}
+
+
+def task_expire_stale_leases(grace_sec: float = 0.0) -> list[str]:
+    """把租约过期的 running 任务置 failed(lease_expired)。返回被置失败的 task_id 列表。
+
+    ADR-007 §9.2：过期由 Core 置 failed(lease_expired)，禁止永久 running。
+    """
+    cutoff = now() - float(grace_sec)
+    expired: list[str] = []
+    with conn() as c:
+        rows = c.execute(
+            "SELECT id FROM tasks WHERE status=? AND lease_expires_at IS NOT NULL "
+            "AND lease_expires_at < ?",
+            (TASK_RUNNING, cutoff),
+        ).fetchall()
+        for r in rows:
+            expired.append(r["id"])
+    for tid in expired:
+        try:
+            task_apply_authoritative_event(
+                tid, event=TASK_FAILED, error_code="lease_expired",
+                error_message="执行租约过期，Core 置失败（禁止永久 running）",
+            )
+        except (IllegalTransitionError, KeyError):
+            continue
+    return expired
