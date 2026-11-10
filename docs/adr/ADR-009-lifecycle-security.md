@@ -1,6 +1,7 @@
 # ADR-009：安装、升级、备份、恢复、卸载与安全边界（M3）
 
-- 状态：**Proposed（M3a/M3b/M3c 代码已实现；干净机器演练/真实升级回滚待 M3d）**
+- 状态：**Proposed（M3a/M3b/M3c 代码已实现；干净机器演练进行中，已暴露并修复 5 类首启缺陷；完整走查/真实升级回滚待 M3d）**
+- 演练记录：`docs/reports/M3C-CLEAN-VM-FINDINGS.md`
 - 日期：2026-11-11
 - 关联：`PRODUCT-BOUNDARY.md`（PB-03/04/06）、`ARCHITECTURE-GAP.md`（G-06/G-11，M3）、`ADR-006`（网关鉴权）、`ADR-007`（任务 owner）、`ADR-008`（Provider）
 - 目标：让 Möbius 从"开发者机器可运行"变成"**干净 Windows 可安装、可升级、可备份、可卸载**"；安全边界可验收。

@@ -44,11 +44,16 @@ if str(_HERE) not in _sys.path:
     _sys.path.insert(0, str(_HERE))
 from component_state import ComponentStateStore, StateTransitionError  # noqa: E402
 
-DEFAULT_7Z = os.environ.get("MOBIUS_7Z") or r"D:\AI\napcat-native\7z.exe"
+_LOCAL_7Z = Path(__file__).resolve().with_name("7z.exe")
+DEFAULT_7Z = os.environ.get("MOBIUS_7Z") or (str(_LOCAL_7Z) if _LOCAL_7Z.is_file() else r"D:\AI\napcat-native\7z.exe")
 
 
 def log(msg: str) -> None:
-    print(msg, flush=True)
+    try:
+        print(msg, flush=True)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(str(msg).encode(enc, "replace").decode(enc, "replace"), flush=True)
 
 
 def human(n: float) -> str:

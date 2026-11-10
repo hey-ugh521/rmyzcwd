@@ -551,7 +551,7 @@ def components_state() -> list[dict]:
     except (OSError, ValueError):
         versions = {}
     try:
-        states = _json.loads(open(os.path.join(ROOT, "component_states.json"), encoding="utf-8")).get("components", {})
+        states = _json.loads(open(os.path.join(ROOT, "component_states.json"), encoding="utf-8").read()).get("components", {})
     except (OSError, ValueError):
         states = {}
     rows = []
@@ -998,6 +998,9 @@ def cmd_bootstrap(source_dir: str = "") -> int:
     """M3c 首次运行：组件 → secrets → PG init → 配置就绪。"""
     _attach_console()
     _ensure_config_file()
+    local_7z = os.path.join(ROOT, "ops", "l3", "7z.exe")
+    if os.path.isfile(local_7z):
+        os.environ.setdefault("MOBIUS_7Z", local_7z)
     log("首次运行 bootstrap：安装必需组件 …")
     if not install_components(source_dir=source_dir):
         log("必需组件安装失败；可在启动器里重试")
@@ -1016,7 +1019,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Möbius 启动器")
     parser.add_argument("--headless", choices=[
         "start", "stop", "status",
-        "components", "install-components",
+        "components", "install-components", "bootstrap",
         "configure-llm", "test-llm", "migrate-models",
         "configure-github", "check-github",
     ], default=None)
@@ -1057,6 +1060,8 @@ def main() -> int:
         return cmd_components()
     if args.headless == "install-components":
         return 0 if install_components(source_dir=args.source_dir) else 1
+    if args.headless == "bootstrap":
+        return cmd_bootstrap(source_dir=args.source_dir)
     if args.headless == "configure-llm":
         ok, detail = configure_llm(args.base_url, args.api_key, args.model)
         print(("✓ " if ok else "✗ ") + detail)

@@ -52,6 +52,8 @@ Source: "{#SourceRoot}\docs\L3-PLAN.md"; DestDir: "{app}\docs"; Flags: ignorever
 Source: "{#SourceRoot}\docs\L3-LICENSES.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#SourceRoot}\docs\L3-COMPONENTS.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#SourceRoot}\ops\l3\downloader.py"; DestDir: "{app}\ops\l3"; Flags: ignoreversion
+Source: "{#SourceRoot}\ops\l3\7z.exe"; DestDir: "{app}\ops\l3"; Flags: ignoreversion
+Source: "{#SourceRoot}\ops\l3\7z.dll"; DestDir: "{app}\ops\l3"; Flags: ignoreversion
 Source: "{#SourceRoot}\ops\l3\packs\*.json"; DestDir: "{app}\ops\l3\packs"; Flags: ignoreversion
 Source: "{#SourceRoot}\ops\l3\licenses\THIRD-PARTY.md"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "{#SourceRoot}\ops\l3\licenses\licenses.json"; DestDir: "{app}\licenses"; Flags: ignoreversion
