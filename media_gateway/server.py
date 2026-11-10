@@ -1436,9 +1436,18 @@ class CoreTaskClient:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 r = await client.post(f"{self.base}/v1/tasks/{task_id}/events",
                                       json=body, headers=self._headers())
-            if r.status_code >= 300:
+            if r.status_code >= 500:
                 log.warning("上报 Core 事件 HTTP %s（保留重试）task=%s", r.status_code, task_id)
                 return False
+            if r.status_code >= 300:
+                if r.status_code in (408, 429):
+                    log.warning("上报 Core 事件 HTTP %s（保留重试）task=%s", r.status_code, task_id)
+                    return False
+                # 其余 4xx 是永久性拒绝（任务不存在/状态机冲突/鉴权拒绝）：保留会永久堵住 outbox 队头。
+                # 丢弃该事件并继续后续任务；5xx/超时仍保留重试。
+                log.warning("上报 Core 事件 HTTP %s（不可重试，丢弃）task=%s body=%s",
+                            r.status_code, task_id, r.text[:160])
+                return True
             data = r.json() or {}
             return bool(data.get("ok") or data.get("duplicate"))
         except Exception as exc:  # noqa: BLE001
@@ -1526,6 +1535,14 @@ class TaskStore(DurableTaskStore):
     # -- 生命周期 ---------------------------------------------------------
     async def bootstrap(self) -> None:
         """启动时恢复未完成任务，再拉起 worker 与 outbox 投递循环。"""
+        # 恢复前先处理「running 但无 remote_id」：这是 worker 在提交前崩溃的残留。
+        # 必须在 recover 之前做——recover 会把它标成 submission_unknown，之后就无法自动收尾。
+        stale = [t for t in self.list(limit=200)
+                 if t.status == STATUS_RUNNING and not t.remote_id]
+        for task in stale:
+            self.finish(task.id, status=STATUS_FAILED,
+                        error="worker_lost_before_submit", error_code="worker_lost")
+            log.warning("启动清理无执行ID的 running 任务 %s（本地 failed，outbox 补发 Core）", task.id)
         try:
             stats = await self.recover(self._probe_comfy)
             log.info("任务恢复完成：%s", stats)
@@ -1535,10 +1552,20 @@ class TaskStore(DurableTaskStore):
         # 恢复后仍是 running 的任务（ComfyUI 里还在跑）：重新接上等待，
         # 否则它们会永远停在 running，没人收尾。
         running = [t for t in self.list(limit=200) if t.status == STATUS_RUNNING]
+        resumed = 0
         for task in running:
+            if not task.remote_id:
+                # worker 在提交前崩溃（例如缺方法 AttributeError）会留下 running 且无执行 ID。
+                # 这类任务不可能被 _resume_running 接管，必须显式失败，否则永久 pending/running。
+                self.finish(task.id, status=STATUS_FAILED,
+                            error="worker_lost_before_submit", error_code="worker_lost")
+                # finish() 会在同一事务写 outbox；outbox 循环会把 failed 上报 Core。
+                log.warning("清理无执行ID的 running 任务 %s（本地 failed，outbox 补发 Core）", task.id)
+                continue
             asyncio.create_task(self._resume_running(task))
-        if running:
-            log.info("已重新接管 %d 个运行中的任务", len(running))
+            resumed += 1
+        if resumed:
+            log.info("已重新接管 %d 个运行中的任务", resumed)
 
         # M1c：对账 Core 的 running 孤儿任务（core 模式；失败交给 Core 租约过期收敛）
         asyncio.create_task(self._reconcile_core_running())
@@ -1698,8 +1725,9 @@ class TaskStore(DurableTaskStore):
                 continue
 
             self.active_id = task.id
-            lease_task = self._spawn_lease_renewal(task.id)
+            lease_task = None
             try:
+                lease_task = self._spawn_lease_renewal(task.id)
                 if task.cancel_requested:
                     self.finish(task.id, status=STATUS_CANCELLED)
                     continue
@@ -2068,6 +2096,15 @@ def _check_cancel(task) -> None:
         raise _TaskCanceled()
 
 
+def _wire_gateway_runtime(target, source=TaskStore) -> None:
+    """把 TaskStore 的网关层方法复制到 PG 版本；动态复制避免 M1c/M2c 新方法漏挂。"""
+    for name, value in source.__dict__.items():
+        if name.startswith("__") or name == "__init__":
+            continue
+        if callable(value):
+            setattr(target, name, value)
+
+
 # 阶段 2：任务存储后端可切换（sqlite 默认；pg 走 PostgreSQL）
 if os.environ.get("MOBIUS_TASK_STORE", "sqlite").lower() == "pg":
     from pg_taskstore import PgTaskStore
@@ -2083,13 +2120,16 @@ if os.environ.get("MOBIUS_TASK_STORE", "sqlite").lower() == "pg":
             self.active_id: str | None = None
             super().__init__(dsn, outbox_limit=outbox_limit)
 
-    # 把 TaskStore 上的网关层方法（不含 __init__）挂到 PG 版本
-    for _name in (
-        "bootstrap", "_resume_running", "ensure_worker", "_outbox_loop", "_send_core_event",
-        "_probe_comfy", "_worker_loop", "wait", "cancel", "record_voice_task", "_add_warning",
-        "_run_image", "_build_image_result", "_prepare_reference", "_run_voice",
-    ):
-        setattr(PgGatewayStore, _name, getattr(TaskStore, _name))
+    # 把 TaskStore 上的网关层方法（不含 __init__）动态挂到 PG 版本。
+    # 不能维护手写清单：M1c/M2c 新增 _spawn_lease_renewal/_run_image_impl 等曾漏挂，
+    # 导致 PG 生产路径 worker 在 try 之前 AttributeError，任务永久 running。
+    _wire_gateway_runtime(PgGatewayStore, TaskStore)
+    _required = ("bootstrap", "_worker_loop", "_spawn_lease_renewal", "_lease_renewal_loop",
+                 "_reconcile_core_running", "_run_image", "_run_image_impl",
+                 "_resume_running", "_resume_running_impl", "_outbox_loop", "_send_core_event")
+    _missing = [n for n in _required if not hasattr(PgGatewayStore, n)]
+    if _missing:
+        raise RuntimeError(f"PgGatewayStore 缺少运行时方法：{_missing}")
 
     store = PgGatewayStore(settings, os.environ["MOBIUS_TASK_DSN"], outbox_limit=500)
     log.info("任务存储后端：PostgreSQL")

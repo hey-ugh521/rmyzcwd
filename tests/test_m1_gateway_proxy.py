@@ -186,6 +186,24 @@ def test_core_client() -> None:
     check("send_event 5xx → False（outbox 保留重试）",
           run(client.send_event("t1", event="completed", seq=6)) is False)
 
+    def h_event_gone(method, url, body, params):
+        return _FakeResp(404, {"ok": False, "error": "task not found"})
+    _ROUTER["handler"] = h_event_gone
+    check("send_event 404 → True（死信丢弃，不堵队头）",
+          run(client.send_event("t1", event="completed", seq=7)) is True)
+
+    def h_event_conflict(method, url, body, params):
+        return _FakeResp(409, {"ok": False, "error": "invalid_transition"})
+    _ROUTER["handler"] = h_event_conflict
+    check("send_event 409 → True（死信丢弃）",
+          run(client.send_event("t1", event="completed", seq=8)) is True)
+
+    def h_event_429(method, url, body, params):
+        return _FakeResp(429, {"ok": False, "error": "rate_limited"})
+    _ROUTER["handler"] = h_event_429
+    check("send_event 429 → False（保留重试）",
+          run(client.send_event("t1", event="completed", seq=9)) is False)
+
     # get_task
     def h_get_ok(method, url, body, params):
         return _FakeResp(200, {"id": "t1", "status": "running"})

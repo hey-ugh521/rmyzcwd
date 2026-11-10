@@ -162,6 +162,13 @@ class MediaProvider(Protocol):
 - 测试：M2a 24/24、M2b 19/19、M2c 16/16；M1 真 E2E 14/14、client 11/11、recovery 17/17；网关 t5/t3/t4/async 全过；Core readiness/service/t1 全过。legacy 回退路径 async 37 通过。
 - **生产部署（2026-11-10）**：安装器 `59516e15b7b6f5f4f67d143cef5154f6bcc3127b620625574706abfcc2044c3f` 已安装；`/api/providers` 返回 mode=adapters；真实 Kokoro TTS 经 adapters 路径成功（task `t_422e0bb1` completed，音频 126044 bytes）；资源租约清零。回滚：`MOBIUS_MEDIA_PROVIDER=legacy`（Gateway 环境）+ 重启网关。备份：`D:\AI\backups\m2-deploy-20261110-232013`。
 
+## 7e. 生产事故修复（2026-11-10，M2 上线后）
+
+- PG 生产路径 `PgGatewayStore` 运行时方法手写清单漏挂，导致 worker 停在 running、生图永久 pending；
+  已改为动态复制 + 启动断言，并让 worker 的 spawn 处于 try 内。
+- outbox 4xx 死信化：404/409 等永久拒绝不再阻塞队列，5xx/408/429 保留重试。
+- 详见 `docs/reports/INCIDENT-20261110-pg-worker-outbox.md`；生产测试图 `t_652e75b1` completed。
+
 ## 6. 待确认决策
 
 1. Provider Adapter 放 Gateway（本 ADR 建议）还是部分放 Core？
