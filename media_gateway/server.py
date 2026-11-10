@@ -2152,57 +2152,8 @@ async def list_voices(cfg: Settings) -> dict[str, Any]:
     }
 
 
-async def synth_tts(
-    cfg: Settings, text: str, voice: str = "", engine: str = "mobius", speed: float = 1.0
-) -> dict[str, Any]:
-    text = str(text or "").strip()
-    if not text:
-        raise ApiError("missing_text", "text 不能为空")
-    if len(text) > 4000:
-        raise ApiError("text_too_long", "text 过长（>4000 字符），请拆分后合成")
-    engine = str(engine or "mobius").strip().lower()
-    if engine not in ("kokoro", "mobius", "f5"):
-        raise ApiError("unknown_engine", f"未知 TTS 引擎 {engine!r}；可用: kokoro / mobius")
-    base_url = cfg.kokoro_url if engine == "kokoro" else cfg.f5_url
-    if not voice:
-        voice = "mobius" if engine in ("mobius", "f5") else "zf_xiaobei"
-    speed = _as_float(speed) or 1.0
-    speed = max(0.5, min(2.0, speed))
-
-    payload = {
-        "model": "tts",
-        "input": text,
-        "voice": voice,
-        "response_format": "wav",
-        "speed": speed,
-    }
-    async def _post_tts(eng: str) -> tuple[Any, str]:
-        target = cfg.kokoro_url if eng == "kokoro" else cfg.f5_url
-        voice_name = "mobius" if eng in ("mobius", "f5") else "zf_xiaobei"
-        body = dict(payload)
-        body["voice"] = voice_name
-        try:
-            async with httpx.AsyncClient(timeout=cfg.tts_timeout) as client:
-                return await client.post(f"{target}/v1/audio/speech", json=body), target
-        except Exception as exc:  # noqa: BLE001
-            raise ApiError("tts_unavailable", f"TTS 引擎 {eng} 不可达（{target}）: {exc}", 503) from exc
-
-    try:
-        resp, _target = await _post_tts(engine)
-    except ApiError:
-        if engine == "kokoro":
-            raise
-        log.warning("TTS 引擎 %s 不可达，回退 kokoro", engine)
-        engine = "kokoro"
-        resp, _target = await _post_tts(engine)
-    if resp.status_code != 200:
-        if engine != "kokoro":
-            log.warning("TTS 引擎 %s 返回 %s，回退 kokoro", engine, resp.status_code)
-            engine = "kokoro"
-            resp, _target = await _post_tts(engine)
-        if resp.status_code != 200:
-            raise ApiError("tts_failed", f"TTS 引擎 {engine} 返回 HTTP {resp.status_code}: {resp.text[:300]}", 502)
-    audio = resp.content
+def _finalize_tts(cfg: Settings, audio: bytes, engine: str, voice: str, speed: float) -> dict[str, Any]:
+    """TTS 公共收尾：大小校验 + 原子落盘 + URL/秒数；legacy 与 adapters 共用。"""
     if not audio:
         raise ApiError("tts_empty_audio", "TTS 返回空音频", 502)
     if len(audio) > cfg.max_voice_bytes:
@@ -2214,7 +2165,6 @@ async def synth_tts(
     os.makedirs(cfg.tts_dir, exist_ok=True)
     filename = f"tts_{int(time.time())}_{random.randint(100, 999)}_{uuid.uuid4().hex[:6]}.wav"
     filepath = os.path.join(cfg.tts_dir, filename)
-    # 原子落盘 + 写后校验：避免并发/重启半截文件、以及相对路径写错位置
     tmp_path = filepath + ".tmp"
     try:
         with open(tmp_path, "wb") as f:
@@ -2252,6 +2202,69 @@ async def synth_tts(
         "path": f"/audio?{query}",
         "local_path": filepath,
     }
+
+
+async def synth_tts(
+    cfg: Settings, text: str, voice: str = "", engine: str = "mobius", speed: float = 1.0
+) -> dict[str, Any]:
+    text = str(text or "").strip()
+    if not text:
+        raise ApiError("missing_text", "text 不能为空")
+    if len(text) > 4000:
+        raise ApiError("text_too_long", "text 过长（>4000 字符），请拆分后合成")
+    engine = str(engine or "mobius").strip().lower()
+    if engine not in ("kokoro", "mobius", "f5"):
+        raise ApiError("unknown_engine", f"未知 TTS 引擎 {engine!r}；可用: kokoro / mobius")
+    base_url = cfg.kokoro_url if engine == "kokoro" else cfg.f5_url
+    if not voice:
+        voice = "mobius" if engine in ("mobius", "f5") else "zf_xiaobei"
+    speed = _as_float(speed) or 1.0
+    speed = max(0.5, min(2.0, speed))
+
+    if media_provider_mode() == "adapters":
+        from providers.base import ProviderError as _ProviderError
+        from providers.tts import synthesize_with_fallback
+
+        try:
+            audio_res = await synthesize_with_fallback(tts_registry(cfg), engine, text, voice, speed)
+        except _ProviderError as exc:
+            raise ApiError(exc.error_code, str(exc), exc.status) from exc
+        return _finalize_tts(cfg, audio_res.audio, audio_res.engine, audio_res.voice, audio_res.speed)
+
+    payload = {
+        "model": "tts",
+        "input": text,
+        "voice": voice,
+        "response_format": "wav",
+        "speed": speed,
+    }
+    async def _post_tts(eng: str) -> tuple[Any, str]:
+        target = cfg.kokoro_url if eng == "kokoro" else cfg.f5_url
+        voice_name = "mobius" if eng in ("mobius", "f5") else "zf_xiaobei"
+        body = dict(payload)
+        body["voice"] = voice_name
+        try:
+            async with httpx.AsyncClient(timeout=cfg.tts_timeout) as client:
+                return await client.post(f"{target}/v1/audio/speech", json=body), target
+        except Exception as exc:  # noqa: BLE001
+            raise ApiError("tts_unavailable", f"TTS 引擎 {eng} 不可达（{target}）: {exc}", 503) from exc
+
+    try:
+        resp, _target = await _post_tts(engine)
+    except ApiError:
+        if engine == "kokoro":
+            raise
+        log.warning("TTS 引擎 %s 不可达，回退 kokoro", engine)
+        engine = "kokoro"
+        resp, _target = await _post_tts(engine)
+    if resp.status_code != 200:
+        if engine != "kokoro":
+            log.warning("TTS 引擎 %s 返回 %s，回退 kokoro", engine, resp.status_code)
+            engine = "kokoro"
+            resp, _target = await _post_tts(engine)
+        if resp.status_code != 200:
+            raise ApiError("tts_failed", f"TTS 引擎 {engine} 返回 HTTP {resp.status_code}: {resp.text[:300]}", 502)
+    return _finalize_tts(cfg, audio, engine, voice, speed)
 
 
 async def do_tts(
@@ -2779,6 +2792,21 @@ async def route_health(request: Request) -> Response:
 
 
 _PROVIDER_REGISTRY: ProviderRegistry | None = None
+_TTS_REGISTRY: ProviderRegistry | None = None
+
+
+async def _tts_http_post(url: str, payload: dict, timeout: float = 120.0):
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        return await client.post(url, json=payload)
+
+
+def tts_registry(cfg: Settings) -> ProviderRegistry:
+    global _TTS_REGISTRY
+    if _TTS_REGISTRY is None:
+        from providers.tts import build_tts_registry
+
+        _TTS_REGISTRY = build_tts_registry(cfg, _tts_http_post)
+    return _TTS_REGISTRY
 
 
 def media_provider_mode() -> str:
@@ -2800,6 +2828,10 @@ def provider_registry(cfg: Settings) -> ProviderRegistry:
                 cancel_fn=lambda pid: comfy_cancel_prompt(cfg, pid),
                 query_fn=None,
             ))
+        from providers.tts import build_tts_registry
+
+        for provider in build_tts_registry(cfg, _tts_http_post).all():
+            reg.register(provider)
         _PROVIDER_REGISTRY = reg
     return _PROVIDER_REGISTRY
 

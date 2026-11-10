@@ -1,6 +1,6 @@
 # ADR-008：媒体 Provider Adapter 与资源调度（M2）
 
-- 状态：**Proposed（M2a 已实现并验收；M2b/M2c 待实现）**
+- 状态：**Proposed（M2a/M2b 已实现并验收；M2c/M2d 待实现）**
 - 日期：2026-11-10
 - 决策人：产品经理（M2 方向已定：Provider Adapter + 媒体资源调度，ComfyUI/TTS 解耦）
 - 关联：`ARCHITECTURE-v1.1.md`、`ADR-002`（状态词）、`ADR-007`（任务 owner）、`PRODUCT-BOUNDARY.md`、`ARCHITECTURE-GAP.md`（G-02/G-03/G-13）
@@ -138,6 +138,13 @@ class MediaProvider(Protocol):
 - `config.example.json`：新增 `media.providers/routing` 示例。
 - 测试：`media_gateway/test_m2_provider_contract.py` **23/23**；既有网关回归 t5 40、t3 9、t4 9、async 37 全过。
 - 未接执行路径：ComfyUI Adapter 尚未替换 legacy `_run_image`；TTS Adapter/资源调度在 M2b/M2c。
+
+## 7b. M2b 实现状态（2026-11-10）
+
+- `media_gateway/providers/tts.py`：Kokoro（CPU，tts）、GSV（GPU heavy，tts/voice_clone）、F5（GPU heavy，voice_clone）Provider；`synthesize` 返回音频字节，落盘/URL 由 `_finalize_tts` 统一处理。
+- `synth_tts`：`MOBIUS_MEDIA_PROVIDER=adapters` 时按 engine→Provider 路由并回退 kokoro（仅健康/服务端失败）；默认 legacy 行为不变。
+- `/api/providers` 已列出 comfyui/kokoro/gsv/f5 的能力/资源/并发。
+- 测试：`media_gateway/test_m2_tts_providers.py` **17/17**；adapters 路径实测可落盘并返回 `audio_url`；M2a 23/23；网关回归 t5 40、t3 9、t4 9、async 37 全过。
 
 ## 6. 待确认决策
 
