@@ -1,6 +1,6 @@
 # ADR-009：安装、升级、备份、恢复、卸载与安全边界（M3）
 
-- 状态：**Proposed（M3a 安全边界、M3b 备份/恢复已实现；M3c 安装器/升级执行器待实现）**
+- 状态：**Proposed（M3a/M3b 已实现；M3c 安装器可移植化+首次 bootstrap 已实现，干净机器演练待 M3d）**
 - 日期：2026-11-11
 - 关联：`PRODUCT-BOUNDARY.md`（PB-03/04/06）、`ARCHITECTURE-GAP.md`（G-06/G-11，M3）、`ADR-006`（网关鉴权）、`ADR-007`（任务 owner）、`ADR-008`（Provider）
 - 目标：让 Möbius 从"开发者机器可运行"变成"**干净 Windows 可安装、可升级、可备份、可卸载**"；安全边界可验收。
@@ -112,6 +112,18 @@ mobius lifecycle uninstall [--remove-data]
 - `restore --scratch` 创建临时库、pg_restore、校验表数后 drop；真实覆盖留到 M3c 停服/回滚接通。
 - 实测：生产备份 → scratch 恢复 `mobius_core 10 表 / mobius 6 表 / langbot 52 表`，临时库已清理；`tests/test_m3_lifecycle.py` 19/19。
 - 原 Docker 口径 `ops/pg_backup.py` 不再作为 M3 入口；M3c 删除/标注。
+
+## 4c. M3c 实现状态（2026-11-11，部分）
+
+- 安装器默认目录改为 `{localappdata}\Programs\Mobius`（per-user，免管理员）；升级/卸载语义待 M3d。
+- 安装后 `MobiusCLI.exe --headless bootstrap`：
+  1) 安装必需组件包（python-core/gateway/memory/langbot、postgres、napcat；从 Release 下载，可选本地 `--source-dir`）；
+  2) 生成 secrets（PG 口令、Core API key）；
+  3) `initdb` 便携 PG + 创建 `mobius_core`/`mobius`/`langbot`；
+  4) 启动 PG，留给 launcher 启动 Core。
+- `preflight.ps1` 改为配置驱动，无 `D:\AI`/Anaconda 硬编码；检查 launcher/core_python、gateway、pg_ctl、可选媒体组件。
+- `config.example.json` 对齐 runtime 组件路径（langbot/memory）。
+- 实测：便携 PG `initdb`→建库在临时端口 55433 通过；未做干净 Windows Sandbox/VM 演练（M3d）。
 
 ## 5. 待 PM 确认
 

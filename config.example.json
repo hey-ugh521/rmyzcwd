@@ -137,8 +137,8 @@
     "memory": {
       "enabled": true,
       "autostart": true,
-      "python": "${RUNTIME}/python-gateway/Scripts/python.exe",
-      "cwd": ".",
+      "python": "${RUNTIME}/python-memory/Scripts/python.exe",
+      "cwd": "${ROOT}",
       "args": [
         "ops\\memory\\memory_mcp.py",
         "--port",
@@ -172,7 +172,7 @@
     "langbot": {
       "enabled": true,
       "autostart": true,
-      "cwd": "${AI}\\langbot-native",
+      "cwd": "${RUNTIME}/langbot",
       "port": 5300,
       "health_url": "http://127.0.0.1:5300/healthz",
       "start_timeout_sec": 240,

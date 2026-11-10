@@ -12,7 +12,7 @@ AppId={{8F3C2A71-4D2B-4B7E-9C1A-6E5D7A1B2C31}
 AppName=Möbius
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-DefaultDirName=D:\AI\Mobius
+DefaultDirName={localappdata}\Programs\Mobius
 DefaultGroupName=Möbius
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -71,7 +71,10 @@ Name: "{group}\卸载 Möbius"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Möbius"; Filename: "{app}\Mobius.exe"; WorkingDir: "{app}"; IconFilename: "{app}\launcher\mobius.ico"; Tasks: desktopicon
 
 [Run]
+; M3c：首次运行先安装必需组件 + 初始化便携 PG/secrets；失败可在启动器重试
+Filename: "{app}\MobiusCLI.exe"; Parameters: "--headless bootstrap"; WorkingDir: "{app}"; Description: "初始化 Möbius 运行时"; Flags: postinstall runascurrentuser waituntilterminated skipifsilent
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\preflight.ps1"""; WorkingDir: "{app}"; Description: "运行环境检查"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\Mobius.exe"; WorkingDir: "{app}"; Description: "启动 Möbius"; Flags: postinstall nowait skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\logs"

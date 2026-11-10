@@ -21,6 +21,7 @@ import ctypes
 import importlib.util
 import json
 import os
+import secrets as pysecrets
 import shutil
 import subprocess
 import sys
@@ -303,6 +304,101 @@ def start_postgres(lc: dict) -> bool:
         creationflags=0x08000000,
     )
     return wait_until(lambda: port_open(lc["pg_port"]), 60)
+
+
+def _pg_bin(pg_ctl: str, name: str) -> str:
+    return os.path.join(os.path.dirname(pg_ctl), name + (".exe" if os.name == "nt" else ""))
+
+
+def _pg_env(password: str) -> dict:
+    env = os.environ.copy()
+    if password:
+        env["PGPASSWORD"] = password
+    return env
+
+
+def _ensure_local_secrets() -> bool:
+    """M3c：首次运行生成 PG 口令与 Core API key（写 secrets.json SSOT）。"""
+    try:
+        if not _core_secrets.get("pg", "password"):
+            _core_secrets.set_value("pg", "password", value=pysecrets.token_urlsafe(24))
+        if not _core_secrets.get("core", "api_key"):
+            _core_secrets.set_value("core", "api_key", value=pysecrets.token_urlsafe(32))
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log(f"生成 secrets 失败: {exc}")
+        return False
+
+
+def _psql_scalar(pg_ctl: str, port: int, db: str, sql: str, password: str) -> str:
+    r = subprocess.run(
+        [_pg_bin(pg_ctl, "psql"), "-h", "127.0.0.1", "-p", str(port), "-U", "postgres",
+         "-d", db, "-tAc", sql],
+        capture_output=True, text=True, timeout=30, env=_pg_env(password),
+            creationflags=0x08000000,
+    )
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout or "")[:300])
+    return (r.stdout or "").strip()
+
+
+def init_postgres_data(lc: dict) -> bool:
+    """首次运行初始化便携 PG：initdb → start → 建 mobius_core/mobius/langbot。"""
+    pg_ctl = str(lc.get("pg_ctl") or "")
+    data = str(lc.get("pg_data") or "")
+    port = int(lc.get("pg_port") or 55432)
+    if not pg_ctl or not os.path.isfile(pg_ctl):
+        log(f"初始化 PostgreSQL 失败：找不到 pg_ctl {pg_ctl}")
+        return False
+    if not data:
+        log("初始化 PostgreSQL 失败：未配置 pg_data")
+        return False
+    password = _core_secrets.get("pg", "password")
+    marker = os.path.join(data, "PG_VERSION")
+    if not os.path.isfile(marker):
+        os.makedirs(os.path.dirname(data) or data, exist_ok=True)
+        pwfile = os.path.join(os.path.dirname(data) or ".", ".pg_init_pw")
+        try:
+            with open(pwfile, "w", encoding="utf-8") as f:
+                f.write(password)
+            log("初始化 PostgreSQL 数据目录 …")
+            r = subprocess.run(
+                [_pg_bin(pg_ctl, "initdb"), "-D", data, "-U", "postgres",
+                 "--pwfile", pwfile, "--auth=scram-sha-256", "--encoding=UTF8"],
+                capture_output=True, text=True, timeout=180, env=_pg_env(password),
+                creationflags=0x08000000,
+            )
+            if r.returncode != 0:
+                log(f"initdb 失败：{(r.stderr or r.stdout or '')[:300]}")
+                return False
+        finally:
+            try:
+                os.unlink(pwfile)
+            except OSError:
+                pass
+    if not start_postgres(lc):
+        return False
+    try:
+        for db in ("mobius_core", "mobius", "langbot"):
+            exists = _psql_scalar(pg_ctl, port, "postgres",
+                                  f"select 1 from pg_database where datname='{db}'", password)
+            if exists != "1":
+                r = subprocess.run(
+                    [_pg_bin(pg_ctl, "createdb"), "-h", "127.0.0.1", "-p", str(port),
+                     "-U", "postgres", db],
+                    capture_output=True, text=True, timeout=60, env=_pg_env(password),
+                    creationflags=0x08000000,
+                )
+                if r.returncode != 0:
+                    # langbot 等可选库失败不阻断文本入口
+                    if db == "mobius_core" or db == "mobius":
+                        log(f"创建数据库 {db} 失败：{(r.stderr or r.stdout or '')[:300]}")
+                        return False
+                    log(f"可选数据库 {db} 创建失败（忽略）：{(r.stderr or '')[:120]}")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log(f"初始化数据库失败：{exc}")
+        return False
 
 
 def stop_postgres(lc: dict) -> None:
@@ -896,6 +992,24 @@ def _attach_console() -> None:
         sys.stderr = open("CONOUT$", "w", encoding="utf-8", buffering=1)
     except Exception:
         pass
+
+
+def cmd_bootstrap(source_dir: str = "") -> int:
+    """M3c 首次运行：组件 → secrets → PG init → 配置就绪。"""
+    _attach_console()
+    _ensure_config_file()
+    log("首次运行 bootstrap：安装必需组件 …")
+    if not install_components(source_dir=source_dir):
+        log("必需组件安装失败；可在启动器里重试")
+        return 1
+    if not _ensure_local_secrets():
+        return 1
+    cfg = load_config()
+    lc = launcher_cfg(cfg)
+    if not init_postgres_data(lc):
+        return 1
+    log("bootstrap 完成：PostgreSQL 与运行时已就绪")
+    return 0
 
 
 def main() -> int:

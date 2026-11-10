@@ -1,67 +1,87 @@
-﻿# Mobius 环境检查（安装后 / 首次运行）
+# Mobius 环境检查（M3c：配置驱动，不依赖开发路径）
 # 只读检查，不修改任何东西。
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File preflight.ps1
 # 退出码：0 = 关键依赖齐备；1 = 有关键缺失
 
 $ErrorActionPreference = 'SilentlyContinue'
 $root = Split-Path -Parent $PSScriptRoot
-$coreOk = $false
-$gwOk = $false
+$cfgPath = Join-Path $root 'config.json'
+if (-not (Test-Path $cfgPath)) { $cfgPath = Join-Path $root 'config.example.json' }
+
+function Expand-MobiusPath([string]$value, [string]$rootDir) {
+    if (-not $value) { return $value }
+    $v = $value
+    $v = $v.Replace('${ROOT}', $rootDir)
+    $v = $v.Replace('${RUNTIME}', (Join-Path $rootDir 'runtime'))
+    $v = $v.Replace('${DATA}', (Join-Path $rootDir 'data'))
+    $v = $v.Replace('${AI}', (Join-Path $rootDir 'runtime'))
+    $v = $v.Replace('${USERPROFILE}', $env:USERPROFILE)
+    return $v
+}
+
+$cfg = $null
+try { $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json } catch {}
+if (-not $cfg) {
+    Write-Host "无法读取配置: $cfgPath" -ForegroundColor Red
+    exit 1
+}
 
 function Check($name, $path, $required) {
-    if (Test-Path $path) {
-        Write-Host ("  [OK]   {0}: {1}" -f $name, $path) -ForegroundColor Green
+    $expanded = Expand-MobiusPath $path $root
+    if ($expanded -and (Test-Path $expanded)) {
+        Write-Host ("  [OK]   {0}: {1}" -f $name, $expanded) -ForegroundColor Green
         return $true
     }
     if ($required) {
-        Write-Host ("  [缺失] {0}: {1}" -f $name, $path) -ForegroundColor Red
+        Write-Host ("  [缺失] {0}: {1}" -f $name, $expanded) -ForegroundColor Red
         return $false
     }
-    Write-Host ("  [可选] {0}: {1}" -f $name, $path) -ForegroundColor Yellow
+    Write-Host ("  [可选] {0}: {1}" -f $name, $expanded) -ForegroundColor Yellow
     return $true
 }
 
 Write-Host ""
-Write-Host "===== Mobius 环境检查 =====" -ForegroundColor Cyan
+Write-Host "===== Möbius 环境检查（配置驱动） =====" -ForegroundColor Cyan
+Write-Host "  配置: $cfgPath"
 Write-Host ""
 
-Check "安装目录" $root $true | Out-Null
-Check "配置文件" (Join-Path $root 'config.json') $true | Out-Null
+$coreOk = $false
+$gwOk = $false
+$pgOk = $false
+$launcher = $cfg.launcher
+$services = $cfg.services
 
-$pyCore = 'D:\Anaconda3\envs\open-webui\python.exe'
-$pyGw = 'D:\AI\qqbot-mcp\Scripts\python.exe'
-$pyMem = 'D:\AI\mobius-memory\Scripts\python.exe'
-$uv = 'C:\Users\lenovo\.local\bin\uv.exe'
+$corePy = if ($launcher) { $launcher.core_python } else { $null }
+if (-not $corePy) { $corePy = ($services.gateway).python }
+$coreOk = Check "Core Python" $corePy $true
+$gwOk = Check "Gateway Python" ($services.gateway).python $true
+$pgOk = Check "PostgreSQL pg_ctl" (($services.postgres).exe) $true
+Check "Core 代码" (Join-Path $root 'core\server.py') $true | Out-Null
+Check "Gateway 代码" (Join-Path $root 'media_gateway\server.py') $true | Out-Null
+Check "secrets.json" (Join-Path $root 'data\secrets.json') $true | Out-Null
+Check "config.json" (Join-Path $root 'config.json') $false | Out-Null
 
-$coreOk = Check "Core Python 环境" $pyCore $true
-$gwOk = Check "网关 Python 环境" $pyGw $true
-Check "记忆 Python 环境" $pyMem $false | Out-Null
-Check "uv（LangBot 原生运行时）" $uv $true | Out-Null
-Check "原生 LangBot 源码" 'D:\AI\langbot-native\main.py' $true | Out-Null
+Check "LangBot" (($services.langbot).exe) $false | Out-Null
+Check "NapCat" (($services.napcat).exe) $false | Out-Null
+Check "ComfyUI" (($services.comfyui).python) $false | Out-Null
+Check "Kokoro" (($services.kokoro).python) $false | Out-Null
+Check "GSV" (($services.gsv).python) $false | Out-Null
 
-Check "便携 PostgreSQL" 'D:\AI\pgsql-portable\pgsql\bin\pg_ctl.exe' $true | Out-Null
-Check "原生 NapCat" 'D:\AI\napcat-native\NapCat.52230.Shell\NapCatWinBootMain.exe' $true | Out-Null
-Check "ComfyUI（生图，可选）" 'D:\AI\comic\ComfyUI_windows_portable\ComfyUI\main.py' $false | Out-Null
-Check "GPT-SoVITS（语音，可选）" 'D:\AI\GPT-SoVITS-v4\GPT-SoVITS-v4-20250529-nvidia50\api_v2.py' $false | Out-Null
-Check "ComfyUI 模型目录" 'D:\AI\comic\ComfyUI_windows_portable\ComfyUI\models' $false | Out-Null
-Check "语音模型目录" 'D:\AI\community_models' $false | Out-Null
-
-$ports = @(55432, 8900, 8899, 8902, 8903, 8000, 5300, 3000, 3001)
+$ports = @(55432, 8900, 8899, 8902, 8000, 5300, 3000, 3001)
 foreach ($p in $ports) {
     $busy = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
     if ($busy) {
-        Write-Host ("  [占用] 端口 {0} 已被监听（若 Mobius 已在运行属正常）" -f $p) -ForegroundColor Yellow
+        Write-Host ("  [占用] 端口 {0} 已被监听（若 Möbius 已在运行属正常）" -f $p) -ForegroundColor Yellow
     }
 }
 
 Write-Host ""
-if ($coreOk -and $gwOk) {
-    Write-Host "关键依赖齐备：双击 Mobius.exe 即可启动（需要管理员权限用于 NapCat）。" -ForegroundColor Green
-    Write-Host "模型目录缺失不影响文本聊天；生图/语音需要对应模型路径。"
+if ($coreOk -and $gwOk -and $pgOk) {
+    Write-Host "关键依赖齐备：双击 Mobius.exe 即可启动。" -ForegroundColor Green
+    Write-Host "可选组件缺失只影响生图/语音/QQ；文本聊天可先用。"
     Write-Host ""
     exit 0
-} else {
-    Write-Host "关键依赖缺失：请按上面 [缺失] 项安装/放置后再运行。" -ForegroundColor Red
-    Write-Host ""
-    exit 1
 }
+Write-Host "关键依赖缺失：请先运行 MobiusCLI.exe --headless bootstrap 安装必需组件。" -ForegroundColor Red
+Write-Host ""
+exit 1
