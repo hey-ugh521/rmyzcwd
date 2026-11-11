@@ -46,3 +46,32 @@
 - 本机截图：`%TEMP%\vnc*.png`（安装、bootstrap、失败日志）
 - 代码回归：`tests/test_m3c_bootstrap.py` 12/12；`tests/test_m3_lifecycle.py` 23/23；`tests/test_m3_security.py` 19/19
 - 本轮未部署生产；生产仍为 M2 + 事故热修。
+
+## M3d 续跑进展（2026-11-11 晚）
+
+### 已修复
+
+7. **旧组件残树导致 WinError 5**
+   - 现象：`os.replace(临时目录 → runtime/python-langbot)` 报拒绝访问；目标目录是上次失败留下的 `Lib/` 残树，`shutil.rmtree(ignore_errors=True)` 未删干净。
+   - 修复：`_replace_tree()` 先把旧目录改名让位，再移动新树；失败回滚；不再用 ignore_errors 掩盖。
+   - 验证：新增 ZIP 提取残留目标回归，`tests/test_m3c_bootstrap.py` 17/17。
+
+8. **干净系统缺少 MSVC 运行库 + Universal CRT**
+   - 现象：`initdb` 退出码 `0xC0000135`（DLL 未找到）；干净 Server 2022 无 `vcruntime140/msvcp140/ucrtbase`，也没有 25 个 UCRT forwarder。
+   - 修复：安装器携带 `vendor/msvc-runtime`（VC runtime + ucrtbase + api-ms-win-crt-*），bootstrap 在 `initdb` 前补进 PostgreSQL `bin`。
+   - 验证：`initdb --version` 可在干净 VM 运行；完整 `initdb` 仍见下方阻塞。
+
+9. **PyInstaller 动态导入缺 uuid**
+   - 现象：`No module named uuid`；downloader 是动态加载，PyInstaller 未收集新增 import。
+   - 修复：改用已导入的 `os.urandom` 生成后缀，避免新增模块依赖。
+
+### 仍未通过
+
+- 完整 `initdb` 仍以 `0xC0000135` 退出；Windows 报“找不到 libpq.dll”，但 `libpq.dll` 实际存在且 SHA256 与已知正常包一致，`libintl-9`/`libiconv-2`/`ssl`/`crypto` 也在 bin。
+- Dependencies 工具解析未给出明确缺失项；下一步需用 Procmon/加载器日志定位真实失败模块，或改为系统级 VC++ Redistributable/UCRT 安装路径。
+- 因此 PostgreSQL 初始化、Core 启动、健康检查、重启、升级回滚、卸载仍未完整验收。
+
+### 当前代码/产物
+
+- 提交前工作树：`ops/l3/downloader.py`、`launcher/mobius_launcher.py`、`installer/mobius.iss`、`vendor/msvc-runtime/`、`tests/test_m3c_bootstrap.py`。
+- 本地安装器已重建；未上传、未部署生产。

@@ -342,6 +342,37 @@ def _psql_scalar(pg_ctl: str, port: int, db: str, sql: str, password: str) -> st
     return (r.stdout or "").strip()
 
 
+def _ensure_pg_runtime(lc: dict) -> bool:
+    """干净机无 VC++ Redistributable：把随包运行库补进 PG bin。
+
+    PostgreSQL 便携包在 Windows 上依赖 MSVC 2015-2022 运行库；干净系统没有
+    这些 DLL 时 initdb 以 0xC0000135（DLL not found）退出。组件自身不带运行库，
+    因此由首启 bootstrap 从安装包的 vendor 目录补齐。
+    """
+    pg_bin = os.path.dirname(str(lc.get("pg_ctl") or ""))
+    vendor = os.path.join(ROOT, "vendor", "msvc-runtime")
+    if not pg_bin or not os.path.isdir(pg_bin):
+        return True
+    copied = []
+    if not os.path.isdir(vendor):
+        return True
+    for name in sorted(os.listdir(vendor)):
+        if not name.lower().endswith(".dll"):
+            continue
+        src = os.path.join(vendor, name)
+        dst = os.path.join(pg_bin, name)
+        if os.path.isfile(src) and not os.path.exists(dst):
+            try:
+                shutil.copy2(src, dst)
+                copied.append(name)
+            except OSError as exc:
+                log(f"补齐 PostgreSQL 运行库失败 {name}: {exc}")
+                return False
+    if copied:
+        log("已补齐 PostgreSQL VC 运行库: " + ", ".join(copied))
+    return True
+
+
 def init_postgres_data(lc: dict) -> bool:
     """首次运行初始化便携 PG：initdb → start → 建 mobius_core/mobius/langbot。"""
     pg_ctl = str(lc.get("pg_ctl") or "")
@@ -1009,6 +1040,8 @@ def cmd_bootstrap(source_dir: str = "") -> int:
         return 1
     cfg = load_config()
     lc = launcher_cfg(cfg)
+    if not _ensure_pg_runtime(lc):
+        return 1
     if not init_postgres_data(lc):
         return 1
     log("bootstrap 完成：PostgreSQL 与运行时已就绪")

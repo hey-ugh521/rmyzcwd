@@ -1,0 +1,7 @@
+Microsoft Visual C++ 2015-2022 Redistributable runtime DLLs
+(vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll)
+
+These files are redistributed with Möbius so the portable PostgreSQL component can
+run on clean Windows machines without a separate VC++ Redistributable install.
+They remain subject to the Microsoft Visual Studio redistributable license.
+Source: Microsoft Visual C++ Redistributable (x64), system32 copies from the build host.

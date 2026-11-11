@@ -56,6 +56,31 @@ def log(msg: str) -> None:
         print(str(msg).encode(enc, "replace").decode(enc, "replace"), flush=True)
 
 
+def _replace_tree(src: Path, target: Path) -> None:
+    """原子替换目录：先把旧 target 改名让位，再移动新树；失败时回滚旧树。
+
+    Windows 上 target 已存在或旧树含超长路径时，shutil.rmtree(ignore_errors=True)
+    可能留下残树，随后 os.replace 报 WinError 5。改名让位不遍历旧树，能绕开
+    该失败点，也让失败回滚有据可依。
+    """
+    backup: Path | None = None
+    if target.exists():
+        backup = target.with_name(f".{target.name}.mobius-old-{os.urandom(4).hex()}")
+        os.replace(target, backup)
+    try:
+        os.replace(src, target)
+    except OSError:
+        if backup is not None and not target.exists():
+            try:
+                os.replace(backup, target)
+            except OSError:
+                pass
+        raise
+    finally:
+        if backup is not None:
+            shutil.rmtree(backup, ignore_errors=True)
+
+
 def human(n: float) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
@@ -283,16 +308,12 @@ class Downloader:
             entries = [p for p in work.iterdir()]
             if len(entries) == 1 and entries[0].is_dir():
                 src = entries[0]
-                if target.exists():
-                    shutil.rmtree(target, ignore_errors=True)
-                os.replace(src, target)
+                _replace_tree(src, target)
             else:
                 target.mkdir(parents=True, exist_ok=True)
                 for child in entries:
                     dest = target / child.name
-                    if dest.exists():
-                        shutil.rmtree(dest, ignore_errors=True) if dest.is_dir() else dest.unlink()
-                    os.replace(child, dest)
+                    _replace_tree(child, dest)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -391,8 +412,6 @@ class Downloader:
             archive = self.download(cid)
             self.state_store.mark_installing(cid)
             log(f"  解压 {cid} -> {target}")
-            if target.exists() and force:
-                shutil.rmtree(target, ignore_errors=True)
             self._extract(archive, str((comp.get("install") or {}).get("format", "7z")).lower(), target)
             self.installed["components"][cid] = {
                 "id": cid,

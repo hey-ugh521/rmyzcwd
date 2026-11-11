@@ -54,6 +54,8 @@ Source: "{#SourceRoot}\docs\L3-COMPONENTS.md"; DestDir: "{app}\docs"; Flags: ign
 Source: "{#SourceRoot}\ops\l3\downloader.py"; DestDir: "{app}\ops\l3"; Flags: ignoreversion
 Source: "{#SourceRoot}\ops\l3\7z.exe"; DestDir: "{app}\ops\l3"; Flags: ignoreversion
 Source: "{#SourceRoot}\ops\l3\7z.dll"; DestDir: "{app}\ops\l3"; Flags: ignoreversion
+Source: "{#SourceRoot}\vendor\msvc-runtime\*.dll"; DestDir: "{app}\vendor\msvc-runtime"; Flags: ignoreversion
+Source: "{#SourceRoot}\vendor\msvc-runtime\NOTICE.txt"; DestDir: "{app}\vendor\msvc-runtime"; Flags: ignoreversion
 Source: "{#SourceRoot}\ops\l3\packs\*.json"; DestDir: "{app}\ops\l3\packs"; Flags: ignoreversion
 Source: "{#SourceRoot}\ops\l3\licenses\THIRD-PARTY.md"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "{#SourceRoot}\ops\l3\licenses\licenses.json"; DestDir: "{app}\licenses"; Flags: ignoreversion
