@@ -29,6 +29,8 @@ from fastapi.staticfiles import StaticFiles
 from . import store
 from .agent import Agent
 from .qq_adapter import QQAdapter
+from .registry import RegistryError, init_schema as init_registry_schema
+from .registry_api import registry_error_handler, router as registry_router
 from .services import GatewayClient, MediaDisabled, ServiceError, Supervisor
 
 CFG = store.CFG
@@ -45,6 +47,8 @@ STUDIO_DIR = Path(__file__).resolve().parent.parent / "web" / "studio" / "dist"
 
 app = FastAPI(title="Möbius Core", version="1.0.0")
 qq_adapter = QQAdapter(agent, CFG.get("qq") or {})
+app.add_exception_handler(RegistryError, registry_error_handler)
+app.include_router(registry_router)
 
 # 后台任务引用集合（防止 asyncio 任务被 GC；不等待完成）
 _BACKGROUND: set = set()
@@ -138,6 +142,7 @@ async def _task_convergence_loop() -> None:
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI):
     store.audit("core", "core.start", {"port": CORE.get("port")})
+    init_registry_schema()
     task = asyncio.create_task(sup.idle_loop())
     converge = asyncio.create_task(_task_convergence_loop())
     # 网关是轻进程（不占显存）：无论什么媒体模式都随 Core 起来，
