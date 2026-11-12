@@ -23,11 +23,12 @@ from typing import Any
 import httpx
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .agent import Agent
+from .qq_adapter import QQAdapter
 from .services import GatewayClient, MediaDisabled, ServiceError, Supervisor
 
 CFG = store.CFG
@@ -43,6 +44,7 @@ CONSOLE_DIR = Path(__file__).resolve().parent / "console"
 STUDIO_DIR = Path(__file__).resolve().parent.parent / "web" / "studio" / "dist"
 
 app = FastAPI(title="Möbius Core", version="1.0.0")
+qq_adapter = QQAdapter(agent, CFG.get("qq") or {})
 
 # 后台任务引用集合（防止 asyncio 任务被 GC；不等待完成）
 _BACKGROUND: set = set()
@@ -960,6 +962,26 @@ async def api_context_reset(session_id: str):
 @app.get("/api/audit")
 async def api_audit(limit: int = 100, kind: str | None = None):
     return {"audit": store.audit_list(limit=limit, kind=kind)}
+
+
+# ---------------------------------------------------------------- QQ OneBot
+
+@app.post("/onebot/event")
+async def onebot_event(request: Request, event: dict = Body(...)):
+    """OneBot v11 HTTP webhook（B1）。仅本机、需 token；处理放到后台，尽快返回。"""
+    if not qq_adapter.cfg.enabled:
+        return JSONResponse({"error": "qq adapter disabled"}, status_code=404)
+    if not qq_adapter.authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=403)
+    task = asyncio.create_task(qq_adapter.handle_event(event))
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
+    return Response(status_code=204)
+
+
+@app.get("/api/qq/status")
+async def api_qq_status():
+    return {"ok": True, **qq_adapter.status()}
 
 
 # ---------------------------------------------------------------- 控制台静态

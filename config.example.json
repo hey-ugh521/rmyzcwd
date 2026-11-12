@@ -253,6 +253,20 @@
   "characters_dir": "data/characters",
   "db": "${DATA}/mobius.db",
   "default_character": "bronya",
+  "qq": {
+    "enabled": false,
+    "onebot_http": "http://127.0.0.1:3000",
+    "token": "",
+    "self_id": "",
+    "character": "",
+    "group_require_at": true,
+    "allowed_groups": [],
+    "dedupe_ttl": 600,
+    "dedupe_max": 2048,
+    "max_reply_chars": 1200,
+    "action_timeout_sec": 15,
+    "allow_unauthenticated_loopback": false
+  },
   "integrations": {
     "langbot": {
       "base_url": "http://127.0.0.1:5300",
