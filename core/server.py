@@ -967,12 +967,19 @@ async def api_audit(limit: int = 100, kind: str | None = None):
 # ---------------------------------------------------------------- QQ OneBot
 
 @app.post("/onebot/event")
-async def onebot_event(request: Request, event: dict = Body(...)):
+async def onebot_event(request: Request):
     """OneBot v11 HTTP webhook（B1）。仅本机、需 token；处理放到后台，尽快返回。"""
     if not qq_adapter.cfg.enabled:
         return JSONResponse({"error": "qq adapter disabled"}, status_code=404)
-    if not qq_adapter.authorized(request):
+    raw = await request.body()
+    if not qq_adapter.authorized(request, raw):
         return JSONResponse({"error": "unauthorized"}, status_code=403)
+    try:
+        event = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+    if not isinstance(event, dict):
+        return JSONResponse({"error": "invalid event"}, status_code=400)
     task = asyncio.create_task(qq_adapter.handle_event(event))
     _BACKGROUND.add(task)
     task.add_done_callback(_BACKGROUND.discard)

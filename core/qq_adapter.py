@@ -119,8 +119,13 @@ class QQAdapter:
 
     # ------------------------------------------------------------------ auth
 
-    def authorized(self, request: Any) -> bool:
-        """Validate the inbound webhook token and loopback boundary."""
+    def authorized(self, request: Any, raw_body: bytes = b"") -> bool:
+        """Validate the inbound webhook token and loopback boundary.
+
+        NapCat's HTTP client sends ``X-Signature: sha1=HMAC-SHA1(raw_body, token)``
+        rather than an Authorization header. Support that plus direct bearer
+        tokens for other OneBot implementations/tests.
+        """
         host = getattr(getattr(request, "client", None), "host", "") or ""
         if host not in LOOPBACK:
             return False
@@ -131,7 +136,15 @@ class QQAdapter:
         token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
         if not token:
             token = str(headers.get("x-onebot-token") or "").strip()
-        return bool(token) and hmac.compare_digest(token, self.cfg.token)
+        if token and hmac.compare_digest(token, self.cfg.token):
+            return True
+        signature = str(headers.get("x-signature") or "").strip()
+        if signature.lower().startswith("sha1=") and raw_body:
+            expected = "sha1=" + hmac.new(
+                self.cfg.token.encode("utf-8"), raw_body, hashlib.sha1
+            ).hexdigest()
+            return hmac.compare_digest(signature.lower(), expected)
+        return False
 
     # ------------------------------------------------------------- event I/O
 

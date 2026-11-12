@@ -7,6 +7,8 @@ Run with the Core venv:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -177,6 +179,12 @@ def test_auth() -> None:
     check("无 token 拒绝", adapter.authorized(req("127.0.0.1", {})) is False)
     check("Bearer token 通过", adapter.authorized(req("127.0.0.1", {"authorization": "Bearer secret"})) is True)
     check("X-OneBot-Token 通过", adapter.authorized(req("127.0.0.1", {"x-onebot-token": "secret"})) is True)
+    raw = b'{"post_type":"message"}'
+    sig = "sha1=" + hmac.new(b"secret", raw, hashlib.sha1).hexdigest()
+    check("NapCat X-Signature 通过",
+          adapter.authorized(req("127.0.0.1", {"x-signature": sig}), raw) is True)
+    check("X-Signature 坏签名拒绝",
+          adapter.authorized(req("127.0.0.1", {"x-signature": "sha1=bad"}), raw) is False)
     check("非回环拒绝", adapter.authorized(req("192.168.1.10", {"authorization": "Bearer secret"})) is False)
     open_adapter = QQAdapter(FakeAgent(), {"enabled": True, "token": "",
                                             "allow_unauthenticated_loopback": True})
