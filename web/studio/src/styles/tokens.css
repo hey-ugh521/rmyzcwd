@@ -1,0 +1,247 @@
+/* ===========================================================================
+   Möbius Studio — 设计令牌
+    palette 由主题本身推导：深靛夜空（本机工作台）+ 电紫（Möbius 环 / 品牌）
+   + 品红（图像创作）+ 青（语音 / 信息）+ 语义绿/琥珀/红。暗色优先，含亮色主题。
+   =========================================================================== */
+
+:root,
+[data-theme="dark"] {
+  --c-base: 9 10 15;
+  --c-surface: 15 17 25;
+  --c-raised: 22 25 36;
+  --c-overlay: 28 32 46;
+  --c-line: 38 42 60;
+  --c-line-soft: 27 30 44;
+  --c-ink: 233 234 244;
+  --c-muted: 150 155 178;
+  --c-faint: 100 105 128;
+
+  --c-brand: 139 124 255;
+  --c-brand-soft: 167 156 255;
+  --c-magenta: 255 77 141;
+  --c-cyan: 34 211 238;
+  --c-success: 74 222 128;
+  --c-warning: 251 191 36;
+  --c-danger: 251 85 96;
+  --c-info: 96 165 250;
+
+  --glow-1: 139 124 255;
+  --glow-2: 255 77 141;
+  --glow-3: 34 211 238;
+  --grain-opacity: 0.035;
+  --shadow-ambient: 0 30px 80px -40px rgb(0 0 0 / 0.9);
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --c-base: 243 244 250;
+  --c-surface: 255 255 255;
+  --c-raised: 250 250 254;
+  --c-overlay: 255 255 255;
+  --c-line: 221 223 235;
+  --c-line-soft: 235 237 245;
+  --c-ink: 23 25 38;
+  --c-muted: 88 93 118;
+  --c-faint: 138 143 166;
+
+  --c-brand: 109 92 240;
+  --c-brand-soft: 139 124 255;
+  --c-magenta: 225 29 105;
+  --c-cyan: 8 145 178;
+  --c-success: 22 163 74;
+  --c-warning: 199 110 6;
+  --c-danger: 225 29 72;
+  --c-info: 37 99 235;
+
+  --glow-1: 139 124 255;
+  --glow-2: 255 77 141;
+  --glow-3: 34 211 238;
+  --grain-opacity: 0.02;
+  --shadow-ambient: 0 30px 70px -45px rgb(40 40 90 / 0.4);
+
+  color-scheme: light;
+}
+
+:root {
+  --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-display: "Segoe UI Variable Display", system-ui, -apple-system,
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Code", "SF Mono", "JetBrains Mono", ui-monospace,
+    "Consolas", "Liberation Mono", monospace;
+
+  --sidebar-w: 248px;
+  --sidebar-w-collapsed: 72px;
+  --topbar-h: 60px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: rgb(var(--c-base));
+  color: rgb(var(--c-ink));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+  overflow: hidden;
+}
+
+/* ---- 环境背景：分层极光 + 颗粒 + 极淡网格（克制、缓慢漂移） ---- */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.app-bg::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(38% 46% at 18% 12%, rgb(var(--glow-1) / 0.16), transparent 70%),
+    radial-gradient(34% 40% at 86% 18%, rgb(var(--glow-2) / 0.12), transparent 72%),
+    radial-gradient(46% 50% at 70% 96%, rgb(var(--glow-3) / 0.1), transparent 72%);
+  filter: blur(20px);
+  animation: drift 26s ease-in-out infinite;
+}
+.app-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+}
+.app-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgb(var(--c-line) / 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--c-line) / 0.16) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(70% 60% at 50% 0%, #000 0%, transparent 80%);
+  opacity: 0.5;
+}
+
+/* ---- 自定义滚动条（取自 palette） ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--c-line)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-line));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--c-brand) / 0.6);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::selection {
+  background: rgb(var(--c-brand) / 0.32);
+  color: rgb(var(--c-ink));
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--c-brand) / 0.8);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button {
+  font-family: inherit;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  color: inherit;
+}
+
+/* 数字 / 代码用等宽，强化“精密仪器”感 */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+/* 文本渐变（品牌） */
+.text-gradient {
+  background: linear-gradient(
+    100deg,
+    rgb(var(--c-brand-soft)),
+    rgb(var(--c-magenta)) 55%,
+    rgb(var(--c-cyan))
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 玻璃面板 */
+.glass {
+  background: rgb(var(--c-surface) / 0.72);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+/* 细描边卡片 */
+.hairline {
+  border: 1px solid rgb(var(--c-line-soft));
+}
+
+/* 状态点呼吸 */
+.led {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+.led-live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: inherit;
+  animation: pulse-ring 2.4s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
