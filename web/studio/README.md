@@ -50,7 +50,8 @@ src/styles/       tokens 与全局样式
 ## 当前边界（接手时状态）
 
 - 已导入 Qoder 基线：页面完整、构建通过、mock 流程可演示。
-- **真实 Core/Gateway 联调尚未完成**；live adapter 需要在本机后端可用时验收。
+- 已完成 **基础真实联调**：Core/Gateway 在线、任务列表/轮询、TTS 合成、图像生成、媒体 URL 加载。
+- 仍需系统性验收：自动恢复、取消/失败路径、长任务、鉴权 401、安装包内静态托管。
 - 后端暂无统一任务 SSE，任务/状态使用轮询（默认运行中 3.5s、空闲 18s）。
 - 暂无媒体库聚合 API，Gallery 从任务 `kind/result` 派生。
 - M3 安装/首启未收口，Studio 尚未接入安装包。
@@ -59,8 +60,11 @@ src/styles/       tokens 与全局样式
 ## 已验证
 
 - `pnpm build`：通过（129 modules）。
+- `pnpm typecheck`：通过。
 - 首启引导深链：直接打开 `#/settings` 不再被全屏引导遮挡；回首页仍会出现引导。
 - 自动模式回退：设置页会显示“未检测到本机 Core（127.0.0.1:8900），已回退演示数据。”
+- Live 联调：`/api/tasks` 62 条真实任务、任务状态轮询正常；Kokoro TTS 返回 5.3s WAV；图像生成完成并显示 832×1216 结果；Gallery/Tasks 图片 0 broken。
+- 媒体 URL：Gateway `/img` 在 ComfyUI 休眠/不可达时回退本地 output 文件（路径穿越有校验）。
 
 ## 相关文档
 

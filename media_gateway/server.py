@@ -3270,6 +3270,25 @@ async def route_wake(request: Request) -> Response:
 # ---- 代理路由 --------------------------------------------------------------
 
 
+def _local_output_image(comfy_output_dir: str, filename: str, subfolder: str) -> str | None:
+    """在 ComfyUI 休眠/不可达时，直接从 output 目录提供已生成图片。
+
+    旧实现 /img 永远代理 ComfyUI /view；ComfyUI 未启动时 gallery 全 404，
+    即使文件仍在磁盘。这里只接受 output 目录内的安全相对路径作为回退。
+    """
+    if not filename or os.path.basename(filename) != filename:
+        return None
+    if subfolder:
+        normalized = subfolder.replace("\\", "/")
+        if normalized.startswith("/") or ".." in normalized.split("/"):
+            return None
+    root = os.path.realpath(comfy_output_dir)
+    candidate = os.path.realpath(os.path.join(root, subfolder, filename))
+    if os.path.commonpath([root, candidate]) != root:
+        return None
+    return candidate if os.path.isfile(candidate) else None
+
+
 @api_route("/img", ["GET"])
 async def route_img(request: Request) -> Response:
     filename = request.query_params.get("filename", "")
@@ -3277,6 +3296,13 @@ async def route_img(request: Request) -> Response:
     image_type = request.query_params.get("type", "output")
     if not filename:
         raise ApiError("missing_filename", "/img 需要 ?filename=xxx.png")
+    # 优先本地 output：ComfyUI 可按需休眠，作品浏览不应依赖它在线。
+    if image_type == "output":
+        local = _local_output_image(settings.comfy_output_dir, filename, subfolder)
+        if local:
+            media_type = mimetypes.guess_type(local)[0] or "image/png"
+            with open(local, "rb") as f:
+                return Response(content=f.read(), media_type=media_type)
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.get(
