@@ -4,7 +4,7 @@
 - 状态：Phase 0 完成，等待审查；未进入 Phase 1
 - 基础契约：[Capability Registry 架构契约 v2](../aegis/plans/2026-11-13-capability-registry-contract.md)
 - ADR：[ADR-010 Registry Resource Lifecycle](../adr/ADR-010-registry-lifecycle.md)
-- 代码提交：`005a545`
+- 代码提交：`005a545`（Phase 0 主实现）、`c513e9c`（PG 重复引用错误处理修正）
 
 ## 1. 范围遵守
 
