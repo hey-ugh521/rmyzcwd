@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
@@ -578,7 +577,9 @@ class RegistryService:
                     "VALUES(?,?,?,?,?)",
                     (source_type, source_id, target_type, target_id, _now()),
                 )
-            except sqlite3.IntegrityError as exc:
+            except Exception as exc:  # sqlite3.IntegrityError / psycopg UniqueViolation
+                if exc.__class__.__name__ not in {"IntegrityError", "UniqueViolation"}:
+                    raise
                 raise RegistryError("reference_exists", "引用已存在", 409) from exc
             _audit(c, action="add_reference", resource_type=source_type,
                    resource_id=source_id, revision=None, actor=actor,
@@ -723,7 +724,9 @@ class RegistryService:
                     (key, operation, resource_type, resource_id, request_hash,
                      _canonical(response), _now()),
                 )
-        except sqlite3.IntegrityError:
+        except Exception as exc:  # sqlite3.IntegrityError / psycopg UniqueViolation
+            if exc.__class__.__name__ not in {"IntegrityError", "UniqueViolation"}:
+                raise
             # Concurrent same key: another request won; re-read and compare.
             existing = self._idempotent(key, operation, request_hash)
             if existing is None:
