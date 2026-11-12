@@ -2,7 +2,7 @@ import type { Api, LogsResponse, HistoryItem } from "../index";
 import type {
   SystemStatus, ServicesResponse, ServiceInfo, MediaConfig, MediaResources,
   Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
-  ChatSession, ChatMessage, ChatRequest, ChatEvent, Character,
+  ChatSession, ChatMessage, ChatRequest, ChatEvent, Character, ConstitutionResponse,
 } from "../types";
 import { ApiError } from "../client";
 import { normalizeStatus } from "../normalize";
@@ -32,6 +32,8 @@ export class MockBackend implements Api {
   private config: MediaConfig = { ...MEDIA_CONFIG };
   private sessions: ChatSession[] = [];
   private messages: Record<string, ChatMessage[]> = {};
+  private characters: Character[] = CHARACTERS.map((c) => ({ ...c }));
+  private constitutions: Record<string, { text: string; version: number; note: string }> = {};
   private history: HistoryItem[] = [];
   private schedules = new Map<string, Schedule>();
   private idem = new Map<string, string>();
@@ -48,6 +50,11 @@ export class MockBackend implements Api {
     const now = Date.now();
     this.services = SERVICES.map((s) => ({ ...s }));
     this.config = { ...MEDIA_CONFIG };
+    this.characters = CHARACTERS.map((c) => ({ ...c }));
+    this.constitutions = {};
+    for (const c of this.characters) {
+      if (c.constitution) this.constitutions[c.id] = { text: c.constitution, version: 1, note: "内置角色卡" };
+    }
     this.tasks = buildSeedTasks(now, generateArtwork, generateWav);
     this.sessions = CHAT_SESSIONS.map((s, i) => ({ ...s, updated_at: now - i * 9 * 60000 }));
     this.messages = {};
@@ -196,7 +203,41 @@ export class MockBackend implements Api {
   async getLoras(q = "") { const l = LORAS.filter((x) => !q || x.name.toLowerCase().includes(q.toLowerCase())); return { loras: l.map((x) => ({ ...x })) }; }
   async getVoices() { return { voices: VOICES.map((v) => ({ ...v })) }; }
   async getWorkflows() { return { workflows: WORKFLOWS.map((w) => ({ ...w })) }; }
-  async getCharacters() { return { characters: CHARACTERS.map((c) => ({ ...c })) }; }
+  async getCharacters() { return { characters: this.characters.map((c) => ({ ...c })) }; }
+  async getCharacter(id: string) {
+    const c = this.characters.find((x) => x.id === id);
+    if (!c) throw new ApiError("character_not_found", `未知角色 ${id}`, 404);
+    return { ...c };
+  }
+  async saveCharacter(id: string, body: Partial<Character>) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new ApiError("invalid_character_id", "角色 id 只能包含字母、数字、下划线、连字符", 400);
+    const idx = this.characters.findIndex((x) => x.id === id);
+    const next = { ...(idx >= 0 ? this.characters[idx] : { id }), ...body, id } as Character;
+    if (idx >= 0) this.characters[idx] = next; else this.characters.push(next);
+    if (next.constitution && !this.constitutions[id]) {
+      this.constitutions[id] = { text: next.constitution, version: 1, note: "角色卡导入" };
+    }
+    this.bump();
+    return { ok: true, character: { ...next } };
+  }
+  async getConstitution(id: string): Promise<ConstitutionResponse> {
+    const c = this.characters.find((x) => x.id === id);
+    const saved = this.constitutions[id];
+    const text = saved?.text || c?.constitution || "";
+    const active = text ? { text, version: saved?.version ?? 1, note: saved?.note ?? "", active: true } : null;
+    const versions = saved ? [{ version: saved.version, note: saved.note, active: true }] : [];
+    return { active, versions, fallback: c?.constitution || "" };
+  }
+  async saveConstitution(id: string, text: string, note = "") {
+    if (text.trim().length < 10) throw new ApiError("constitution_too_short", "系统提示词至少需要 10 个字符", 400);
+    const current = this.constitutions[id];
+    const next = { text: text.trim(), version: (current?.version ?? 0) + 1, note };
+    this.constitutions[id] = next;
+    const c = this.characters.find((x) => x.id === id);
+    if (c) c.constitution = next.text;
+    this.bump();
+    return { ok: true, constitution: { ...next, active: true } };
+  }
 
   async getTasks(params?: { limit?: number; status?: string; source?: string }) {
     let list = [...this.tasks];

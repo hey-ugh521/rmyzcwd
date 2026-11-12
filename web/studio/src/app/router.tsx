@@ -4,6 +4,7 @@ import { StudioHome } from "../features/studio/StudioHome";
 import { CreatePage } from "../features/create/CreatePage";
 import { TasksPage } from "../features/tasks/TasksPage";
 import { GalleryPage } from "../features/gallery/GalleryPage";
+import { CharactersPage } from "../features/characters/CharactersPage";
 import { ChatPage } from "../features/chat/ChatPage";
 import { SystemPage } from "../features/system/SystemPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
@@ -16,6 +17,7 @@ export function AppRoutes() {
         <Route path="create" element={<CreatePage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="gallery" element={<GalleryPage />} />
+        <Route path="characters" element={<CharactersPage />} />
         <Route path="chat" element={<ChatPage />} />
         <Route path="chat/:sessionId" element={<ChatPage />} />
         <Route path="system" element={<SystemPage />} />

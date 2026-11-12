@@ -8,7 +8,7 @@ import { toast } from "../store/feedback";
 import { friendlyError, isActive } from "./normalize";
 import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
-  ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, ProviderInfo, Character,
+  ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, ProviderInfo, Character, ConstitutionResponse,
   ChatSession, ChatMessage, GenerateRequest, TtsRequest,
 } from "./types";
 import type { LogsResponse, HistoryItem } from "./index";
@@ -38,6 +38,7 @@ export const qk = {
   voices: (m: string) => [...root(m), "voices"],
   workflows: (m: string) => [...root(m), "workflows"],
   characters: (m: string) => [...root(m), "characters"],
+  constitution: (m: string, id: string) => [...root(m), "constitution", id],
   tasks: (m: string) => [...root(m), "tasks"],
   task: (m: string, id: string) => [...root(m), "task", id],
   sessions: (m: string) => [...root(m), "sessions"],
@@ -160,6 +161,43 @@ export function useCharacters() {
     queryKey: qk.characters(mode),
     queryFn: () => getApi().getCharacters(),
     staleTime: 60000,
+  });
+}
+
+export function useConstitution(id: string | null) {
+  const mode = useApiMode();
+  return useQuery<ConstitutionResponse>({
+    queryKey: qk.constitution(mode, id ?? ""),
+    queryFn: () => getApi().getConstitution(id!),
+    enabled: !!id,
+    staleTime: 30000,
+  });
+}
+
+export function useSaveCharacter() {
+  const inv = useInvalidate();
+  const mode = useApiMode();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Partial<Character> }) => getApi().saveCharacter(id, body),
+    onSuccess: (res) => {
+      inv([qk.characters(mode), qk.constitution(mode, res.character.id)]);
+      toast.success("角色已保存", res.character.name || res.character.id);
+    },
+    onError: (e) => toast.error("保存角色失败", errText(e)),
+  });
+}
+
+export function useSaveConstitution() {
+  const inv = useInvalidate();
+  const mode = useApiMode();
+  return useMutation({
+    mutationFn: ({ id, text, note }: { id: string; text: string; note?: string }) =>
+      getApi().saveConstitution(id, text, note),
+    onSuccess: (_res, vars) => {
+      inv([qk.constitution(mode, vars.id), qk.characters(mode)]);
+      toast.success("系统提示词已保存");
+    },
+    onError: (e) => toast.error("保存系统提示词失败", errText(e)),
   });
 }
 

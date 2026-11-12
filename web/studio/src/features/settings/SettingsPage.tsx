@@ -15,7 +15,7 @@ import {
 import {
   IconSun, IconMoon, IconVolume, IconWifi, IconDatabase,
   IconCpu, IconRefresh, IconLock, IconInfo, IconSliders, IconClock,
-  IconCheck, IconLogo, IconStudio, IconGallery, IconWarning, IconPower,
+  IconCheck, IconLogo, IconStudio, IconGallery, IconWarning, IconPower, IconChat,
 } from "../../components/icons";
 
 const APP_VERSION = "1.0.0";
@@ -23,6 +23,7 @@ const APP_VERSION = "1.0.0";
 const SECTIONS = [
   { id: "appearance", label: "外观与声音", icon: IconSun },
   { id: "connection", label: "数据源与连接", icon: IconWifi },
+  { id: "qq", label: "QQ / LangBot", icon: IconChat },
   { id: "backend", label: "本机后端（只读）", icon: IconDatabase },
   { id: "data", label: "数据与隐私", icon: IconLock },
   { id: "about", label: "关于", icon: IconInfo },
@@ -301,6 +302,30 @@ export function SettingsPage() {
             <div className="flex items-start gap-2 py-3 text-[11px] leading-relaxed text-faint">
               <IconInfo size={13} className="mt-0.5 flex-none" />
               <span>进行中任务只显示「进行中」与不确定进度条，不伪造百分比；终态以执行端返回为准。</span>
+            </div>
+          </Section>
+
+          {/* QQ / LangBot */}
+          <Section id="qq" icon={<IconChat size={17} />} title="QQ / LangBot"
+            desc="QQ 入口的机器人、管道与插件配置仍由 LangBot 管理台负责。">
+            <div className="py-4">
+              <div className="rounded-lg border border-line-soft bg-raised/40 p-4">
+                <p className="text-sm font-medium text-ink">QQ 专用配置不在 Studio 内复制</p>
+                <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                  Studio 的「角色 / 系统提示词」作用于 Core 对话；QQ 消息当前仍走 LangBot 自己的人格、管道和记忆。
+                  需要改 QQ 的模型、插件、管道或登录态时，请打开 LangBot 管理台。
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button variant="soft" size="sm" icon={<IconChat size={13} />}
+                    onClick={() => window.open("http://127.0.0.1:5300", "_blank", "noopener")}>
+                    打开 LangBot 管理台
+                  </Button>
+                  <span className="text-[11px] text-faint">默认 http://127.0.0.1:5300；仅在 LangBot 运行时可用</span>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] leading-snug text-faint">
+                彻底统一 QQ 与 Studio 的人格/会话，需要把 LangBot 切到 Core 的 /v1/chat；当前未执行，属于后续架构工作。
+              </p>
             </div>
           </Section>
 

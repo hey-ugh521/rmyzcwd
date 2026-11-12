@@ -1,7 +1,7 @@
 import type {
   SystemStatus, ServicesResponse, ServiceInfo, MediaConfig, MediaResources,
   ProviderInfo, ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, Character,
-  Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
+  ConstitutionResponse, Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
   ChatSession, ChatMessage, ChatRequest, ChatEvent,
 } from "./types";
 import { useConnection, probeHealth } from "./client";
@@ -31,6 +31,10 @@ export interface Api {
   getVoices(): Promise<{ voices: VoiceInfo[] }>;
   getWorkflows(): Promise<{ workflows: WorkflowInfo[] }>;
   getCharacters(): Promise<{ characters: Character[] }>;
+  getCharacter(id: string): Promise<Character>;
+  saveCharacter(id: string, body: Partial<Character>): Promise<{ ok: boolean; character: Character }>;
+  getConstitution(id: string): Promise<ConstitutionResponse>;
+  saveConstitution(id: string, text: string, note?: string): Promise<{ ok: boolean; constitution: unknown }>;
   getTasks(params?: { limit?: number; status?: string; source?: string }): Promise<{ tasks: Task[] }>;
   getTask(id: string): Promise<Task>;
   cancelTask(id: string): Promise<{ ok: boolean; task?: Task; note?: string }>;

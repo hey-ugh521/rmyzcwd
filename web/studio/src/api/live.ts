@@ -2,7 +2,7 @@ import type { Api, LogsResponse, HistoryItem } from "./index";
 import { coreFetch, gwFetch, CORE_BASE, ApiError } from "./client";
 import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
-  GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
+  GenerateRequest, GenerateResponse, TtsRequest, TtsResponse, Character, ConstitutionResponse,
   ChatSession, ChatMessage, ChatRequest, ChatEvent,
 } from "./types";
 import { uid } from "../lib/utils";
@@ -44,6 +44,18 @@ export class LiveBackend implements Api {
   async getVoices() { const r = await coreFetch("/api/voices"); return { voices: arr(r, "voices") }; }
   async getWorkflows() { const r = await gwFetch("/api/workflows"); return { workflows: arr(r, "workflows") }; }
   async getCharacters() { const r = await coreFetch("/api/characters"); return { characters: arr(r, "characters") }; }
+  async getCharacter(id: string) { return coreFetch(`/api/characters/${encodeURIComponent(id)}`) as Promise<Character>; }
+  async saveCharacter(id: string, body: Partial<Character>) {
+    return coreFetch(`/api/characters/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }) as Promise<{ ok: boolean; character: Character }>;
+  }
+  async getConstitution(id: string) {
+    return coreFetch(`/api/characters/${encodeURIComponent(id)}/constitution`) as Promise<ConstitutionResponse>;
+  }
+  async saveConstitution(id: string, text: string, note = "") {
+    return coreFetch(`/api/characters/${encodeURIComponent(id)}/constitution`, {
+      method: "PUT", body: JSON.stringify({ text, note }),
+    }) as Promise<{ ok: boolean; constitution: unknown }>;
+  }
   async getTasks(params?: { limit?: number; status?: string; source?: string }) {
     const qs = new URLSearchParams();
     qs.set("limit", String(params?.limit ?? 100));

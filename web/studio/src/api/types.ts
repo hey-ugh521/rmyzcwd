@@ -173,6 +173,7 @@ export interface ProviderInfo {
 export interface Character {
   id: string;
   name?: string;
+  aliases?: string[];
   style_prompt?: string;
   negative_prompt?: string;
   workflow?: string;
@@ -180,9 +181,37 @@ export interface Character {
   size?: [number, number];
   loras?: unknown[];
   voice?: { engine?: string; voice?: string; speed?: number };
-  media_policy?: { allow_image?: boolean; allow_voice?: boolean };
+  media_policy?: { allow_image?: boolean; allow_voice?: boolean; allow_clone?: boolean };
   avatar?: string;
+  constitution?: string;
+  constitution_id?: string;
+  speech_style?: string;
+  relation_stance?: string;
+  taboo?: string[];
+  visual_anchor?: string;
+  notes?: string;
   [k: string]: unknown;
+}
+
+export interface ConstitutionVersion {
+  id?: string;
+  version?: number;
+  note?: string;
+  active?: boolean | number;
+  created_at?: number | string;
+}
+
+export interface Constitution {
+  text: string;
+  version?: number;
+  note?: string;
+  active?: boolean | number;
+}
+
+export interface ConstitutionResponse {
+  active: Constitution | null;
+  versions: ConstitutionVersion[];
+  fallback: string;
 }
 
 export interface ChatSession {

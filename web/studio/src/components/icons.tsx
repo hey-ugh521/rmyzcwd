@@ -46,6 +46,13 @@ export const IconChat = (p: IconProps) => (
     <path d="M8.5 11h.01M12 11h.01M15.5 11h.01" />
   </Base>
 );
+export const IconCharacters = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="3" y="3" width="18" height="18" rx="2.5" />
+    <circle cx="12" cy="9" r="2.5" />
+    <path d="M6.5 18c.8-2.8 2.7-4 5.5-4s4.7 1.2 5.5 4" />
+  </Base>
+);
 export const IconTasks = (p: IconProps) => (
   <Base {...p}>
     <path d="m3 6 2 2 3.5-3.5" />
