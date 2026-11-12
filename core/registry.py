@@ -16,7 +16,8 @@ import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from types import MappingProxyType
+from typing import Any, Iterator, Mapping
 
 from . import store
 
@@ -66,6 +67,17 @@ def _loads(raw: str | None) -> Any:
         return json.loads(raw)
     except Exception as exc:  # noqa: BLE001
         raise RegistryError("invalid_snapshot", f"revision snapshot 不是合法 JSON: {exc}") from exc
+
+
+def _freeze(value: Any) -> Any:
+    """Deeply freeze a snapshot so RequestContext callers cannot mutate it."""
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(k): _freeze(v) for k, v in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(v) for v in value)
+    if isinstance(value, tuple):
+        return tuple(_freeze(v) for v in value)
+    return value
 
 
 def _assert_type(resource_type: str) -> None:
@@ -237,6 +249,9 @@ def init_schema(*, _after_ddl: Any = None) -> None:
         "CREATE INDEX IF NOT EXISTS idx_registry_resources_type ON registry_resources(type,status,updated_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_registry_revisions_type ON registry_revisions(type,id,revision DESC)",
         "CREATE INDEX IF NOT EXISTS idx_registry_refs_target ON registry_references(target_type,target_id)",
+        # exactly one published revision per resource
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_registry_published_one "
+        "ON registry_revisions(type,id) WHERE state='published'",
     ]
     if store.DB_BACKEND == "pg":
         tables = [_pg_ddl(t) for t in tables]
@@ -268,6 +283,27 @@ def init_schema(*, _after_ddl: Any = None) -> None:
                 BEFORE UPDATE OR DELETE ON registry_revisions
                 FOR EACH ROW EXECUTE FUNCTION registry_revision_immutable()
             """)
+            c.execute("""
+                CREATE OR REPLACE FUNCTION registry_published_valid()
+                RETURNS trigger AS $$
+                BEGIN
+                  IF NEW.published_revision IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM registry_revisions
+                    WHERE type = NEW.type AND id = NEW.id
+                      AND revision = NEW.published_revision
+                  ) THEN
+                    RAISE EXCEPTION 'published revision does not exist';
+                  END IF;
+                  RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql
+            """)
+            c.execute("DROP TRIGGER IF EXISTS trg_registry_published_valid ON registry_resources")
+            c.execute("""
+                CREATE TRIGGER trg_registry_published_valid
+                BEFORE UPDATE OF published_revision ON registry_resources
+                FOR EACH ROW EXECUTE FUNCTION registry_published_valid()
+            """)
         else:
             c.execute("""
                 CREATE TRIGGER IF NOT EXISTS trg_registry_revision_immutable
@@ -281,6 +317,19 @@ def init_schema(*, _after_ddl: Any = None) -> None:
                 BEFORE DELETE ON registry_revisions
                 BEGIN
                   SELECT RAISE(ABORT, 'registry revision is immutable');
+                END
+            """)
+            c.execute("""
+                CREATE TRIGGER IF NOT EXISTS trg_registry_published_valid
+                BEFORE UPDATE OF published_revision ON registry_resources
+                WHEN NEW.published_revision IS NOT NULL
+                BEGIN
+                  SELECT RAISE(ABORT, 'published revision does not exist')
+                  WHERE NOT EXISTS (
+                    SELECT 1 FROM registry_revisions
+                    WHERE type = NEW.type AND id = NEW.id
+                      AND revision = NEW.published_revision
+                  );
                 END
             """)
         c.execute("CREATE TABLE IF NOT EXISTS schema_meta(k TEXT PRIMARY KEY, v TEXT)")
@@ -301,7 +350,7 @@ class ResolvedResource:
     resource_id: str
     revision: int
     checksum: str
-    snapshot: dict[str, Any]
+    snapshot: Mapping[str, Any]
     resolved_at: float = field(default_factory=_now)
 
 
@@ -481,28 +530,28 @@ class RegistryService:
     # ---------------------------------------------------------- state changes
 
     def disable(self, resource_type: str, resource_id: str, *, actor: str = "system",
-                expected_revision: int | None = None,
+                expected_revision: int,
                 request_id: str | None = None) -> dict[str, Any]:
         return self._set_status(resource_type, resource_id, "disabled", actor,
                                 expected_revision=expected_revision,
-                                request_id=request_id)
+                                request_id=request_id, allowed={"active"})
 
     def enable(self, resource_type: str, resource_id: str, *, actor: str = "system",
-               expected_revision: int | None = None,
+               expected_revision: int,
                request_id: str | None = None) -> dict[str, Any]:
         return self._set_status(resource_type, resource_id, "active", actor,
                                 expected_revision=expected_revision,
                                 request_id=request_id, allowed={"disabled"})
 
     def archive(self, resource_type: str, resource_id: str, *, actor: str = "system",
-                expected_revision: int | None = None,
+                expected_revision: int,
                 request_id: str | None = None) -> dict[str, Any]:
         return self._set_status(resource_type, resource_id, "archived", actor,
                                 expected_revision=expected_revision,
                                 request_id=request_id, allowed={"active", "disabled"})
 
     def delete(self, resource_type: str, resource_id: str, *, actor: str = "system",
-               expected_revision: int | None = None,
+               expected_revision: int,
                request_id: str | None = None) -> dict[str, Any]:
         """Soft delete. References are checked under the same transaction lock."""
         with _tx() as c:
@@ -510,6 +559,9 @@ class RegistryService:
             if row is None:
                 raise RegistryError("resource_not_found", "资源不存在", 404)
             self._check_expected(row, expected_revision)
+            if row["status"] == "deleted":
+                raise RegistryError("invalid_status_transition", "资源已删除", 409,
+                                    {"status": row["status"]})
             refs = _rows(c,
                          "SELECT source_type,source_id FROM registry_references "
                          "WHERE target_type=? AND target_id=?",
@@ -522,7 +574,7 @@ class RegistryService:
         return self.get(resource_type, resource_id, include_snapshot=True)
 
     def _set_status(self, resource_type: str, resource_id: str, status: str,
-                    actor: str, *, expected_revision: int | None = None,
+                    actor: str, *, expected_revision: int,
                     request_id: str | None = None,
                     allowed: set[str] | None = None) -> dict[str, Any]:
         with _tx() as c:
@@ -539,7 +591,10 @@ class RegistryService:
 
     @staticmethod
     def _check_expected(row: dict[str, Any], expected_revision: int | None) -> None:
-        if expected_revision is not None and int(row["current_revision"]) != int(expected_revision):
+        if expected_revision is None:
+            raise RegistryError("expected_revision_required",
+                                "状态变更必须提供 expected_revision", 422)
+        if int(row["current_revision"]) != int(expected_revision):
             raise RegistryError("revision_conflict", "资源当前版本已变化", 409,
                                 {"expected": expected_revision,
                                  "current": row["current_revision"]})
@@ -627,7 +682,7 @@ class RegistryService:
                    resource_id=resource_id, revision=int(published), actor="runtime",
                    detail={"checksum": rev["checksum"]}, request_id=request_id)
             return ResolvedResource(resource_type, resource_id, int(published),
-                                    str(rev["checksum"]), snapshot)
+                                    str(rev["checksum"]), _freeze(snapshot))
 
     def get(self, resource_type: str, resource_id: str,
             *, include_snapshot: bool = False) -> dict[str, Any]:

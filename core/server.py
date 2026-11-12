@@ -99,9 +99,15 @@ async def auth_mw(request: Request, call_next):
                     return JSONResponse({"error": "unauthorized",
                                          "hint": "本机变更接口需要 Authorization: Bearer <api_key> 或 /studio 同源会话"},
                                         status_code=401)
+            if API_KEY and request.method.upper() in MUTATING_METHODS:
+                actor = "api-key" if _bearer_ok(request) else "local-session"
+            else:
+                actor = "local-read"
         else:
             if not _bearer_ok(request):
                 return JSONResponse({"error": "unauthorized"}, status_code=401)
+            actor = "remote-api"
+        request.state.actor = actor
     response = await call_next(request)
     # Console/Studio 首屏下发 HttpOnly + SameSite=Strict cookie，供同源 fetch 自动携带；
     # 跨站页面无法读取该 cookie，普通跨站表单也不会在 SameSite=Strict 下携带。

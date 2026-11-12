@@ -26,6 +26,21 @@ deleted (terminal in Phase 0)
 - `archived`：退出正常管理；保留历史 revision/audit；不可编辑；不可发布。
 - `deleted`：软删除；保留 revision/audit；不可解析；物理清理由后续受控流程处理。
 
+状态变更必须提供 `expected_revision`：
+
+- 缺失：`422 expected_revision_required`
+- 不匹配：`409 revision_conflict`
+- 并发状态变更：一个成功，另一个 `409 invalid_status_transition`
+
+状态迁移：
+
+```text
+disable: active -> disabled
+enable:  disabled -> active
+archive: active|disabled -> archived
+delete:  active|disabled|archived -> deleted
+```
+
 ## Revision states
 
 ```text
@@ -93,8 +108,12 @@ Phase 0 只提供对象；Agent/TTS/Gateway 尚未接入。
 1. `registry_revisions` 的 snapshot/checksum/identity 不可更新；DB trigger 拒绝。
 2. revision 不可删除；DB trigger 拒绝。
 3. `current_revision` 单调递增。
-4. `published_revision` 必须指向存在的 revision。
-5. 编辑不改变 `published_revision`。
-6. 删除前必须在同一事务中检查引用。
-7. 同一资源同时只有一个并发写者能成功。
-8. 软删除保留 revision 和 audit。
+4. `published_revision` 必须指向存在的 revision；DB trigger 拒绝无效指针。
+5. 每个资源最多只有一个 `state='published'` revision；partial unique index 保证。
+6. 编辑不改变 `published_revision`。
+7. 删除前必须在同一事务中检查引用。
+8. 同一资源同时只有一个并发写者能成功。
+9. 软删除保留 revision 和 audit。
+10. `RequestContext` 返回深冻结 snapshot；调用方不能修改已解析内容。
+11. checksum 使用 `sort_keys=True`、紧凑分隔符、UTF-8 的确定性 JSON 规范化。
+12. Reference 建立要求 source 为 active/disabled、target 为 active；删除 target 前必须在同一事务检查引用；解除引用与删除语义分别审计。

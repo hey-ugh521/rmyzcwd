@@ -142,13 +142,13 @@ class RegistryLifecycleTest(unittest.TestCase):
         self.create()
         self.svc.publish("character", "bronya", 1,
                          expected_current_revision=1, expected_published_revision=None)
-        self.svc.disable("character", "bronya")
+        self.svc.disable("character", "bronya", expected_revision=1)
         with self.assertRaises(registry.RegistryError) as cm:
             self.svc.resolve("character", "bronya")
         self.assertEqual(cm.exception.code, "resource_unavailable")
-        self.svc.enable("character", "bronya")
+        self.svc.enable("character", "bronya", expected_revision=1)
         self.assertEqual(self.svc.resolve("character", "bronya").revision, 1)
-        self.svc.archive("character", "bronya")
+        self.svc.archive("character", "bronya", expected_revision=1)
         with self.assertRaises(registry.RegistryError):
             self.svc.resolve("character", "bronya")
         # history is preserved
@@ -159,10 +159,10 @@ class RegistryLifecycleTest(unittest.TestCase):
         self.create("character", "bronya_ref", {"name": "Bronya"})
         self.svc.add_reference("character", "bronya_ref", "voice_profile", "bronya_voice")
         with self.assertRaises(registry.RegistryError) as cm:
-            self.svc.delete("voice_profile", "bronya_voice")
+            self.svc.delete("voice_profile", "bronya_voice", expected_revision=1)
         self.assertEqual(cm.exception.code, "reference_exists")
         self.svc.remove_reference("character", "bronya_ref", "voice_profile", "bronya_voice")
-        self.svc.delete("voice_profile", "bronya_voice")
+        self.svc.delete("voice_profile", "bronya_voice", expected_revision=1)
         self.assertEqual(self.svc.get("voice_profile", "bronya_voice")["status"], "deleted")
 
     def test_idempotent_create_and_conflict(self):
@@ -177,11 +177,15 @@ class RegistryLifecycleTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, "idempotency_conflict")
 
     def test_request_context_locks_revision(self):
-        self.create(payload={"name": "v1"})
+        self.create(payload={"name": "v1", "nested": {"x": [1, 2]}})
         self.svc.publish("character", "bronya", 1,
                          expected_current_revision=1, expected_published_revision=None)
         ctx = registry.RequestContext("req-test")
         pinned = ctx.resolve(self.svc, "character", "bronya")
+        with self.assertRaises(TypeError):
+            pinned.snapshot["name"] = "hacked"  # type: ignore[index]
+        with self.assertRaises(TypeError):
+            pinned.snapshot["nested"]["x"] = []  # type: ignore[index]
         self.svc.update("character", "bronya", {"name": "v2"}, expected_revision=1)
         self.svc.publish("character", "bronya", 2,
                          expected_current_revision=2, expected_published_revision=1)
@@ -189,6 +193,34 @@ class RegistryLifecycleTest(unittest.TestCase):
         self.assertEqual(ctx.resolve(self.svc, "character", "bronya").revision, 1)
         new_ctx = registry.RequestContext("req-test-2")
         self.assertEqual(new_ctx.resolve(self.svc, "character", "bronya").revision, 2)
+
+    def test_exactly_one_published_revision_and_valid_pointer(self):
+        self.create(payload={"name": "v1"})
+        self.svc.publish("character", "bronya", 1,
+                         expected_current_revision=1, expected_published_revision=None)
+        self.svc.update("character", "bronya", {"name": "v2"}, expected_revision=1)
+        self.svc.publish("character", "bronya", 2,
+                         expected_current_revision=2, expected_published_revision=1)
+        c = store.conn()
+        try:
+            n = c.execute("SELECT COUNT(*) AS n FROM registry_revisions "
+                          "WHERE type='character' AND id='bronya' AND state='published'").fetchone()["n"]
+            self.assertEqual(n, 1)
+        finally:
+            c.close()
+        c = store.conn()
+        try:
+            with self.assertRaises(sqlite3.DatabaseError):
+                c.execute("UPDATE registry_resources SET published_revision=999 "
+                          "WHERE type='character' AND id='bronya'")
+                c.commit()
+        finally:
+            c.close()
+
+    def test_checksum_is_deterministic(self):
+        a = {"b": 2, "a": {"y": True, "x": [1, 2]}}
+        b = {"a": {"x": [1, 2], "y": True}, "b": 2}
+        self.assertEqual(registry._checksum(a), registry._checksum(b))
 
     def test_schema_and_state_survive_restart(self):
         self.create(payload={"name": "v1"})
@@ -245,7 +277,7 @@ class RegistryLifecycleTest(unittest.TestCase):
         def delete_target() -> None:
             try:
                 barrier.wait(timeout=10)
-                self.svc.delete("voice_profile", "voice")
+                self.svc.delete("voice_profile", "voice", expected_revision=1)
                 results.append("delete_ok")
             except registry.RegistryError as exc:
                 results.append(exc.code)
@@ -261,6 +293,27 @@ class RegistryLifecycleTest(unittest.TestCase):
         if got["status"] == "deleted":
             with self.assertRaises(registry.RegistryError):
                 self.svc.add_reference("character", "char", "voice_profile", "voice")
+
+    def test_concurrent_disable_has_one_winner(self):
+        self.create()
+        barrier = threading.Barrier(2)
+        results: list[str] = []
+
+        def work() -> None:
+            try:
+                barrier.wait(timeout=10)
+                self.svc.disable("character", "bronya", expected_revision=1)
+                results.append("ok")
+            except registry.RegistryError as exc:
+                results.append(exc.code)
+
+        threads = [threading.Thread(target=work) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+        self.assertEqual(sorted(results), ["invalid_status_transition", "ok"], str(results))
+        self.assertEqual(self.svc.get("character", "bronya")["status"], "disabled")
 
     def test_list_pagination(self):
         for i in range(3):

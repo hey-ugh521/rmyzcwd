@@ -96,12 +96,14 @@ class RegistryApiTest(unittest.TestCase):
         r = self.client.post("/api/registry/character/char/references",
                              json={"target_type": "voice_profile", "target_id": "voice"})
         self.assertEqual(r.status_code, 200, r.text)
-        r = self.client.delete("/api/registry/voice_profile/voice")
+        r = self.client.delete("/api/registry/voice_profile/voice",
+                               params={"expected_revision": 1})
         self.assertEqual(r.status_code, 409, r.text)
         self.assertEqual(r.json()["error"]["code"], "reference_exists")
         self.client.delete("/api/registry/character/char/references",
                            params={"target_type": "voice_profile", "target_id": "voice"})
-        r = self.client.delete("/api/registry/voice_profile/voice")
+        r = self.client.delete("/api/registry/voice_profile/voice",
+                               params={"expected_revision": 1})
         self.assertEqual(r.status_code, 200, r.text)
 
     def test_state_endpoints(self):
@@ -109,12 +111,18 @@ class RegistryApiTest(unittest.TestCase):
         self.client.post("/api/registry/character/bronya/publish",
                          json={"revision": 1, "expected_current_revision": 1,
                                "expected_published_revision": None})
-        r = self.client.post("/api/registry/character/bronya/disable")
+        r = self.client.post("/api/registry/character/bronya/disable", params={"expected_revision": 1})
         self.assertEqual(r.json()["status"], "disabled")
-        r = self.client.post("/api/registry/character/bronya/enable")
+        r = self.client.post("/api/registry/character/bronya/enable", params={"expected_revision": 1})
         self.assertEqual(r.json()["status"], "active")
-        r = self.client.post("/api/registry/character/bronya/archive")
+        r = self.client.post("/api/registry/character/bronya/archive", params={"expected_revision": 1})
         self.assertEqual(r.json()["status"], "archived")
+
+    def test_state_change_requires_expected_revision(self):
+        self.create()
+        r = self.client.post("/api/registry/character/bronya/disable")
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(r.json()["error"]["code"], "expected_revision_required")
 
     def test_list_pagination(self):
         for i in range(3):

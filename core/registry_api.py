@@ -28,6 +28,11 @@ def _request_id(request: Request) -> str | None:
     return request.headers.get("x-request-id")
 
 
+def _actor(request: Request) -> str:
+    # Set by Core's auth middleware. Never trust a client-supplied actor field.
+    return str(getattr(request.state, "actor", "anonymous") or "anonymous")
+
+
 def _if_match(request: Request) -> int | None:
     raw = (request.headers.get("if-match") or "").strip().strip('"')
     if not raw:
@@ -61,7 +66,7 @@ async def create_resource(resource_type: str, request: Request,
         raise RegistryError("payload_required", "缺少 payload object", 422)
     return service.create(
         resource_type, resource_id, payload,
-        actor=str(body.get("actor") or "local"),
+        actor=_actor(request),
         change_note=str(body.get("change_note") or ""),
         idempotency_key=request.headers.get("idempotency-key"),
         request_id=_request_id(request),
@@ -88,7 +93,7 @@ async def update_resource(resource_type: str, resource_id: str, request: Request
     return service.update(
         resource_type, resource_id, payload,
         expected_revision=_expected(request, body),
-        actor=str(body.get("actor") or "local"),
+        actor=_actor(request),
         change_note=str(body.get("change_note") or ""),
         request_id=_request_id(request),
     )
@@ -104,7 +109,7 @@ async def publish_resource(resource_type: str, resource_id: str, request: Reques
         resource_type, resource_id, int(body.get("revision") or 0),
         expected_current_revision=_expected(request, body, "expected_current_revision"),
         expected_published_revision=body.get("expected_published_revision"),
-        actor=str(body.get("actor") or "local"),
+        actor=_actor(request),
         change_note=str(body.get("change_note") or ""),
         request_id=_request_id(request),
     )
@@ -120,16 +125,24 @@ async def rollback_resource(resource_type: str, resource_id: str, request: Reque
         resource_type, resource_id, int(body.get("revision") or 0),
         expected_current_revision=_expected(request, body, "expected_current_revision"),
         expected_published_revision=body.get("expected_published_revision"),
-        actor=str(body.get("actor") or "local"),
+        actor=_actor(request),
         request_id=_request_id(request),
     )
+
+
+def _required_revision(expected_revision: int | None) -> int:
+    if expected_revision is None:
+        raise RegistryError("expected_revision_required",
+                            "状态变更必须提供 expected_revision", 422)
+    return int(expected_revision)
 
 
 @router.post("/{resource_type}/{resource_id}/disable")
 async def disable_resource(resource_type: str, resource_id: str, request: Request,
                            expected_revision: int | None = None):
     return service.disable(resource_type, resource_id,
-                           actor="local", expected_revision=expected_revision,
+                           actor=_actor(request),
+                           expected_revision=_required_revision(expected_revision),
                            request_id=_request_id(request))
 
 
@@ -137,7 +150,8 @@ async def disable_resource(resource_type: str, resource_id: str, request: Reques
 async def enable_resource(resource_type: str, resource_id: str, request: Request,
                           expected_revision: int | None = None):
     return service.enable(resource_type, resource_id,
-                          actor="local", expected_revision=expected_revision,
+                          actor=_actor(request),
+                          expected_revision=_required_revision(expected_revision),
                           request_id=_request_id(request))
 
 
@@ -145,7 +159,8 @@ async def enable_resource(resource_type: str, resource_id: str, request: Request
 async def archive_resource(resource_type: str, resource_id: str, request: Request,
                            expected_revision: int | None = None):
     return service.archive(resource_type, resource_id,
-                           actor="local", expected_revision=expected_revision,
+                           actor=_actor(request),
+                           expected_revision=_required_revision(expected_revision),
                            request_id=_request_id(request))
 
 
@@ -153,7 +168,8 @@ async def archive_resource(resource_type: str, resource_id: str, request: Reques
 async def delete_resource(resource_type: str, resource_id: str, request: Request,
                           expected_revision: int | None = None):
     return service.delete(resource_type, resource_id,
-                          actor="local", expected_revision=expected_revision,
+                          actor=_actor(request),
+                          expected_revision=_required_revision(expected_revision),
                           request_id=_request_id(request))
 
 
@@ -170,7 +186,7 @@ async def add_reference(resource_type: str, resource_id: str, request: Request,
     if not target_type or not target_id:
         raise RegistryError("invalid_reference", "缺少 target_type/target_id", 422)
     service.add_reference(resource_type, resource_id, target_type, target_id,
-                          actor="local", request_id=_request_id(request))
+                          actor=_actor(request), request_id=_request_id(request))
     return {"ok": True}
 
 
@@ -178,5 +194,5 @@ async def add_reference(resource_type: str, resource_id: str, request: Request,
 async def remove_reference(resource_type: str, resource_id: str, request: Request,
                            target_type: str, target_id: str):
     service.remove_reference(resource_type, resource_id, target_type, target_id,
-                             actor="local", request_id=_request_id(request))
+                             actor=_actor(request), request_id=_request_id(request))
     return {"ok": True}

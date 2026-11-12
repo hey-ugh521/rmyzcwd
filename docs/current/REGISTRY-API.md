@@ -9,6 +9,8 @@ read these endpoints yet.
 
 - `resource_type`: `character` | `voice_profile` | `workflow`
 - Mutating requests use Core's existing local auth middleware in production.
+- `actor` in request bodies is ignored. Audit actor comes from the authenticated
+  Core request context (`api-key`, `local-session`, `remote-api`).
 - Concurrency:
   - update / publish require `expected_revision` or `If-Match`.
   - publish additionally requires `expected_published_revision` (nullable).
@@ -111,12 +113,19 @@ Publishes the historical revision; does not rewrite it.
 
 ### State changes
 
+`expected_revision` is **required** for every state change:
+missing -> `422 expected_revision_required`; mismatch -> `409 revision_conflict`.
+
 ```http
 POST /api/registry/{resource_type}/{id}/disable?expected_revision=3
 POST /api/registry/{resource_type}/{id}/enable?expected_revision=3
 POST /api/registry/{resource_type}/{id}/archive?expected_revision=3
 DELETE /api/registry/{resource_type}/{id}?expected_revision=3
 ```
+
+Disable only from `active`; enable only from `disabled`; archive only from
+`active|disabled`; delete is soft delete and rejects already-deleted resources.
+Concurrent state changes: one winner, the other gets `409 invalid_status_transition`.
 
 Delete is soft delete. Referenced resources return `409 reference_exists`.
 

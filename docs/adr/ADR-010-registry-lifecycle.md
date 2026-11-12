@@ -1,6 +1,6 @@
 # ADR-010: Registry Resource Lifecycle
 
-- 状态：Accepted（Phase 0）
+- 状态：Accepted（Phase 0.1 hardened）
 - 日期：2026-11-13
 - 关联：[Capability Registry 架构契约 v2](../aegis/plans/2026-11-13-capability-registry-contract.md)
 - 实现：`core/registry.py`, `core/registry_api.py`, `tests/test_registry_lifecycle.py`, `tests/test_registry_api.py`, `tests/test_registry_pg_contract.py`
@@ -32,9 +32,13 @@ RegistryRevision
 3. 编辑已发布资源只产生 draft revision，不改变 `published_revision`。
 4. Publish/Rollback 通过 CAS（expected current + expected published）和事务更新发布指针。
 5. Disable = 暂停运行时；Archive = 退出正常管理和使用；Delete = 默认软删除，必须先做引用检查。
-6. 引用表使用复合外键和行锁，删除与新增引用不得留下悬空引用。
-7. `RequestContext` 在请求开始时锁定 `resolved_revision`；Phase 0 只定义契约，不接入 Runtime。
-8. 数据库层用 SQLite/PG trigger 阻止 revision snapshot/checksum/identity 被原地更新或删除。
+6. disable/enable/archive/delete 必须提供 `expected_revision`；缺失返回 422，不匹配返回 409。
+7. 引用表使用复合外键和行锁，删除与新增引用不得留下悬空引用。
+8. `RequestContext` 在请求开始时锁定 `resolved_revision`，并返回深冻结 snapshot；Phase 0 只定义契约，不接入 Runtime。
+9. 数据库层用 SQLite/PG trigger 阻止 revision snapshot/checksum/identity 被原地更新或删除。
+10. partial unique index 保证每个资源最多一个 published revision；trigger 保证 published 指针指向有效 revision。
+11. Registry API 的审计 actor 来自 Core 认证上下文，不信任请求 body 的 actor。
+12. SQLite 与 PostgreSQL 都必须通过并发/回滚/引用契约测试，不能只用单连接顺序模拟。
 
 ## Consequences
 
@@ -63,10 +67,13 @@ Negative / deferred:
 
 ## Verification
 
-- SQLite lifecycle: 13/13
-- API contract: 7/7
-- PostgreSQL contract: 2/2
+- SQLite lifecycle: 16/16
+- API contract: 8/8
+- Core auth integration: 6/6
+- PostgreSQL contract/concurrency: 8/8
 - 现有 QQ adapter/webhook 回归：52/52 + 5/5
+
+PostgreSQL 并发测试使用两个独立连接（每个 Service 调用独立 `store.conn()`），覆盖 concurrent update、concurrent publish、reference/create-delete race、duplicate reference、publish failure rollback、reference failure rollback。
 
 ## Rollback
 
