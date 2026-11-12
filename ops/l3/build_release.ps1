@@ -50,6 +50,21 @@ $pyinstallerEnv = 'D:\AI\mobius-launcher\Scripts\python.exe'
 
 if (-not (Test-Path $releaseDir)) { Fail "无法创建输出目录: $OutDir" }
 
+# ---------------------------------------------------------------- 构建 Studio 前端
+if (-not $SkipLauncher) {
+    Step "构建 Studio 前端"
+    $studio = Join-Path $repo 'web\studio'
+    if (-not (Test-Path (Join-Path $studio 'package.json'))) { Fail "缺少 web/studio/package.json" }
+    Push-Location $studio
+    try {
+        & pnpm install --frozen-lockfile
+        if ($LASTEXITCODE -ne 0) { Fail "Studio 依赖安装失败" }
+        & pnpm build
+        if ($LASTEXITCODE -ne 0) { Fail "Studio 构建失败" }
+    } finally { Pop-Location }
+    if (-not (Test-Path (Join-Path $studio 'dist\index.html'))) { Fail "Studio dist 产物缺失" }
+}
+
 # ---------------------------------------------------------------- 构建启动器
 if (-not $SkipLauncher) {
     Step "构建启动器 exe"

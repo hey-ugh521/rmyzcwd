@@ -43,6 +43,7 @@ Source: "{#SourceRoot}\launcher\mobius.ico"; DestDir: "{app}\launcher"; Flags: i
 Source: "{#SourceRoot}\launcher\README.md"; DestDir: "{app}\launcher"; Flags: ignoreversion
 ; Core / 网关 / 运维脚本 / 配置
 Source: "{#SourceRoot}\core\*"; DestDir: "{app}\core"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,console\_mock\screenshots,*_mock.json"
+Source: "{#SourceRoot}\web\studio\dist\*"; DestDir: "{app}\web\studio\dist"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "{#SourceRoot}\shared\*"; DestDir: "{app}\shared"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc"
 Source: "{#SourceRoot}\media_gateway\*"; DestDir: "{app}\media_gateway"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,tts_output,data,logs,*.db,*.db-*"
 Source: "{#SourceRoot}\ops\*"; DestDir: "{app}\ops"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.db,*.db-wal,*.db-shm,l2\requirements\*.txt,voice_eval,*.wav,*.mp3"
@@ -69,6 +70,7 @@ Source: "preflight.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Möbius 启动器"; Filename: "{app}\Mobius.exe"; WorkingDir: "{app}"; IconFilename: "{app}\launcher\mobius.ico"
+Name: "{group}\Möbius Studio"; Filename: "http://127.0.0.1:8900/studio"; IconFilename: "{app}\launcher\mobius.ico"
 Name: "{group}\Möbius 控制台"; Filename: "http://127.0.0.1:8900/console"; IconFilename: "{app}\launcher\mobius.ico"
 Name: "{group}\环境检查"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\preflight.ps1"""; WorkingDir: "{app}"
 Name: "{group}\许可与第三方声明"; Filename: "notepad.exe"; Parameters: """{app}\licenses\THIRD-PARTY.md"""; WorkingDir: "{app}"

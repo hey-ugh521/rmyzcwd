@@ -40,6 +40,7 @@ gw = GatewayClient()
 agent = Agent(sup, gw)
 
 CONSOLE_DIR = Path(__file__).resolve().parent / "console"
+STUDIO_DIR = Path(__file__).resolve().parent.parent / "web" / "studio" / "dist"
 
 app = FastAPI(title="Möbius Core", version="1.0.0")
 
@@ -82,23 +83,23 @@ async def auth_mw(request: Request, call_next):
     """
     path = request.url.path
     host = request.client.host if request.client else ""
-    if path.rstrip("/") == "/console" and host not in LOOPBACK:
-        # 不允许网络客户端打开 Console（否则同源 cookie 会泄露 API key）
+    if path.rstrip("/") in ("/console", "/studio") and host not in LOOPBACK:
+        # 不允许网络客户端打开本机控制面（否则同源 cookie 会泄露 API key）
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     if path.startswith("/v1") or path.startswith("/api"):
         if host in LOOPBACK:
             if API_KEY and request.method.upper() in MUTATING_METHODS:
                 if not (_bearer_ok(request) or _local_cookie_ok(request)):
                     return JSONResponse({"error": "unauthorized",
-                                         "hint": "本机变更接口需要 Authorization: Bearer <api_key> 或 /console 同源会话"},
+                                         "hint": "本机变更接口需要 Authorization: Bearer <api_key> 或 /studio 同源会话"},
                                         status_code=401)
         else:
             if not _bearer_ok(request):
                 return JSONResponse({"error": "unauthorized"}, status_code=401)
     response = await call_next(request)
-    # Console 首屏下发 HttpOnly + SameSite=Strict cookie，供同源 fetch 自动携带；
+    # Console/Studio 首屏下发 HttpOnly + SameSite=Strict cookie，供同源 fetch 自动携带；
     # 跨站页面无法读取该 cookie，普通跨站表单也不会在 SameSite=Strict 下携带。
-    if API_KEY and host in LOOPBACK and path.rstrip("/") == "/console":
+    if API_KEY and host in LOOPBACK and path.rstrip("/") in ("/console", "/studio"):
         response.set_cookie(
             LOCAL_TOKEN_COOKIE, API_KEY, httponly=True, samesite="strict", path="/"
         )
@@ -969,6 +970,13 @@ else:
     @app.get("/console")
     async def console_placeholder():
         return JSONResponse({"error": "console 尚未安装", "expected": str(CONSOLE_DIR)}, 503)
+
+if STUDIO_DIR.exists():
+    app.mount("/studio", StaticFiles(directory=str(STUDIO_DIR), html=True), name="studio")
+else:
+    @app.get("/studio")
+    async def studio_placeholder():
+        return JSONResponse({"error": "Studio 尚未构建", "expected": str(STUDIO_DIR)}, 503)
 
 
 def main() -> None:

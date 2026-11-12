@@ -937,7 +937,7 @@ def run_wizard() -> None:
 # ---------------------------------------------------------------------------
 
 
-def run_gui() -> None:
+def run_tk_gui() -> None:
     import tkinter as tk
     from tkinter import messagebox, ttk
 
@@ -1012,6 +1012,71 @@ def run_gui() -> None:
 # ---------------------------------------------------------------------------
 
 
+def run_gui() -> None:
+    """桌面壳：优先用 WebView2 载入 Studio；失败回退旧 Tk 控制台。
+
+    Studio 由 Core 的 /studio 同源静态托管，因此登录 Cookie、API 请求和媒体 URL
+    都与真实 Core 一致；launcher 只负责拉起栈和提供原生窗口。
+    """
+    try:
+        import webview  # pywebview；安装器/launcher 构建时打包
+    except Exception as exc:  # noqa: BLE001
+        log(f"WebView 不可用，回退 Tk 启动器：{exc}")
+        run_tk_gui()
+        return
+
+    loading_html = """<!doctype html><html><head><meta charset="utf-8">
+    <style>
+      html,body{height:100%;margin:0;background:#090b12;color:#e7e9f4;
+        font-family:'Segoe UI',system-ui,sans-serif;display:grid;place-items:center}
+      .box{text-align:center;max-width:560px;padding:32px}
+      .mark{font-size:44px;font-weight:700;letter-spacing:-2px;color:#b9a7ff}
+      h1{font-size:22px;font-weight:600;margin:18px 0 8px}
+      p{color:#8d93a8;font-size:13px;line-height:1.7;margin:0}
+      .bar{width:240px;height:3px;margin:24px auto 0;background:#202436;border-radius:9px;overflow:hidden}
+      .bar i{display:block;width:35%;height:100%;background:linear-gradient(90deg,#8b7cff,#ff4d8d);
+        border-radius:9px;animation:run 1.2s ease-in-out infinite}
+      @keyframes run{0%{transform:translateX(-120%)}100%{transform:translateX(360%)}}
+      .err{color:#ff7b8a;white-space:pre-wrap;margin-top:18px;font-size:12px}
+    </style></head><body><div class="box">
+      <div class="mark">Möbius</div>
+      <h1>正在启动本机服务</h1>
+      <p>PostgreSQL → Core → Media Gateway → Studio<br>首次启动可能需要一点时间，请不要关闭窗口。</p>
+      <div class="bar"><i></i></div><div class="err" id="err"></div>
+    </div></body></html>"""
+
+    studio_url = CORE_API + "/studio"
+    window = webview.create_window(
+        "Möbius Studio", html=loading_html,
+        width=1440, height=900, min_size=(980, 640),
+    )
+
+    def boot() -> None:
+        try:
+            rc = cmd_start()
+            if rc == 0:
+                window.load_url(studio_url)
+            else:
+                window.evaluate_js(
+                    "document.getElementById('err').textContent="
+                    + repr("启动未完全成功，请查看 logs/launcher.log；也可用“打开日志”排查。")
+                )
+        except Exception as exc:  # noqa: BLE001
+            log(f"Studio 启动失败：{exc}")
+            try:
+                window.evaluate_js(
+                    "document.getElementById('err').textContent=" + repr(f"启动失败：{exc}")
+                )
+            except Exception:
+                pass
+
+    try:
+        webview.start(boot)
+    except Exception as exc:  # noqa: BLE001
+        log(f"WebView 启动失败，回退 Tk 启动器：{exc}")
+        run_tk_gui()
+
+
 def _attach_console() -> None:
     """windowed exe 在 --headless 模式下把输出接回调用它的控制台。"""
     if not getattr(sys, "frozen", False):
@@ -1057,6 +1122,7 @@ def main() -> int:
         "configure-github", "check-github",
     ], default=None)
     parser.add_argument("--wizard", action="store_true", help="强制进入首次运行向导")
+    parser.add_argument("--tk", action="store_true", help="使用旧 Tk 控制台（WebView 调试/回退）")
     parser.add_argument("--base-url", default="")
     parser.add_argument("--api-key", default="")
     parser.add_argument("--model", default="")
@@ -1116,6 +1182,9 @@ def main() -> int:
         return 0 if ok else 1
     if is_first_run() or args.wizard:
         run_wizard()
+        return 0
+    if args.tk:
+        run_tk_gui()
         return 0
     run_gui()
     return 0

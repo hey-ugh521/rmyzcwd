@@ -16,6 +16,7 @@ foreach ($mode in @(@("--windowed", "Mobius"), @("--console", "MobiusCLI"))) {
         --distpath "$root\launcher\dist" `
         --workpath "$root\launcher\build" `
         --specpath "$root\launcher" `
+        --collect-all webview `
         "$root\launcher\mobius_launcher.py"
 }
 
