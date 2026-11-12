@@ -275,8 +275,11 @@ export function SettingsPage() {
                 <ConnRow icon={<IconCpu size={14} />} label="Core · 8900" ok={conn.coreOk} mock={mock} />
                 <ConnRow icon={<IconDatabase size={14} />} label="Media Gateway · 8899" ok={conn.gatewayOk} mock={mock} />
               </div>
-              {conn.lastError && !mock && (
-                <p className="mt-2 rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-[11px] leading-snug text-danger">{conn.lastError}</p>
+              {conn.lastError && (
+                <p className={cn(
+                  "mt-2 rounded-md border px-3 py-2 text-[11px] leading-snug",
+                  mock ? "border-warning/25 bg-warning/10 text-warning" : "border-danger/25 bg-danger/10 text-danger"
+                )}>{conn.lastError}</p>
               )}
               {mock && (
                 <p className="mt-2 rounded-md border border-line-soft bg-raised/60 px-3 py-2 text-[11px] leading-snug text-muted">

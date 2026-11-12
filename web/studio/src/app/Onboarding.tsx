@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useUI } from "../store/ui";
 import { useConnection } from "../api/client";
 import { Modal } from "../components/overlays";
@@ -18,9 +18,12 @@ export function Onboarding() {
   const dismiss = useUI((s) => s.dismissOnboarding);
   const mode = useConnection((s) => s.mode);
   const navigate = useNavigate();
+  const location = useLocation();
   const [step, setStep] = useState(0);
 
-  if (done) return null;
+  // 首次使用引导只在工作台首页自动出现。
+  // 直接深链到设置/创作等页面时不应被全屏引导挡住；引导仍可在「设置 → 重新查看」再次打开。
+  if (done || location.pathname !== "/") return null;
 
   const finish = (to?: string) => { dismiss(); if (to) navigate(to); };
 

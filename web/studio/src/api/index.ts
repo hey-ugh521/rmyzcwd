@@ -90,18 +90,37 @@ export async function initApi(): Promise<void> {
   const live = health.core;
   conn.set({
     mode: live ? "live" : "mock", coreOk: health.core, gatewayOk: health.gateway,
-    probing: false, lastError: null,
+    probing: false,
+    lastError: live ? null : "未检测到本机 Core（127.0.0.1:8900），已回退演示数据。",
   });
 }
 
 export async function refreshConnection(): Promise<void> {
   const conn = useConnection.getState();
-  if (conn.mode === "mock") {
-    // mock 模式下也允许用户手动切到 live 探活
+  const override = useUI.getState().apiModeOverride;
+
+  // 手动固定演示：不改变用户选择。
+  if (override === "mock") {
+    conn.set({ mode: "mock", coreOk: false, gatewayOk: false, probing: false, lastError: null });
     return;
   }
+
   const health = await probeHealth();
-  conn.set({ coreOk: health.core, gatewayOk: health.gateway, lastError: health.core ? null : "Core 不可达" });
+  if (override === "live") {
+    conn.set({
+      mode: "live", coreOk: health.core, gatewayOk: health.gateway, probing: false,
+      lastError: health.core ? null : "Core 不可达（live 模式）",
+    });
+    return;
+  }
+
+  // 自动模式：Core 恢复后从演示数据自动切回真实服务。
+  const live = health.core;
+  conn.set({
+    mode: live ? "live" : "mock", coreOk: health.core, gatewayOk: health.gateway,
+    probing: false,
+    lastError: live ? null : "未检测到本机 Core（127.0.0.1:8900），已回退演示数据。",
+  });
 }
 
 export async function switchMode(mode: "mock" | "live"): Promise<void> {
