@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import re
 import time
 from collections import OrderedDict
 from typing import Any, Awaitable, Callable
@@ -99,6 +100,9 @@ class QQConfig:
         self.group_at_sender = _as_bool(raw.get("group_at_sender"), True)
         self.rate_limit_per_min = max(0, int(raw.get("rate_limit_per_min") or 12))
         self.aggregate_window_sec = max(0.0, float(raw.get("aggregate_window_sec") or 0))
+        self.send_media = _as_bool(raw.get("send_media"), True)
+        self.media_base = str(raw.get("media_base") or "http://127.0.0.1:8899").rstrip("/")
+        self.max_media_items = max(0, int(raw.get("max_media_items") or 2))
         self.allowed_groups = {str(x) for x in _as_list(raw.get("allowed_groups"))}
         self.dedupe_ttl = float(raw.get("dedupe_ttl") or 600)
         self.dedupe_max = int(raw.get("dedupe_max") or 2048)
@@ -235,6 +239,8 @@ class QQAdapter:
         sender_id = str(event.get("user_id") or "")
         user_id, session_id, target = session_for(event)
         reply = ""
+        images: list[str] = []
+        audio: list[str] = []
         try:
             async for ev, payload in self.agent.run(
                 source="qq", user_id=user_id, session_id=session_id,
@@ -244,11 +250,14 @@ class QQAdapter:
                     self.last_error = str((payload or {}).get("message") or "agent_error")
                 elif ev == "done":
                     reply = str((payload or {}).get("reply") or "").strip()
+                    images = [str(u) for u in (payload or {}).get("images") or [] if u]
+                    audio = [str(u) for u in (payload or {}).get("audio") or [] if u]
         except Exception as exc:  # noqa: BLE001
             self.last_error = f"{type(exc).__name__}: {exc}"
             reply = ""
 
-        if not reply:
+        reply = strip_media_refs(reply, images + audio)
+        if not reply and not images and not audio:
             reply = "（没有生成回复，请稍后再试）"
         for chunk in split_text(reply, self.cfg.max_reply_chars):
             try:
@@ -256,12 +265,19 @@ class QQAdapter:
             except Exception as exc:  # noqa: BLE001
                 self.last_error = f"send_failed: {type(exc).__name__}: {exc}"
                 break
+        if self.cfg.send_media and (images or audio):
+            try:
+                await self._send_media(target[0], target[1], images, audio)
+            except Exception as exc:  # noqa: BLE001
+                self.last_error = f"media_send_failed: {type(exc).__name__}: {exc}"
         self.handled += 1
         self.last_reply_at = time.time()
         return reply
 
     async def _send(self, target_kind: str, target_id: str, text: str,
                     sender_id: str = "") -> None:
+        if not text:
+            return
         if self._send_action is not None:
             await self._send_action(target_kind, target_id, text)
             return
@@ -275,6 +291,42 @@ class QQAdapter:
             params["group_id"] = int(target_id) if target_id.isdigit() else target_id
         else:
             params["user_id"] = int(target_id) if target_id.isdigit() else target_id
+        await self._action(action, params)
+
+    async def _send_media(self, target_kind: str, target_id: str,
+                          images: list[str], audio: list[str]) -> None:
+        if self._send_action is not None:
+            return
+        action = "send_group_msg" if target_kind == "group" else "send_private_msg"
+        base: dict[str, Any] = {}
+        if target_kind == "group":
+            base["group_id"] = int(target_id) if target_id.isdigit() else target_id
+        else:
+            base["user_id"] = int(target_id) if target_id.isdigit() else target_id
+        media = [("image", u) for u in images[: self.cfg.max_media_items]]
+        media += [("record", u) for u in audio[: self.cfg.max_media_items]]
+        if not self.cfg.send_media:
+            return
+        for seg_type, url in media:
+            absolute = self._absolute_url(url)
+            if not absolute:
+                continue
+            await self._action(action, {
+                **base,
+                "message": [{"type": seg_type, "data": {"file": absolute}}],
+            })
+
+    def _absolute_url(self, url: str) -> str:
+        url = str(url or "").strip()
+        if not url:
+            return ""
+        if url.startswith("//"):
+            return "http:" + url
+        if url.startswith("/"):
+            return self.cfg.media_base + url
+        return url
+
+    async def _action(self, action: str, params: dict[str, Any]) -> None:
         headers = {"Content-Type": "application/json"}
         if self.cfg.token:
             headers["Authorization"] = f"Bearer {self.cfg.token}"
@@ -378,6 +430,17 @@ def split_text(text: str, limit: int = 1200) -> list[str]:
         chunks.append(rest[:cut].rstrip())
         rest = rest[cut:].lstrip("\n")
     return [c for c in chunks if c]
+
+
+def strip_media_refs(text: str, urls: list[str] | None = None) -> str:
+    """Remove media URLs/markdown that the adapter sends as native segments."""
+    out = str(text or "")
+    for url in urls or []:
+        if url:
+            out = out.replace(str(url), "")
+    out = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
 
 
 def build_reply_segments(target_kind: str, text: str, sender_id: str,

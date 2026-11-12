@@ -25,6 +25,7 @@ from core.qq_adapter import (  # noqa: E402
     session_for,
     should_handle,
     split_text,
+    strip_media_refs,
 )
 
 PASSED: list[str] = []
@@ -217,6 +218,27 @@ def test_auth() -> None:
     check("显式允许无 token 回环", open_adapter.authorized(req("127.0.0.1", {})) is True)
 
 
+def test_media() -> None:
+    url = "http://127.0.0.1:8899/img?filename=a.png"
+    check("剥离图片 Markdown", strip_media_refs("好看吧 ![x](%s)" % url, [url]) == "好看吧")
+    check("剥离裸 URL", strip_media_refs("语音来了\n%s\n" % url, [url]) == "语音来了")
+    adapter = QQAdapter(FakeAgent(), {"enabled": True, "send_media": True,
+                                      "media_base": "http://127.0.0.1:8899"})
+    check("相对 URL 补全", adapter._absolute_url("/img?filename=a.png")
+          == "http://127.0.0.1:8899/img?filename=a.png")
+    calls = []
+
+    async def fake_action(action, params):
+        calls.append((action, params))
+
+    adapter._action = fake_action  # type: ignore[method-assign]
+    asyncio.run(adapter._send_media("private", "10001", ["/img?filename=a.png"],
+                                    ["/audio?file=tts_a.wav"]))
+    check("图片原生段", calls[0][0] == "send_private_msg"
+          and calls[0][1]["message"][0]["type"] == "image")
+    check("语音原生段", calls[1][1]["message"][0]["type"] == "record")
+
+
 def main() -> int:
     print("[1] dedupe")
     test_dedupe()
@@ -230,6 +252,8 @@ def main() -> int:
     asyncio.run(test_handle())
     print("[6] auth")
     test_auth()
+    print("[7] media")
+    test_media()
     print(f"\n结果: {len(PASSED)}/{len(PASSED) + len(FAILED)} 通过")
     return 0 if not FAILED else 1
 
