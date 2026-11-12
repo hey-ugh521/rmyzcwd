@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import uuid
 from typing import Any, AsyncIterator
 
 import httpx
@@ -204,10 +205,8 @@ class Agent:
     async def _do_image(self, args: dict, ctx: dict) -> dict:
         if ctx.get("image_done"):
             return {"ok": False, "error": "本轮已生成过一张图，请直接使用"}
-        char_key = args.get("character") or ctx.get("character")
-        ch = store.get_character(char_key)
-        if not ch:
-            ch = store.get_character(store.CFG.get("default_character"))
+        char_key = str(args.get("character") or "").strip()
+        ch = store.get_character(char_key) if char_key else None
         char_id = (ch or {}).get("id")
         policy = (ch or {}).get("media_policy") or {}
         if policy.get("allow_image") is False:
@@ -236,6 +235,9 @@ class Agent:
             resp = await self.gw.generate(
                 character=char_id, prompt=prompt,
                 user_id=ctx["user_id"], session_id=ctx["session_id"],
+                # 每次工具调用是一个新的逻辑请求；不能复用 session 派生 key，
+                # 否则同会话下一张图会命中上一张图的 idempotency 并 409。
+                idempotency_key=f"core-image-{uuid.uuid4().hex}",
                 **{"async": True},
             )
             task_id = resp.get("task_id") or resp.get("id")
