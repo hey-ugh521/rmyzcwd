@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 from core.qq_adapter import (  # noqa: E402
     MessageDedupe,
     QQAdapter,
+    build_reply_segments,
     extract_text,
     is_at_self,
     session_for,
@@ -135,6 +136,10 @@ def test_mapping_and_policy() -> None:
     check("群白名单命中", should_handle(group_event(message=[]), cfg2, "3947356403") is True)
     cfg3 = SimpleNamespace(group_require_at=False, allowed_groups={"999"})
     check("群白名单未命中忽略", should_handle(group_event(), cfg3, "3947356403") is False)
+    segs = build_reply_segments("group", "在", "10001", True)
+    check("群回复带 @", segs[0]["type"] == "at" and segs[0]["data"]["qq"] == "10001"
+          and segs[1]["type"] == "text")
+    check("私聊回复不带 @", build_reply_segments("private", "在", "10001", True)[0]["type"] == "text")
 
 
 def test_split() -> None:
@@ -171,6 +176,27 @@ async def test_handle() -> None:
 
     disabled = QQAdapter(agent, {"enabled": False}, send_action=sender)
     check("disabled 忽略", await disabled.handle_event(private_event(message_id=9010)) is None)
+
+    sender2 = FakeSender()
+    limited = QQAdapter(FakeAgent("限流回复"), {"enabled": True, "rate_limit_per_min": 2},
+                        send_action=sender2)
+    for i in range(3):
+        await limited.handle_event(private_event(message_id=9200 + i))
+    check("每用户限流", len(sender2.calls) == 2 and limited.rate_limited == 1,
+          f"calls={len(sender2.calls)} limited={limited.rate_limited}")
+
+    sender3 = FakeSender()
+    agg_agent = FakeAgent("聚合回复")
+    agg = QQAdapter(agg_agent, {"enabled": True, "aggregate_window_sec": 0.05},
+                    send_action=sender3)
+    e1 = private_event(message_id=9301, message=[{"type": "text", "data": {"text": "第一句"}}])
+    e2 = private_event(message_id=9302, message=[{"type": "text", "data": {"text": "第二句"}}])
+    check("聚合窗口首条缓冲", await agg.handle_event(e1) is None)
+    check("聚合窗口次条缓冲", await agg.handle_event(e2) is None)
+    await asyncio.sleep(0.15)
+    check("聚合后只回复一次", len(sender3.calls) == 1, str(sender3.calls))
+    check("聚合文本合并", agg_agent.calls and "第一句" in agg_agent.calls[-1]["text"]
+          and "第二句" in agg_agent.calls[-1]["text"], str(agg_agent.calls))
 
 
 def test_auth() -> None:

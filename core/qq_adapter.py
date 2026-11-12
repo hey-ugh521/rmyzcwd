@@ -10,6 +10,7 @@ no side effects and creates no network connections.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import time
@@ -95,6 +96,9 @@ class QQConfig:
         self.self_id = str(raw.get("self_id") or "")
         self.character = str(raw.get("character") or "").strip() or None
         self.group_require_at = _as_bool(raw.get("group_require_at"), True)
+        self.group_at_sender = _as_bool(raw.get("group_at_sender"), True)
+        self.rate_limit_per_min = max(0, int(raw.get("rate_limit_per_min") or 12))
+        self.aggregate_window_sec = max(0.0, float(raw.get("aggregate_window_sec") or 0))
         self.allowed_groups = {str(x) for x in _as_list(raw.get("allowed_groups"))}
         self.dedupe_ttl = float(raw.get("dedupe_ttl") or 600)
         self.dedupe_max = int(raw.get("dedupe_max") or 2048)
@@ -112,10 +116,14 @@ class QQAdapter:
         self.cfg = QQConfig(config)
         self.dedupe = MessageDedupe(self.cfg.dedupe_ttl, self.cfg.dedupe_max)
         self._send_action = send_action
+        self._rate: dict[str, list[float]] = {}
+        self._buffers: dict[str, dict[str, Any]] = {}
+        self._buffer_tasks: set[asyncio.Task] = set()
         self.last_event_at: float | None = None
         self.last_reply_at: float | None = None
         self.last_error: str | None = None
         self.handled = 0
+        self.rate_limited = 0
 
     # ------------------------------------------------------------------ auth
 
@@ -148,6 +156,19 @@ class QQAdapter:
 
     # ------------------------------------------------------------- event I/O
 
+    def _allow_rate(self, key: str) -> bool:
+        limit = self.cfg.rate_limit_per_min
+        if limit <= 0:
+            return True
+        now = time.monotonic()
+        window = [t for t in self._rate.get(key, []) if now - t < 60]
+        if len(window) >= limit:
+            self._rate[key] = window
+            return False
+        window.append(now)
+        self._rate[key] = window
+        return True
+
     async def handle_event(self, event: dict[str, Any]) -> str | None:
         """Process one OneBot event. Returns the reply text, or None if ignored."""
         if not self.cfg.enabled:
@@ -178,6 +199,40 @@ class QQAdapter:
         if self.dedupe.is_duplicate(key):
             return None
 
+        rate_key = f"{message_type}:{event.get('group_id') or event.get('user_id')}:{sender_id}"
+        if not self._allow_rate(rate_key):
+            self.rate_limited += 1
+            self.last_error = "rate_limited"
+            return None
+
+        user_id, session_id, target = session_for(event)
+        if self.cfg.aggregate_window_sec > 0:
+            buffer_key = f"{session_id}|{sender_id}"
+            buf = self._buffers.get(buffer_key)
+            if buf is None:
+                buf = {"texts": [], "event": event, "sender_id": sender_id}
+                self._buffers[buffer_key] = buf
+                task = asyncio.create_task(self._flush_buffer(buffer_key))
+                self._buffer_tasks.add(task)
+                task.add_done_callback(self._buffer_tasks.discard)
+            buf["texts"].append(text)
+            return None
+
+        return await self._respond(event, text)
+
+    async def _flush_buffer(self, buffer_key: str) -> None:
+        await asyncio.sleep(self.cfg.aggregate_window_sec)
+        buf = self._buffers.pop(buffer_key, None)
+        if not buf:
+            return
+        text = "\n".join(t for t in buf.get("texts", []) if t).strip()
+        if text:
+            await self._respond(buf["event"], text)
+
+    async def _respond(self, event: dict[str, Any], text: str) -> str | None:
+        message_type = str(event.get("message_type") or "")
+        self_id = str(event.get("self_id") or self.cfg.self_id or "")
+        sender_id = str(event.get("user_id") or "")
         user_id, session_id, target = session_for(event)
         reply = ""
         try:
@@ -197,7 +252,7 @@ class QQAdapter:
             reply = "（没有生成回复，请稍后再试）"
         for chunk in split_text(reply, self.cfg.max_reply_chars):
             try:
-                await self._send(target[0], target[1], chunk)
+                await self._send(target[0], target[1], chunk, sender_id)
             except Exception as exc:  # noqa: BLE001
                 self.last_error = f"send_failed: {type(exc).__name__}: {exc}"
                 break
@@ -205,12 +260,17 @@ class QQAdapter:
         self.last_reply_at = time.time()
         return reply
 
-    async def _send(self, target_kind: str, target_id: str, text: str) -> None:
+    async def _send(self, target_kind: str, target_id: str, text: str,
+                    sender_id: str = "") -> None:
         if self._send_action is not None:
             await self._send_action(target_kind, target_id, text)
             return
         action = "send_group_msg" if target_kind == "group" else "send_private_msg"
-        params: dict[str, Any] = {"message": [{"type": "text", "data": {"text": text}}]}
+        params: dict[str, Any] = {
+            "message": build_reply_segments(
+                target_kind, text, sender_id, self.cfg.group_at_sender
+            )
+        }
         if target_kind == "group":
             params["group_id"] = int(target_id) if target_id.isdigit() else target_id
         else:
@@ -231,6 +291,10 @@ class QQAdapter:
             "self_id": self.cfg.self_id,
             "character": self.cfg.character,
             "group_require_at": self.cfg.group_require_at,
+            "group_at_sender": self.cfg.group_at_sender,
+            "rate_limit_per_min": self.cfg.rate_limit_per_min,
+            "aggregate_window_sec": self.cfg.aggregate_window_sec,
+            "rate_limited": self.rate_limited,
             "allowed_groups": sorted(self.cfg.allowed_groups),
             "dedupe": self.dedupe.stats(),
             "handled": self.handled,
@@ -314,6 +378,22 @@ def split_text(text: str, limit: int = 1200) -> list[str]:
         chunks.append(rest[:cut].rstrip())
         rest = rest[cut:].lstrip("\n")
     return [c for c in chunks if c]
+
+
+def build_reply_segments(target_kind: str, text: str, sender_id: str,
+                         at_sender: bool = True) -> list[dict[str, Any]]:
+    """Build OneBot message segments for a reply.
+
+    Group replies can @ the sender so the reply is visible/notifying; private
+    replies are always plain text.
+    """
+    segments: list[dict[str, Any]] = []
+    if target_kind == "group" and at_sender and sender_id:
+        segments.append({"type": "at", "data": {"qq": str(sender_id)}})
+        segments.append({"type": "text", "data": {"text": " " + text}})
+    else:
+        segments.append({"type": "text", "data": {"text": text}})
+    return segments
 
 
 def _event_fallback_key(event: dict[str, Any]) -> str:
