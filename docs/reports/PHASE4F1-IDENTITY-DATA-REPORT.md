@@ -1,7 +1,7 @@
 # Phase 4F-1 实施报告：身份数据模型与凭证生命周期
 
 - 日期：2026-11-13
-- 状态：4F-1 完成并已把身份数据层部署到生产；未改变 HTTP 认证/路由授权行为
+- 状态：**验收通过，切片冻结**
 - 设计审查：[Phase 4F 设计稿](../aegis/plans/2026-11-13-phase4f-identity-authorization.md)
 - 数据契约：[Identity Data Model Contract](../current/IDENTITY-DATA-MODEL.md)
 - 代码提交：`dbdd784`、`a94bc55`、`659bed9`（原子初始化与外键加固）
@@ -228,9 +228,51 @@ python -m core.identity_cli list-principals
 - 生产身份表已用空表重建，显式 FK 已验证
 - 审计记录仍无 UI；4G 提供筛选页
 
-## 9. 停止点
+## 9. 验收与冻结
 
-4F-1 到此停止。
+2026-11-13 验收通过，4F-1 冻结。
 
-等待 4F-2（认证映射 + shadow）测试结果，再进入 4F-3 路由授权。
+- 复核测试合计：92/92（本报告列出的十组文件）
+- 该数字来自本次实施运行；不是独立复现的代码审计
+- 生产身份表为空，未创建 admin / bootstrap token
+- 现有 HTTP 认证和路由授权未切换
+
+## 10. 冻结后的工程约束
+
+以下不是 4F-1 的未完成项，而是后续演进必须遵守的约束：
+
+1. **身份表迁移兼容性**
+   - 当前生产为空表，允许重建 FK schema。
+   - 一旦身份表有真实数据，禁止继续使用破坏性重建。
+   - 必须使用可迁移、可回滚的数据库迁移。
+2. **撤销状态传播**
+   - Principal 禁用、Credential 撤销、Session 撤销、Token 失效已有语义。
+   - 未来加入缓存或多进程服务时，必须保证撤销状态及时传播；不能让缓存继续认可已失效身份。
+3. **local kind 边界**
+   - `local` 允许 admin/operator 是已冻结决定。
+   - 后续必须明确 local 的创建权限和运行边界，不能仅凭 `kind=local` 默认可信。
+
+## 11. 下一阶段准入
+
+4F-2A 的准入范围仅限：
+
+```text
+旧 API_KEY
+  -> service-legacy Principal
+  -> Credential
+  -> role = service
+```
+
+不接管真实 HTTP 认证，不改变放行结果，不做 Admin Login。
+
+必须证明：
+
+1. 同一旧 API_KEY 始终映射到同一 Principal。
+2. 不同旧 API_KEY 不会错误地映射到同一 Credential。
+3. 未知 API_KEY 不会自动创建 Principal。
+4. 旧 API_KEY 永远不会映射为 admin。
+5. 映射失败不会污染身份表。
+6. Legacy 映射不会绕过未来统一认证/授权管线。
+
+本切片到此结束，不再追加功能。
 

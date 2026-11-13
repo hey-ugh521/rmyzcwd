@@ -1,6 +1,6 @@
 # Identity Data Model Contract (Phase 4F-1)
 
-- 状态：Frozen for 4F-1
+- 状态：**Frozen / 4F-1 accepted**
 - 日期：2026-11-13
 - 设计审查：[Phase 4F design](../aegis/plans/2026-11-13-phase4f-identity-authorization.md)
 - 范围：只定义数据事实与生命周期；**不改变现有 HTTP 认证/路由行为**
