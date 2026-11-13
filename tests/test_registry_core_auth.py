@@ -13,17 +13,20 @@ sys.path.insert(0, str(ROOT))
 from fastapi.testclient import TestClient  # noqa: E402
 
 from core import registry, store  # noqa: E402
+from core import capabilities  # noqa: E402
 
 
 class RegistryCoreAuthTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.tmp = tempfile.TemporaryDirectory()
+        cls.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         cls.old_backend = store.DB_BACKEND
         cls.old_path = store.DB_PATH
         store.DB_BACKEND = "sqlite"
         store.DB_PATH = Path(cls.tmp.name) / "core_auth.db"
+        store.init_db()
         registry.init_schema()
+        capabilities.init_schema()
 
         # Import the real Core app after the test DB is selected.
         import core.server as coreserver  # noqa: PLC0415
@@ -104,6 +107,32 @@ class RegistryCoreAuthTest(unittest.TestCase):
         paths = {getattr(route, "path", "") for route in self.coreserver.app.routes}
         self.assertIn("/api/registry/{resource_type}", paths)
         self.assertNotIn("/registry/{resource_type}", paths)
+
+
+    def test_policy_unauthenticated_mutation_rejected(self):
+        r = self.client.post("/api/capabilities/permissions", json={
+            "subject_type": "source", "subject": "unauth",
+            "capability": "image.generate", "effect": "deny",
+        })
+        self.assertEqual(r.status_code, 401, r.text)
+
+    def test_policy_bearer_allowed_and_audited(self):
+        r = self.client.post(
+            "/api/capabilities/permissions",
+            json={"subject_type": "source", "subject": "auth-test",
+                  "capability": "image.generate", "effect": "allow"},
+            headers={"Authorization": "Bearer test-api-key"},
+        )
+        self.assertEqual(r.status_code, 200, r.text)
+        c = store.conn()
+        try:
+            row = c.execute(
+                "SELECT actor,result FROM audit WHERE action='capability.permission.set' "
+                "AND result='ok' ORDER BY ts DESC LIMIT 1").fetchone()
+        finally:
+            c.close()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["actor"], "api-key")
 
 
 if __name__ == "__main__":

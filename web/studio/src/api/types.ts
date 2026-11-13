@@ -345,6 +345,7 @@ export interface CapabilityPermission {
   scope_json?: string;
   priority: number;
   enabled: number;
+  version?: number;
   created_at: number;
   updated_at: number;
 }
@@ -354,6 +355,7 @@ export interface CapabilityProvider {
   provider: string;
   priority: number;
   enabled: number;
+  version?: number;
   constraints_json?: string;
   updated_at: number;
 }

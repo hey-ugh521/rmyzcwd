@@ -99,6 +99,7 @@ export function PolicyPage() {
       priority: Number(priority) || 0,
       enabled,
       scope,
+      expected_version: editing?.version,
     });
     resetForm();
   };
@@ -109,6 +110,7 @@ export function PolicyPage() {
       provider: row.provider,
       priority: patch.priority ?? row.priority,
       enabled: patch.enabled ?? !!row.enabled,
+      expected_version: row.version,
       constraints: (() => { try { return JSON.parse(row.constraints_json || "{}"); } catch { return {}; } })(),
     });
   };
@@ -154,7 +156,7 @@ export function PolicyPage() {
                     <span className="ml-auto text-faint">{p.enabled ? "enabled" : "disabled"}</span>
                     <IconTrash size={12} className="text-danger" onClick={(e) => {
                       e.stopPropagation();
-                      deletePermission.mutate(p.id);
+                      deletePermission.mutate({ id: p.id, expectedVersion: p.version });
                     }} />
                   </button>
                 ))}

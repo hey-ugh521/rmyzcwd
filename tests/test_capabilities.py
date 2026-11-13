@@ -37,6 +37,7 @@ class CapabilityTest(unittest.TestCase):
         }), encoding="utf-8")
         self.old = (store.DB_BACKEND, store.DB_PATH, store.CHARS_DIR, store.DATA_DIR,
                     os.environ.get("MOBIUS_REGISTRY_RUNTIME"))
+        self.old_caps_cfg = store.CFG.get("capabilities")
         store.DB_BACKEND = "sqlite"
         store.DB_PATH = root / "cap.db"
         store.CHARS_DIR = chars
@@ -66,6 +67,10 @@ class CapabilityTest(unittest.TestCase):
             os.environ.pop("MOBIUS_REGISTRY_RUNTIME", None)
         else:
             os.environ["MOBIUS_REGISTRY_RUNTIME"] = old_mode
+        if self.old_caps_cfg is None:
+            store.CFG.pop("capabilities", None)
+        else:
+            store.CFG["capabilities"] = self.old_caps_cfg
         self.tmp.cleanup()
 
     def test_image_invocation_records_revision(self):
@@ -168,6 +173,89 @@ class CapabilityTest(unittest.TestCase):
         result = capabilities.prune_invocations(retention_days=30, max_records=10)
         self.assertGreaterEqual(result["deleted_by_age"], 1)
         self.assertFalse(any(x["id"] == "old" for x in capabilities.list_invocations()))
+
+    def test_default_and_disabled_permission(self):
+        self.assertTrue(capabilities.decide_permission(
+            capability="image.generate", actor="u", source="qq")["allow"])
+        capabilities.set_permission(subject_type="source", subject="disabled",
+                                    capability="image.generate", effect="deny",
+                                    enabled=False)
+        self.assertTrue(capabilities.decide_permission(
+            capability="image.generate", actor="disabled", source="disabled")["allow"])
+        store.CFG["capabilities"] = {"default_allow": False}
+        self.assertFalse(capabilities.decide_permission(
+            capability="image.generate", actor="u", source="none")["allow"])
+
+    def test_specificity_and_deny_wins(self):
+        # source wildcard allow vs source exact deny: deny-wins wins at equal rank
+        capabilities.set_permission(subject_type="source", subject="*",
+                                    capability="image.generate", effect="allow")
+        capabilities.set_permission(subject_type="source", subject="qq",
+                                    capability="image.generate", effect="deny")
+        self.assertFalse(capabilities.decide_permission(
+            capability="image.generate", actor="qq", source="qq")["allow"])
+        # user specificity outranks a higher-priority source allow
+        capabilities.set_permission(subject_type="source", subject="qq",
+                                    capability="voice.synthesize", effect="allow", priority=999)
+        capabilities.set_permission(subject_type="user", subject="u1",
+                                    capability="voice.synthesize", effect="deny", priority=0)
+        self.assertFalse(capabilities.decide_permission(
+            capability="voice.synthesize", actor="qq", source="qq", user_id="u1")["allow"])
+
+    def test_permission_version_conflict_and_audit(self):
+        row = capabilities.set_permission(subject_type="source", subject="v",
+                                          capability="image.generate", effect="allow",
+                                          actor="admin-a")
+        self.assertEqual(row["version"], 1)
+        updated = capabilities.set_permission(subject_type="source", subject="v",
+                                              capability="image.generate", effect="deny",
+                                              expected_version=1, actor="admin-b")
+        self.assertEqual(updated["version"], 2)
+        with self.assertRaises(capabilities.CapabilityError) as cm:
+            capabilities.set_permission(subject_type="source", subject="v",
+                                        capability="image.generate", effect="allow",
+                                        expected_version=1, actor="admin-c")
+        self.assertEqual(cm.exception.code, "permission_conflict")
+        with __import__("contextlib").closing(store.conn()) as c:
+            rows = c.execute(
+                "SELECT actor,result,action,detail FROM audit WHERE action='capability.permission.set' "
+                "ORDER BY ts").fetchall()
+        self.assertEqual([r["actor"] for r in rows], ["admin-a", "admin-b", "admin-c"])
+        self.assertEqual([r["result"] for r in rows], ["ok", "ok", "fail"])
+        import json as _json
+        final_detail = _json.loads(rows[-1]["detail"])
+        self.assertIn("before", final_detail)
+        self.assertEqual(final_detail["before"]["effect"], "deny")
+        self.assertEqual(final_detail["before"]["version"], 2)
+
+    def test_concurrent_permission_edit_one_winner(self):
+        import threading
+        base = capabilities.set_permission(subject_type="source", subject="race",
+                                           capability="image.generate", effect="allow")
+        results = []
+        barrier = threading.Barrier(2)
+
+        def worker(effect, actor):
+            barrier.wait()
+            try:
+                row = capabilities.set_permission(
+                    subject_type="source", subject="race", capability="image.generate",
+                    effect=effect, expected_version=base["version"], actor=actor)
+                results.append(("ok", row["version"]))
+            except capabilities.CapabilityError as exc:
+                results.append((exc.code, None))
+
+        threads = [threading.Thread(target=worker, args=("deny", "admin-1")),
+                   threading.Thread(target=worker, args=("allow", "admin-2"))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        ok = [r for r in results if r[0] == "ok"]
+        conflicts = [r for r in results if r[0] == "permission_conflict"]
+        self.assertEqual(len(ok), 1, results)
+        self.assertEqual(len(conflicts), 1, results)
+        self.assertEqual(ok[0][1], 2)
 
     def test_dynamic_health_fails_image(self):
         ch = registry_runtime.character("bronya")

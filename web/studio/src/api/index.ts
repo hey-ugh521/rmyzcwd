@@ -54,7 +54,7 @@ export interface Api {
   deleteVoiceAsset(id: string): Promise<{ ok: boolean; item: VoiceAsset }>;
   getCapabilityPermissions(): Promise<{ items: CapabilityPermission[]; default_allow: boolean }>;
   saveCapabilityPermission(body: Record<string, unknown>): Promise<{ ok: boolean; item: CapabilityPermission }>;
-  deleteCapabilityPermission(id: string): Promise<{ ok: boolean }>;
+  deleteCapabilityPermission(id: string, expectedVersion?: number): Promise<{ ok: boolean }>;
   getCapabilityProviders(): Promise<{ items: CapabilityProvider[] }>;
   saveCapabilityProvider(body: Record<string, unknown>): Promise<{ ok: boolean; item: CapabilityProvider }>;
   getCapabilityProviderHealth(): Promise<{ items: CapabilityProviderHealth[] }>;

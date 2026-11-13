@@ -235,7 +235,7 @@ export class MockBackend implements Api {
     return { items: [], default_allow: true };
   }
   async saveCapabilityPermission(_body: Record<string, unknown>) { return { ok: false, item: {} as CapabilityPermission }; }
-  async deleteCapabilityPermission(_id: string) { return { ok: false }; }
+  async deleteCapabilityPermission(_id: string, _expectedVersion?: number) { return { ok: false }; }
   async getCapabilityProviders(): Promise<{ items: CapabilityProvider[] }> {
     return { items: [
       { capability: "image.generate", provider: "comfyui", priority: 10, enabled: 1, updated_at: 0 },

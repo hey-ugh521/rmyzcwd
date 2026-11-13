@@ -66,6 +66,7 @@ def init_schema() -> None:
           scope_json TEXT,
           priority INTEGER NOT NULL DEFAULT 0,
           enabled INTEGER NOT NULL DEFAULT 1,
+          version INTEGER NOT NULL DEFAULT 1,
           created_at REAL NOT NULL,
           updated_at REAL NOT NULL,
           UNIQUE(subject_type,subject,capability)
@@ -77,11 +78,20 @@ def init_schema() -> None:
           provider TEXT NOT NULL,
           priority INTEGER NOT NULL DEFAULT 100,
           enabled INTEGER NOT NULL DEFAULT 1,
+          version INTEGER NOT NULL DEFAULT 1,
           constraints_json TEXT,
           updated_at REAL NOT NULL,
           PRIMARY KEY(capability,provider)
         )
         """)
+        # Existing 4B deployments predate the optimistic-lock columns.
+        for table in ("capability_permissions", "capability_providers"):
+            if store.DB_BACKEND == "pg":
+                c.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1")
+            else:
+                cols = {r[1] for r in c.execute(f"PRAGMA table_info({table})").fetchall()}
+                if "version" not in cols:
+                    c.execute(f"ALTER TABLE {table} ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
         for capability, provider, priority in (
             ("image.generate", "comfyui", 10),
             ("voice.synthesize", "kokoro", 20),
@@ -116,7 +126,9 @@ def permission_rows() -> list[dict[str, Any]]:
 
 def set_permission(*, subject_type: str, subject: str, capability: str,
                    effect: str, priority: int = 0, enabled: bool = True,
-                   scope: dict[str, Any] | None = None) -> dict[str, Any]:
+                   scope: dict[str, Any] | None = None,
+                   expected_version: int | None = None,
+                   actor: str = "system") -> dict[str, Any]:
     if subject_type not in {"source", "actor", "user", "*"}:
         raise CapabilityError("invalid_permission_subject", "subject_type 非法", 422)
     if not subject:
@@ -126,36 +138,98 @@ def set_permission(*, subject_type: str, subject: str, capability: str,
     import json
     now = time.time()
     pid = "perm_" + uuid.uuid4().hex[:12]
-    with closing(store.conn()) as c:
+    before: dict[str, Any] | None = None
+    c = store.conn()
+    try:
+        if store.DB_BACKEND != "pg":
+            c.execute("BEGIN IMMEDIATE")
         exists = c.execute(
-            "SELECT id FROM capability_permissions WHERE subject_type=? AND subject=? AND capability=?",
+            "SELECT * FROM capability_permissions WHERE subject_type=? AND subject=? AND capability=?",
             (subject_type, subject, capability),
         ).fetchone()
+        before = dict(exists) if exists else None
         if exists:
+            current_version = int(exists["version"]) if "version" in exists.keys() else 1
+            if expected_version is not None and int(expected_version) != current_version:
+                raise CapabilityError(
+                    "permission_conflict", "权限规则已被其他管理员修改", 409,
+                    {"expected_version": expected_version, "current_version": current_version},
+                )
             pid = exists["id"]
             c.execute(
-                "UPDATE capability_permissions SET effect=?,scope_json=?,priority=?,enabled=?,updated_at=? "
-                "WHERE id=?",
+                "UPDATE capability_permissions SET effect=?,scope_json=?,priority=?,enabled=?,"
+                "version=version+1,updated_at=? WHERE id=?",
                 (effect, json.dumps(scope or {}, ensure_ascii=False), priority,
                  1 if enabled else 0, now, pid),
             )
         else:
+            if expected_version not in (None, 0):
+                raise CapabilityError(
+                    "permission_conflict", "权限规则不存在或已被删除", 409,
+                    {"expected_version": expected_version, "current_version": None},
+                )
             c.execute(
                 "INSERT INTO capability_permissions(id,subject_type,subject,capability,effect,"
-                "scope_json,priority,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "scope_json,priority,enabled,version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (pid, subject_type, subject, capability, effect,
                  json.dumps(scope or {}, ensure_ascii=False), priority,
-                 1 if enabled else 0, now, now),
+                 1 if enabled else 0, 1, now, now),
             )
         c.commit()
         row = c.execute("SELECT * FROM capability_permissions WHERE id=?", (pid,)).fetchone()
-    return dict(row)
+    except CapabilityError as exc:
+        c.rollback()
+        store.audit(actor, "capability.permission.set", {
+            "before": before, "requested": {"subject_type": subject_type, "subject": subject,
+                                             "capability": capability, "effect": effect},
+            "expected_version": expected_version,
+        }, result="fail", error=exc.code, source="core")
+        raise
+    except Exception as exc:
+        c.rollback()
+        store.audit(actor, "capability.permission.set", {
+            "before": before, "requested": {"subject_type": subject_type, "subject": subject,
+                                             "capability": capability, "effect": effect},
+            "expected_version": expected_version,
+        }, result="fail", error=f"{type(exc).__name__}: {exc}", source="core")
+        raise CapabilityError("permission_conflict", "权限规则写入冲突，请刷新后重试", 409) from exc
+    finally:
+        c.close()
+    after = dict(row)
+    store.audit(actor, "capability.permission.set", {
+        "before": before, "after": after,
+    }, result="ok", source="core")
+    return after
 
 
-def delete_permission(permission_id: str) -> None:
-    with closing(store.conn()) as c:
+def delete_permission(permission_id: str, *, expected_version: int | None = None,
+                      actor: str = "system") -> None:
+    c = store.conn()
+    before = None
+    try:
+        if store.DB_BACKEND != "pg":
+            c.execute("BEGIN IMMEDIATE")
+        row = c.execute("SELECT * FROM capability_permissions WHERE id=?", (permission_id,)).fetchone()
+        before = dict(row) if row else None
+        if before is None:
+            raise CapabilityError("permission_not_found", "权限规则不存在", 404)
+        if expected_version is not None and int(expected_version) != int(before.get("version") or 1):
+            raise CapabilityError("permission_conflict", "权限规则已被修改", 409,
+                                  {"expected_version": expected_version,
+                                   "current_version": before.get("version")})
         c.execute("DELETE FROM capability_permissions WHERE id=?", (permission_id,))
         c.commit()
+    except CapabilityError as exc:
+        c.rollback()
+        store.audit(actor, "capability.permission.delete", {
+            "before": before, "expected_version": expected_version,
+        }, result="fail", error=exc.code, source="core")
+        raise
+    finally:
+        c.close()
+    store.audit(actor, "capability.permission.delete", {
+        "before": before, "after": None,
+    }, result="ok", source="core")
 
 
 _SUBJECT_WEIGHT = {"*": 0, "source": 1, "actor": 2, "user": 3}
@@ -186,7 +260,7 @@ def decide_permission(*, capability: str, actor: str, source: str,
                       character_id: str | None = None) -> dict[str, Any]:
     import json
     values = {"source": source, "actor": actor, "user": user_id or "", "*": "*"}
-    best: tuple[int, dict[str, Any]] | None = None
+    best: tuple[tuple[int, int, int, int], dict[str, Any]] | None = None
     for row in permission_rows():
         if not row.get("enabled"):
             continue
@@ -203,13 +277,14 @@ def decide_permission(*, capability: str, actor: str, source: str,
             scope = {}
         if not _scope_ok(scope, character_id=character_id, source=source, user_id=user_id):
             continue
-        score = _SUBJECT_WEIGHT[st] * 100
-        if row.get("capability") == capability:
-            score += 10
-        score += int(row.get("priority") or 0)
-        if best is None or score > best[0] or (
-                score == best[0] and row.get("effect") == "deny"):
-            best = (score, row)
+        rank = (
+            _SUBJECT_WEIGHT[st],
+            1 if row.get("capability") == capability else 0,
+            int(row.get("priority") or 0),
+            1 if row.get("effect") == "deny" else 0,
+        )
+        if best is None or rank > best[0]:
+            best = (rank, row)
     if best is None:
         default_allow = bool(_config().get("default_allow", True))
         return {"allow": default_allow, "source": "default", "permission": None}
@@ -226,24 +301,64 @@ def provider_rows() -> list[dict[str, Any]]:
 
 
 def set_provider(*, capability: str, provider: str, priority: int = 100,
-                 enabled: bool = True, constraints: dict[str, Any] | None = None) -> dict[str, Any]:
+                 enabled: bool = True, constraints: dict[str, Any] | None = None,
+                 expected_version: int | None = None,
+                 actor: str = "system") -> dict[str, Any]:
     import json
-    with closing(store.conn()) as c:
-        c.execute(
-            "INSERT INTO capability_providers(capability,provider,priority,enabled,"
-            "constraints_json,updated_at) VALUES(?,?,?,?,?,?) "
-            "ON CONFLICT(capability,provider) DO UPDATE SET priority=excluded.priority,"
-            "enabled=excluded.enabled,constraints_json=excluded.constraints_json,"
-            "updated_at=excluded.updated_at",
-            (capability, provider, priority, 1 if enabled else 0,
-             json.dumps(constraints or {}, ensure_ascii=False), time.time()),
-        )
-        c.commit()
+    now = time.time()
+    before = None
+    c = store.conn()
+    try:
+        if store.DB_BACKEND != "pg":
+            c.execute("BEGIN IMMEDIATE")
         row = c.execute(
             "SELECT * FROM capability_providers WHERE capability=? AND provider=?",
             (capability, provider),
         ).fetchone()
-    return dict(row)
+        before = dict(row) if row else None
+        if before is not None:
+            current = int(before.get("version") or 1)
+            if expected_version is not None and int(expected_version) != current:
+                raise CapabilityError("provider_conflict", "Provider 策略已被修改", 409,
+                                      {"expected_version": expected_version,
+                                       "current_version": current})
+            c.execute(
+                "UPDATE capability_providers SET priority=?,enabled=?,constraints_json=?,"
+                "version=version+1,updated_at=? WHERE capability=? AND provider=?",
+                (priority, 1 if enabled else 0,
+                 json.dumps(constraints or {}, ensure_ascii=False), now,
+                 capability, provider),
+            )
+        else:
+            c.execute(
+                "INSERT INTO capability_providers(capability,provider,priority,enabled,version,"
+                "constraints_json,updated_at) VALUES(?,?,?,?,?,?,?)",
+                (capability, provider, priority, 1 if enabled else 0, 1,
+                 json.dumps(constraints or {}, ensure_ascii=False), now),
+            )
+        c.commit()
+        result = c.execute(
+            "SELECT * FROM capability_providers WHERE capability=? AND provider=?",
+            (capability, provider),
+        ).fetchone()
+    except CapabilityError as exc:
+        c.rollback()
+        store.audit(actor, "capability.provider.set", {
+            "before": before, "capability": capability, "provider": provider,
+        }, result="fail", error=exc.code, source="core")
+        raise
+    except Exception as exc:
+        c.rollback()
+        store.audit(actor, "capability.provider.set", {
+            "before": before, "capability": capability, "provider": provider,
+        }, result="fail", error=f"{type(exc).__name__}: {exc}", source="core")
+        raise CapabilityError("provider_conflict", "Provider 策略写入冲突", 409) from exc
+    finally:
+        c.close()
+    after = dict(result)
+    store.audit(actor, "capability.provider.set", {"before": before, "after": after},
+                result="ok", source="core")
+    return after
 
 
 def choose_provider(capability: str, requested: str | None = None) -> dict[str, Any]:

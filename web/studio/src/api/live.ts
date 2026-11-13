@@ -130,8 +130,9 @@ export class LiveBackend implements Api {
   async saveCapabilityPermission(body: Record<string, unknown>) {
     return coreFetch("/api/capabilities/permissions", { method: "POST", body: JSON.stringify(body) }) as Promise<{ ok: boolean; item: CapabilityPermission }>;
   }
-  async deleteCapabilityPermission(id: string) {
-    return coreFetch(`/api/capabilities/permissions/${encodeURIComponent(id)}`, { method: "DELETE" }) as Promise<{ ok: boolean }>;
+  async deleteCapabilityPermission(id: string, expectedVersion?: number) {
+    const qs = expectedVersion != null ? `?expected_version=${expectedVersion}` : "";
+    return coreFetch(`/api/capabilities/permissions/${encodeURIComponent(id)}${qs}`, { method: "DELETE" }) as Promise<{ ok: boolean }>;
   }
   async getCapabilityProviders() {
     return coreFetch("/api/capabilities/providers") as Promise<{ items: CapabilityProvider[] }>;

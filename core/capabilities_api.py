@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 
 from . import capabilities
 
@@ -34,7 +34,7 @@ async def permissions():
 
 
 @router.post("/permissions")
-async def set_permission(body: dict[str, Any] = Body(...)):
+async def set_permission(request: Request, body: dict[str, Any] = Body(...)):
     try:
         row = capabilities.set_permission(
             subject_type=str(body.get("subject_type") or ""),
@@ -44,6 +44,9 @@ async def set_permission(body: dict[str, Any] = Body(...)):
             priority=int(body.get("priority") or 0),
             enabled=bool(body.get("enabled", True)),
             scope=body.get("scope") if isinstance(body.get("scope"), dict) else None,
+            expected_version=(int(body["expected_version"])
+                              if body.get("expected_version") is not None else None),
+            actor=str(getattr(request.state, "actor", "anonymous") or "anonymous"),
         )
     except capabilities.CapabilityError as exc:
         _raise(exc)
@@ -51,8 +54,15 @@ async def set_permission(body: dict[str, Any] = Body(...)):
 
 
 @router.delete("/permissions/{permission_id}")
-async def delete_permission(permission_id: str):
-    capabilities.delete_permission(permission_id)
+async def delete_permission(permission_id: str, request: Request,
+                            expected_version: int | None = None):
+    try:
+        capabilities.delete_permission(
+            permission_id, expected_version=expected_version,
+            actor=str(getattr(request.state, "actor", "anonymous") or "anonymous"),
+        )
+    except capabilities.CapabilityError as exc:
+        _raise(exc)
     return {"ok": True}
 
 
@@ -74,14 +84,20 @@ async def provider_health():
 
 
 @router.post("/providers")
-async def set_provider(body: dict[str, Any] = Body(...)):
-    row = capabilities.set_provider(
-        capability=str(body.get("capability") or ""),
-        provider=str(body.get("provider") or ""),
-        priority=int(body.get("priority") or 100),
-        enabled=bool(body.get("enabled", True)),
-        constraints=body.get("constraints") if isinstance(body.get("constraints"), dict) else None,
-    )
+async def set_provider(request: Request, body: dict[str, Any] = Body(...)):
+    try:
+        row = capabilities.set_provider(
+            capability=str(body.get("capability") or ""),
+            provider=str(body.get("provider") or ""),
+            priority=int(body.get("priority") or 100),
+            enabled=bool(body.get("enabled", True)),
+            constraints=body.get("constraints") if isinstance(body.get("constraints"), dict) else None,
+            expected_version=(int(body["expected_version"])
+                              if body.get("expected_version") is not None else None),
+            actor=str(getattr(request.state, "actor", "anonymous") or "anonymous"),
+        )
+    except capabilities.CapabilityError as exc:
+        _raise(exc)
     return {"ok": True, "item": row}
 
 

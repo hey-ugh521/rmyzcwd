@@ -333,7 +333,8 @@ export function useDeleteCapabilityPermission() {
   const qc = useQueryClient();
   const mode = useApiMode();
   return useMutation({
-    mutationFn: (id: string) => getApi().deleteCapabilityPermission(id),
+    mutationFn: (vars: { id: string; expectedVersion?: number }) =>
+      getApi().deleteCapabilityPermission(vars.id, vars.expectedVersion),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.capabilityPermissions(mode) });
       toast.success("权限已删除");
