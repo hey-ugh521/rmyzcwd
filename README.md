@@ -87,6 +87,7 @@ start http://127.0.0.1:8900/console
 - Phase 3A 已启用 Registry runtime resolver（`enforce`）：已发布角色/音色/workflow 走 Registry，未发布资源回退 legacy；旧文件读路径仍在。
 - Phase 3B 已完成迁移状态机与旧读关闭：生产状态 `LEGACY_READ_DISABLED`，13 角色 / 4 音色 / 9 workflow 全量对照通过；Agent 不再读 legacy 角色/音色文件。
 - Phase 4A 已完成统一能力入口：Agent 图片/语音经 `CapabilityService`，带权限检查、Provider 路由和执行记录。
+- Phase 4B 已加入能力权限表、Provider 优先级策略、执行记录 30 天/10000 条保留策略。
 - M3 干净安装仍在收口；生产安装与开发仓库分开。
 
 ## 验证

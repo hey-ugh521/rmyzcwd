@@ -254,19 +254,29 @@ Only API Prompt JSON is accepted. UI Workflow JSON is rejected with an explicit
 error. High-risk node classes are reported as warnings; execution is still not
 available in Phase 2A.
 
-## Capability execution (Phase 4A)
+## Capability execution (Phase 4A/4B)
 
 ```text
 GET /api/capabilities
 GET /api/capabilities/invocations?limit=50
+GET /api/capabilities/permissions
+POST /api/capabilities/permissions
+DELETE /api/capabilities/permissions/{id}
+GET /api/capabilities/providers
+POST /api/capabilities/providers
+GET /api/capabilities/retention
+POST /api/capabilities/maintenance/prune
 ```
 
 Agent media tools enter through `CapabilityService`:
 
 - resolve published character/workflow
-- enforce `media_policy` and optional `capabilities.allowed_sources`
-- route to Gateway
+- enforce `capability_permissions` + `media_policy` + optional `capabilities.allowed_sources`
+- route via `capability_providers` (image.comfyui / voice.kokoro|gpt-sovits)
 - record `capability_invocations` with character/workflow revision, provider, task id
+
+Permission defaults to allow (`capabilities.default_allow=true`). Retention defaults
+to 30 days / 10,000 rows and is pruned at Core startup plus a maintenance endpoint.
 
 Gateway remains the execution adapter; direct Gateway `/api/*` is an operator
 surface, not the Agent capability path.
