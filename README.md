@@ -83,6 +83,7 @@ start http://127.0.0.1:8900/console
 - Registry Phase 0.1 已完成资源生命周期、发布、引用、认证边界。
 - Phase 1 只读索引已接入 Studio「能力库」。
 - Phase 2A/2B 已完成旧资源导入、角色卡导入、API workflow 校验（含可选 ComfyUI `/object_info` 节点依赖检查）/导入、draft/publish/rollback 管理页；Runtime 尚未接入。
+- 已受控热更新到 `D:\AI\Mobius`：Studio `/studio` 与 `/api/registry/*` 可用；导入资源均为 draft。
 - M3 干净安装仍在收口；生产安装与开发仓库分开。
 
 ## 验证
