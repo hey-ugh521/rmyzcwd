@@ -192,9 +192,12 @@ class IdentityMeTest(unittest.TestCase):
 
         with mock.patch.object(identity_api, "IDENTITY_ME_TIMEOUT_SECONDS", 0.05), \
                 mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow):
+            started = time.monotonic()
             r = self.get(headers={"Authorization": "Bearer identity-me-key"})
+            elapsed = time.monotonic() - started
             time.sleep(0.35)
         self.assertEqual(r.status_code, 500)
+        self.assertLess(elapsed, 0.2)
         self.assertNotIn("www-authenticate", r.headers)
         self.assertEqual(r.headers.get("cache-control"), "no-store")
 
@@ -234,7 +237,19 @@ class IdentityMeTest(unittest.TestCase):
             self.assertEqual(r.status_code, 200)
             time.sleep(0.1)
             events = shadow.list_shadow_events()
-            self.assertTrue(all(e["path"] == "/api/identity/me" for e in events))
+            self.assertGreaterEqual(len(events), 1)
+            self.assertEqual(events[0]["path"], "/api/identity/me")
+            self.assertEqual(events[0]["evaluation_state"], "not_evaluated")
+        finally:
+            store.CFG.pop("identity", None)
+
+    def test_shadow_write_failure_does_not_change_endpoint(self):
+        store.CFG["identity"] = {"shadow": {"enabled": True}}
+        try:
+            with mock.patch.object(shadow, "record_shadow_event",
+                                   side_effect=RuntimeError("write failed")):
+                r = self.get(headers={"Authorization": "Bearer identity-me-key"})
+            self.assertEqual(r.status_code, 200)
         finally:
             store.CFG.pop("identity", None)
 
