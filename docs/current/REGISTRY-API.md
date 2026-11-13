@@ -279,6 +279,10 @@ Agent media tools enter through `CapabilityService`:
 Permission defaults to allow (`capabilities.default_allow=true`). A permission row
 may include `scope` with `characters`, `sources` or `users` lists; all present
 constraints must match, and a non-matching row is ignored (not auto-deny).
+Every permission/provider row has a `version`; updates accept
+`expected_version` and return `409 permission_conflict` / `provider_conflict` on
+stale writes. Permission/provider mutations write `audit` with `before`/`after`,
+actor and result.
 Retention defaults
 to 30 days / 10,000 rows and is pruned at Core startup plus a maintenance endpoint.
 Provider selection probes Core Supervisor service state with a short cache; an
