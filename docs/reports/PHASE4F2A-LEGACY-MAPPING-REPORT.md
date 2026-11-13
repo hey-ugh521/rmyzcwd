@@ -1,7 +1,7 @@
 # Phase 4F-2A 实施报告：Legacy Identity Mapping
 
 - 日期：2026-11-13
-- 状态：4F-2A 完成；未接入 HTTP 认证，不改变请求放行结果
+- 状态：**有条件验收通过，切片冻结**
 - 上一阶段：[4F-1 报告](PHASE4F1-IDENTITY-DATA-REPORT.md)
 - 数据契约：[Identity Data Model Contract](../current/IDENTITY-DATA-MODEL.md)
 
@@ -89,7 +89,46 @@ created: true → false
 - 真实 audit trigger 失败回滚
 - secret 不落库
 
-## 7. 限制
+## 7. 冻结边界 / 后续契约
+
+以下不改变 4F-2A 结论，但进入后续身份管线契约：
+
+### 7.1 旧 Key 轮换后的 Credential 清理
+
+```text
+API_KEY_A -> Credential_A
+配置轮换 API_KEY_B -> Credential_B
+```
+
+规则：
+
+- 新 Key 映射成功后，旧 Credential 不应继续作为有效身份凭证
+- 旧 Credential 显式撤销并保留审计
+- 映射失败不得提前撤销旧 Credential
+- 重新执行映射不得复活已撤销旧凭证
+
+当前 4F-2A 只实现单次映射，不实现自动轮换清理；轮换清理属于后续
+Identity Pipeline 实现。
+
+### 7.2 lookup_prefix 碰撞
+
+- 16 hex = 64 bit，仅用于索引
+- 唯一约束冲突必须失败，不覆盖已有 Credential
+- 认证必须校验完整 key 哈希，不能把 prefix 当身份
+- 日志不输出完整 key、完整 hash 或前缀
+
+### 7.3 旧 API Key 熵
+
+`sha256(api_key)[:16]` 是确定性、无盐的 64-bit 摘要前缀。
+它不是明文恢复，但对低熵旧 Key 可能成为离线猜测验证器。
+
+部署安全检查应包含：
+
+- 旧 `core.api_key` 长度和生成方式
+- 优先使用高熵随机 key
+- 短密码或人工设置字符串需要重新评估
+
+## 8. 限制
 
 - 尚未接入 HTTP 认证管线
 - 尚未创建管理员
@@ -98,8 +137,8 @@ created: true → false
 - 映射 CLI 尚未编译进 `MobiusCLI.exe`
 - `service-legacy` 的实际调用授权仍待 4F-2B/4F-2C
 
-## 8. 停止点
+## 9. 停止点
 
 4F-2A 到此停止。
 
-下一步需等待 4F-2B shadow 设计审查。
+下一步等待 4F-2B shadow 设计审查。

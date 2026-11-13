@@ -217,6 +217,13 @@ configured core.api_key
 - 4F-2A 只建立数据映射，不接入 HTTP 认证、不改变请求放行结果。
 - 映射不是认证：未来认证管线仍需独立验证 Credential 和授权。
 
+后续契约（未在 4F-2A 实现）：
+
+- 旧 API_KEY 轮换后：新 key 映射成功再撤销旧 Credential；失败不得提前撤销；不得复活已撤销旧凭证。
+- lookup_prefix 只作索引；碰撞必须失败，不覆盖；认证必须校验完整 key 哈希。
+- 旧 API_KEY 熵需纳入部署安全检查；确定性前缀对低熵 key 可能成为离线猜测验证器。
+- Shadow（4F-2B）不得在请求路径创建身份；unknown/mapping-missing 只记录。
+
 ## 12. 验收
 
 - Secret 不落库；哈希算法/版本可识别
