@@ -35,7 +35,7 @@ Legacy Authentication（唯一放行依据）
 | CI | Windows/Ubuntu 矩阵和负向 probe step 已加，待实跑确认 |
 | G-10 | 保持打开 |
 
-## Gate 0 决策（已确认）
+## Gate 0 决策（本轮修订）
 
 1. **覆盖范围**：只覆盖管理、策略、Registry 路由；其他记 `not_evaluated`。
 2. **Legacy 拒绝**：记 `legacy_denied`，不创建、不映射身份。
@@ -43,9 +43,12 @@ Legacy Authentication（唯一放行依据）
 4. **保留期**：30 天或 10000 条，先到先清；批处理，失败隔离。
 5. **观察范围**：只观察 Bearer 旧 API Key；Studio cookie 留给 4F-3。
 6. **上下文不足**：记 `insufficient_context`，绝不推导为 allow。
-7. **权限域**：管理路由 `RoutePolicyEvaluator`；能力调用
-   `decide_permission()`；不把管理路由伪装成能力调用。
-8. **三态**：区分 `evaluated` / `not_evaluated` / `insufficient_context` / `error`。
+7. **权限域**：管理路由 `RoutePolicyEvaluator`；能力路径首版
+   `not_evaluated`，不调用 `decide_permission()`；后续阶段再接线。
+   不把管理路由伪装成能力调用。
+8. **中间件顺序**：Shadow 外层、Legacy auth 内层；Legacy 仅写只读
+   `request.state.legacy_auth`；Shadow 在 Legacy 返回后读取。
+9. **三态**：区分 `evaluated` / `not_evaluated` / `insufficient_context` / `error`。
 
 ## 架构边界
 
@@ -63,7 +66,8 @@ identity_shadow_events       新表，独立迁移
 - 不修改 Legacy Authentication 的 401/403、响应 body/header
 - 不调用任何创建身份的函数
 - 管理路由使用 RoutePolicyEvaluator，不伪装成 capability
-- 能力调用使用 `capabilities.decide_permission()`
+- 能力路径首版统一 `not_evaluated`，不调用 `decide_permission()`
+- Shadow 外层；Legacy auth 内层；Legacy 只增加只读观测状态
 - Shadow allow/deny 只写入记录
 - 记录中不出现 Key/Token/完整 hash
 - Shadow 异常不得传播到 Handler
@@ -78,11 +82,11 @@ identity_shadow_events       新表，独立迁移
 
 ## Ripple Signal Triage
 
-- 共享核心：认证中间件、`capabilities.decide_permission()`、Registry 路由
+- 共享核心：认证中间件、Registry 路由、只读 `legacy_auth` 状态
 - 消费者：管理页面/API 响应
 - 风险：中间件顺序改变响应；Shadow 异常传播；事件表写放大；
   policy_version 漂移；管理路由与能力权限域混淆
-- 对策：Legacy auth 保持外层；Shadow 内层；响应基线对比；异常/超时注入；
+- 对策：Shadow 外层、Legacy 内层；响应基线对比；异常/超时注入；
   route 与 capability 分别测试
 
 ## TDD Route
@@ -109,30 +113,36 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 
 - `RouteContextResolver`：route_id/action/resource/role
 - `RoutePolicyEvaluator`：角色矩阵 + route action + resource，默认拒绝
-- 能力调用才调用 `decide_permission()`；不伪装管理路由
+- **首版不评估能力调用路由**；`/v1/...`、`/api/capabilities/invocations`
+  统一 `not_evaluated`
+- 能力调用 `decide_permission()` 只保留架构边界，不在本切片接线
 - Bearer → 4F-2A 已存在 mapping → 状态检查
 - policy_version：canonical policy snapshot + schema + evaluator version
 - 三态：`evaluated` / `not_evaluated` / `insufficient_context` / `error`
 - 测试：
   - unknown → `unmapped`，无身份写入
   - revoked/expired/disabled → 对应状态
-  - route policy 与 capability policy 分别验证
-  - specificity/priority/deny-wins/scope 只对 capability 路径
+  - 管理路由 route policy 与 capability 路径 `not_evaluated`
+  - 不调用 `decide_permission()`（能力首版未接线）
   - 记录无 secret
 
 ### 2B-3 中间件 Shadow 接线
 
-- Legacy auth 外层；Shadow 内层；异常全捕获
+- **Shadow 外层**；Legacy Authentication 内层
+- Legacy auth 仅写只读 `request.state.legacy_auth`
+- Shadow 在 Legacy 返回后读取结果；拒绝路径可记录 `legacy_denied`
 - 增加 `identity.shadow.enabled` 开关，默认 **off**
 - 基线响应对比测试：
   - Legacy allow + Shadow allow/deny → 状态码/body/headers/cookies 完全一致
   - Legacy deny + Shadow 记录 → 仍拒绝；不调用 Identity Mapping
+  - Legacy deny 后 Shadow 确实执行并记录 `legacy_denied`
   - Shadow 写库失败 → Legacy 请求仍按原逻辑完成
   - Shadow 超时 → Legacy 请求仍按原逻辑完成
   - Shadow 内部异常 → 响应完全不变
   - Shadow 关闭 → 不产生策略评估和 Shadow 写入
   - Shadow deny 不阻断 Legacy 已放行请求
-  - 外部副作用与 baseline 一致（Shadow 自身事件表除外）
+  - 响应的 body/headers/cookies/外部副作用与 baseline 一致
+    （Shadow 自身事件表除外）
 - 不修改任何 401/403/status/headers/body
 
 ### 2B-4 证据与冻结
@@ -157,7 +167,8 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 - 新增 shadow 测试全绿
 - Legacy 认证响应状态/body/headers/cookies 基线完全不变
 - 未知 key/revoked 不写身份表
-- 管理路由走 RoutePolicyEvaluator，能力调用走 `decide_permission()`
+- 管理路由走 RoutePolicyEvaluator；能力路径首版 `not_evaluated`，不调用 `decide_permission()`
+- Shadow 外层能观察 Legacy 拒绝，且拒绝路径不映射身份
 - `not_evaluated` 与 `insufficient_context` 分开
 - 每条 Shadow 记录可追溯到完整 policy_version
 - 无 secret 出现在表或日志

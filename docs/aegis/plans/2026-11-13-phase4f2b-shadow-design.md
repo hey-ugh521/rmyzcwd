@@ -43,25 +43,62 @@ Request
 - Legacy 结果与 Shadow 结果必须在数据结构中分开
 - Shadow 异常不得影响 Handler
 
-## 3. 建议的中间件位置
+## 3. 中间件位置
+
+Shadow 必须是 **外层观察器**，不能放在 Legacy auth 内层：
 
 ```text
-Legacy auth middleware (outer, unchanged)
-    -> Shadow observer middleware (inner, non-short-circuiting)
-        -> route handler
+Shadow Observer (outer, non-blocking)
+  -> Legacy Authentication (inner, unchanged decision logic)
+       +-- accepted -> route handler
+       +-- denied   -> 401/403
+  <- Shadow reads the legacy result after the inner app returns
+       +-- accepted -> Identity Mapping -> Shadow Evaluation
+       +-- denied   -> legacy_denied, no identity mapping
 ```
 
 原因：
 
-- 只有 Legacy 认证完成后才能拿到 `legacy_authenticated` 与旧 actor
-- Shadow 位于 Legacy 之后，不能提前拒绝请求
-- Legacy 拒绝时是否进入 Shadow 由设计决定；建议记录 `legacy_denied` 但不做身份写入
+- Legacy auth 拒绝时直接返回 401/403，内层 Shadow 根本没有执行机会。
+- Shadow 外层不是提前授权；它只是在 Legacy 完成之后读取结果。
+- Legacy 的放行/拒绝逻辑不变。
+
+### 3.1 Legacy auth 只增加只读观测状态
+
+为了让外层观察器准确区分“认证通过、认证拒绝、匿名只读”，Legacy auth
+增加一个只读状态，不参与任何判断：
+
+```text
+request.state.legacy_auth =
+  authenticated: bool
+  actor: str | None
+  reason: "accepted" | "denied" | "anonymous" | "not_applicable"
+```
+
+- accepted：Bearer/cookie 验证通过
+- denied：返回 401/403
+- anonymous：本机只读免鉴权路径
+- not_applicable：非 /api、/v1
+
+这不是把 Shadow 逻辑嵌入 Legacy auth；Legacy 仍然只决定放行与否。
+
+### 3.2 外层的执行顺序
+
+1. Shadow 外层先建立 `request.state.shadow_context`，不读取/修改 body。
+2. 调用内层 Legacy auth。
+3. Legacy auth 返回响应后，Shadow 读取 `legacy_auth`。
+4. 仅 `authenticated=True` 才进入 Identity Mapping + 评估。
+5. `denied` 写入 `legacy_denied`，不调用映射。
+6. `anonymous`/`not_applicable` 记录对应状态，不创建身份。
+7. Shadow 的所有动作在返回响应前完成或超时放弃，但不修改响应。
 
 实现时需要通过中间件顺序测试证明：
 
-- Legacy 401 仍 401
-- Legacy 200 仍 200
-- Shadow 抛异常时响应 body / status / headers 不变
+- Legacy 401/403 仍原样返回
+- Legacy 200 仍原样返回
+- Legacy 拒绝后 Shadow 仍能记录 `legacy_denied`
+- Shadow 抛异常时 response status/body/headers/cookies 不变
+- Shadow 关闭时不读取策略、不写 Shadow Event
 
 ## 4. 身份解析
 
@@ -109,7 +146,7 @@ Identity Shadow Observer
        -> Authorization Context
             +-- Route Policy（管理路由）
             |     -> RoutePolicyEvaluator
-            +-- Capability Policy（能力调用）
+            +-- Capability Policy（能力调用；本阶段不接线）
                   -> capabilities.decide_permission()
             -> Shadow Event
 ```
@@ -143,7 +180,15 @@ user_id / character_id（可解析时）
 
 ### 5.3 Capability Policy
 
-只有确认是能力调用路由时，才调用：
+**4F-2B 首版不实际评估能力调用路由。**
+
+- 首版实际覆盖：管理、策略、Registry 路由
+- `/v1/...`、`/api/capabilities/invocations` 统一记 `not_evaluated`
+- 保留 `decide_permission()` 的架构边界，但不接线
+- 后续独立阶段再接入能力调用 Shadow
+- 不为了证明复用能力而扩大本阶段真实流量覆盖
+
+未来接入能力调用时才调用：
 
 ```text
 decide_permission(
@@ -167,7 +212,7 @@ decide_permission(
 
 在此之前，管理路由只走 RoutePolicyEvaluator。
 
-## 5.5 三态语义
+### 5.5 三态语义
 
 必须区分：
 
@@ -180,22 +225,27 @@ decide_permission(
 
 `not_evaluated` 与 `insufficient_context` 不得合并；前者是覆盖缺口，后者是上下文缺口。
 
-## 5.6 Legacy 拒绝
+### 5.6 Legacy 拒绝
 
 ```text
-Legacy Authentication
-  +-- accepted -> Identity Mapping -> Shadow Evaluation
-  +-- denied   -> legacy_denied -> 不创建、不映射身份
+Shadow Observer (outer)
+  -> Legacy Authentication
+       +-- accepted -> handler -> response
+       +-- denied   -> 401/403 -> response
+  <- Observer reads legacy_auth state
+       +-- accepted -> Identity Mapping -> Shadow Evaluation
+       +-- denied   -> legacy_denied -> 不创建、不映射身份
 ```
 
 Legacy 拒绝时：
 
+- Shadow 已经拿到 401/403 响应，因此可以记录
 - 不调用 4F-2A mapping
 - 不创建 Principal/Credential
 - 只记录 `legacy_denied`
 - Shadow 不能把未知 Key 注册成身份
 
-## 5.7 policy_version
+### 5.7 policy_version
 
 `policy_version` 必须覆盖所有影响决策的策略输入：
 
@@ -215,16 +265,31 @@ policy_version = SHA256(
 - subject weights / deny-wins / specificity 规则版本
 - scope 解释规则版本
 
-`evaluator_version`：
+`evaluator_version` 使用版本清单：
 
-- `route-policy-v1`
-- `capability-policy-v1`
+```json
+{"route": "route-policy-v1", "capability": "capability-policy-v1"}
+```
 
-不包含：请求上下文、时间戳、随机值、用户输入。
+某个域的算法改变时，只提升该域版本；历史事件仍可区分语义。
+
+### 5.7.1 canonical JSON 序列化契约
+
+`canonical_policy_snapshot` 必须使用：
+
+- canonical JSON
+- UTF-8 编码
+- stable key ordering：按 key 字典序
+- stable array ordering：规则按稳定业务键排序（如 permission_id / route_id）
+- explicit null/default：缺失字段写 `null`，默认值显式写出
+- 紧凑分隔符：`(",", ":")`，无额外空白
+- 不包含请求上下文、时间戳、随机值、用户输入
+
+同一策略语义在不同进程/数据库读取顺序下必须生成同一个 hash。
 
 历史 Shadow 事件因此可解释：同一 policy_version 必须对应同一决策语义。
 
-## 5.8 保留与清理
+### 5.8 保留与清理
 
 - 保留 30 天或 10000 条，以事件创建时间为准。
 - 清理按批次上限（建议 500 条/批），避免阻塞请求。
@@ -274,6 +339,7 @@ expired
 principal_disabled
 resolved
 legacy_denied
+legacy_anonymous
 ```
 
 `evaluation_state`（是否完成策略计算）：
@@ -330,7 +396,8 @@ error
 分权限域，不强行复用不匹配的抽象：
 
 - 管理路由：`RoutePolicyEvaluator`，显式 route action / role / resource 规则
-- 能力调用：直接调用 `capabilities.decide_permission()`
+- 4F-2B 首版不实际评估能力调用路由；能力路径统一 `not_evaluated`
+- 能力调用 `decide_permission()` 只保留架构边界，后续独立阶段接线
 - 只有通过语义适配契约后，管理路由才允许复用 capability 决策
 - 若 scope/context 不足，记录 `insufficient_context`，不返回 allow
 - 不写第二套“简化判断”
@@ -391,7 +458,7 @@ Shadow 数据写入失败、超时、内部异常都不能反向影响 Legacy。
 - 未知 key → `unmapped`，身份表无新增
 - revoked/expired/disabled → 对应状态，不复活
 - 管理路由 → `RoutePolicyEvaluator`，不伪装成 capability
-- capability 路径 → `decide_permission()`
+- 能力调用路径 → 首版 `not_evaluated`，不调用 `decide_permission()`
 - `not_evaluated` 与 `insufficient_context` 不混用
 - 每条记录有覆盖全部策略输入的 `policy_version`
 - 日志/记录无明文 Key、Token、完整哈希
@@ -417,8 +484,9 @@ Shadow 数据写入失败、超时、内部异常都不能反向影响 Legacy。
 4. 保留 30 天或 10000 条，先到先清；批处理，失败隔离，不混审计表。
 5. 4F-2B 只观察 Bearer 旧 API Key，Studio cookie 留给 4F-3。
 6. 上下文不足记 `insufficient_context`，不能推导为 allow。
-7. 管理路由使用 RoutePolicyEvaluator；能力调用使用 `decide_permission()`；
-   不把管理路由伪装成能力调用。
+7. 管理路由使用 RoutePolicyEvaluator；能力调用本阶段不接线，统一
+   `not_evaluated`；不把管理路由伪装成能力调用。
 8. 区分 `evaluated` / `not_evaluated` / `insufficient_context` / `error`。
+9. Shadow 外层、Legacy auth 内层；Legacy 只写只读 `legacy_auth` 状态。
 
 以上契约确认后进入 4F-2B 实现。
