@@ -50,7 +50,7 @@ def _child(db_path: str, i: int, barrier, q) -> None:
             pass
         # Non-zero exit lets the parent abort the barrier immediately instead
         # of waiting for every sibling's barrier timeout.
-        raise
+        raise SystemExit(1)
     finally:
         try:
             store.close_anchor()
