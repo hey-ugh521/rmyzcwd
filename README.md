@@ -81,8 +81,8 @@ start http://127.0.0.1:8900/console
 - Studio 已包含角色卡/系统提示词/导入导出。
 - QQ 私聊、群聊 @、限流、聚合、图片/语音段已通过 B1/B2/B3 验证。
 - Registry Phase 0.1 已完成资源生命周期、发布、引用、认证边界。
-- Phase 1 只读索引已接入 Studio「能力库」：角色、音色、ComfyUI 工作流只读展示。
-- Agent/Gateway 尚未读取 Registry；资源编辑/导入/发布仍属于 Phase 2。
+- Phase 1 只读索引已接入 Studio「能力库」。
+- Phase 2A 已完成旧资源导入、角色卡导入、API workflow 校验/导入、draft/publish/rollback 管理页；Runtime 尚未接入。
 - M3 干净安装仍在收口；生产安装与开发仓库分开。
 
 ## 验证

@@ -289,6 +289,38 @@ export interface RegistryIndex {
   image_models: RegistryIndexModel[];
 }
 
+export type RegistryResourceType = "character" | "voice_profile" | "workflow";
+
+export interface RegistryRevisionMeta {
+  revision: number;
+  checksum: string;
+  state: "draft" | "published" | "superseded";
+  created_at: number;
+  created_by?: string;
+  change_note?: string;
+  parent_revision?: number | null;
+  payload?: Record<string, unknown>;
+}
+
+export interface RegistryResourceSummary {
+  type: RegistryResourceType;
+  id: string;
+  status: "active" | "disabled" | "archived" | "deleted";
+  current_revision: number;
+  published_revision: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface RegistryResourceDetail extends RegistryResourceSummary {
+  current?: RegistryRevisionMeta;
+  published?: RegistryRevisionMeta;
+}
+
+export interface RegistryRevisionList {
+  items: Omit<RegistryRevisionMeta, "payload">[];
+}
+
 export interface ChatSession {
   session_id: string;
   title?: string;

@@ -3,6 +3,7 @@ import type {
   SystemStatus, ServicesResponse, ServiceInfo, MediaConfig, MediaResources,
   Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
   ChatSession, ChatMessage, ChatRequest, ChatEvent, Character, ConstitutionResponse, RegistryIndex,
+  RegistryResourceType, RegistryResourceDetail, RegistryRevisionList,
 } from "../types";
 import { ApiError } from "../client";
 import { normalizeStatus } from "../normalize";
@@ -204,6 +205,27 @@ export class MockBackend implements Api {
   async getVoices() { return { voices: VOICES.map((v) => ({ ...v })) }; }
   async getWorkflows() { return { workflows: WORKFLOWS.map((w) => ({ ...w })) }; }
   async getCharacters() { return { characters: this.characters.map((c) => ({ ...c })) }; }
+  async getRegistryResources(_type: RegistryResourceType, _status?: string): Promise<{ items: any[]; total: number }> {
+    return { items: [], total: 0 };
+  }
+  async getRegistryResource(_type: RegistryResourceType, id: string): Promise<RegistryResourceDetail> {
+    throw new ApiError("registry_mock_empty", `演示数据没有 Registry 资源 ${id}`, 404);
+  }
+  async getRegistryRevisions(_type: RegistryResourceType, _id: string): Promise<RegistryRevisionList> {
+    return { items: [] };
+  }
+  async saveRegistryResource(_type: RegistryResourceType, id: string, _payload: Record<string, unknown>, _expectedRevision: number): Promise<RegistryResourceDetail> {
+    throw new ApiError("registry_mock_empty", `演示数据没有 Registry 资源 ${id}`, 404);
+  }
+  async publishRegistryResource(_type: RegistryResourceType, id: string): Promise<RegistryResourceDetail> {
+    throw new ApiError("registry_mock_empty", `演示数据没有 Registry 资源 ${id}`, 404);
+  }
+  async importLegacyRegistry() { return { ok: true, mocked: true }; }
+  async importRegistryCharacter() { return { ok: true, mocked: true }; }
+  async validateRegistryWorkflow(_payload: Record<string, unknown>) {
+    return { ok: true, validation: { status: "invalid", errors: ["演示模式不执行工作流验证"] } };
+  }
+  async importRegistryWorkflow() { return { ok: true, mocked: true }; }
   async getRegistryIndex(): Promise<RegistryIndex> {
     const chars = this.characters.map((c) => ({
       id: c.id, name: c.name || c.id, aliases: c.aliases ?? [],

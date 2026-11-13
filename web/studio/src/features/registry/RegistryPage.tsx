@@ -70,6 +70,7 @@ export function RegistryPage() {
           <p className="mt-1 text-xs text-muted">只读索引现有角色、音色与 ComfyUI 工作流，不改动运行时。</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <Button variant="soft" size="sm" onClick={() => { window.location.hash = "#/registry/manage"; }}>资源管理</Button>
           <Badge tone="brand">只读</Badge>
           <Button variant="ghost" size="sm" icon={<IconRefresh size={14} />} loading={q.isFetching} onClick={() => q.refetch()}>
             刷新索引

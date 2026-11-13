@@ -3,7 +3,7 @@ import { coreFetch, gwFetch, CORE_BASE, ApiError } from "./client";
 import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
   GenerateRequest, GenerateResponse, TtsRequest, TtsResponse, Character, ConstitutionResponse,
-  RegistryIndex,
+  RegistryIndex, RegistryResourceType, RegistryResourceDetail, RegistryRevisionList,
   ChatSession, ChatMessage, ChatRequest, ChatEvent,
 } from "./types";
 import { uid } from "../lib/utils";
@@ -58,6 +58,47 @@ export class LiveBackend implements Api {
     }) as Promise<{ ok: boolean; constitution: unknown }>;
   }
   async getRegistryIndex() { return coreFetch("/api/registry/index") as Promise<RegistryIndex>; }
+  async getRegistryResources(type: RegistryResourceType, status?: string) {
+    const qs = new URLSearchParams({ limit: "100" });
+    if (status) qs.set("status", status);
+    return coreFetch(`/api/registry/${type}?${qs}`) as Promise<{ items: any[]; total: number }>;
+  }
+  async getRegistryResource(type: RegistryResourceType, id: string) {
+    return coreFetch(`/api/registry/${type}/${encodeURIComponent(id)}`) as Promise<RegistryResourceDetail>;
+  }
+  async getRegistryRevisions(type: RegistryResourceType, id: string) {
+    return coreFetch(`/api/registry/${type}/${encodeURIComponent(id)}/revisions`) as Promise<RegistryRevisionList>;
+  }
+  async saveRegistryResource(type: RegistryResourceType, id: string, payload: Record<string, unknown>, expectedRevision: number) {
+    return coreFetch(`/api/registry/${type}/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify({ payload, expected_revision: expectedRevision }),
+    }) as Promise<RegistryResourceDetail>;
+  }
+  async publishRegistryResource(type: RegistryResourceType, id: string, revision: number, expectedCurrent: number, expectedPublished: number | null) {
+    return coreFetch(`/api/registry/${type}/${encodeURIComponent(id)}/publish`, {
+      method: "POST",
+      body: JSON.stringify({ revision, expected_current_revision: expectedCurrent, expected_published_revision: expectedPublished }),
+    }) as Promise<RegistryResourceDetail>;
+  }
+  async importLegacyRegistry() {
+    return coreFetch("/api/registry/manage/import/legacy", { method: "POST" }) as Promise<Record<string, unknown>>;
+  }
+  async importRegistryCharacter(card: Record<string, unknown>, id?: string) {
+    return coreFetch("/api/registry/manage/characters/import", {
+      method: "POST", body: JSON.stringify({ card, id }),
+    }) as Promise<Record<string, unknown>>;
+  }
+  async validateRegistryWorkflow(payload: Record<string, unknown>) {
+    return coreFetch("/api/registry/manage/workflows/validate", {
+      method: "POST", body: JSON.stringify({ payload }),
+    }) as Promise<Record<string, unknown>>;
+  }
+  async importRegistryWorkflow(payload: Record<string, unknown>, id?: string, name?: string) {
+    return coreFetch("/api/registry/manage/workflows/import", {
+      method: "POST", body: JSON.stringify({ payload, id, name }),
+    }) as Promise<Record<string, unknown>>;
+  }
   async getTasks(params?: { limit?: number; status?: string; source?: string }) {
     const qs = new URLSearchParams();
     qs.set("limit", String(params?.limit ?? 100));

@@ -1,7 +1,9 @@
 import type {
   SystemStatus, ServicesResponse, ServiceInfo, MediaConfig, MediaResources,
   ProviderInfo, ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, Character,
-  ConstitutionResponse, RegistryIndex, Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
+  ConstitutionResponse, RegistryIndex, RegistryResourceSummary, RegistryResourceDetail,
+  RegistryRevisionList, RegistryResourceType,
+  Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
   ChatSession, ChatMessage, ChatRequest, ChatEvent,
 } from "./types";
 import { useConnection, probeHealth } from "./client";
@@ -36,6 +38,15 @@ export interface Api {
   getConstitution(id: string): Promise<ConstitutionResponse>;
   saveConstitution(id: string, text: string, note?: string): Promise<{ ok: boolean; constitution: unknown }>;
   getRegistryIndex(): Promise<RegistryIndex>;
+  getRegistryResources(type: RegistryResourceType, status?: string): Promise<{ items: RegistryResourceSummary[]; total: number }>;
+  getRegistryResource(type: RegistryResourceType, id: string): Promise<RegistryResourceDetail>;
+  getRegistryRevisions(type: RegistryResourceType, id: string): Promise<RegistryRevisionList>;
+  saveRegistryResource(type: RegistryResourceType, id: string, payload: Record<string, unknown>, expectedRevision: number): Promise<RegistryResourceDetail>;
+  publishRegistryResource(type: RegistryResourceType, id: string, revision: number, expectedCurrent: number, expectedPublished: number | null): Promise<RegistryResourceDetail>;
+  importLegacyRegistry(): Promise<Record<string, unknown>>;
+  importRegistryCharacter(card: Record<string, unknown>, id?: string): Promise<Record<string, unknown>>;
+  validateRegistryWorkflow(payload: Record<string, unknown>): Promise<Record<string, unknown>>;
+  importRegistryWorkflow(payload: Record<string, unknown>, id?: string, name?: string): Promise<Record<string, unknown>>;
   getTasks(params?: { limit?: number; status?: string; source?: string }): Promise<{ tasks: Task[] }>;
   getTask(id: string): Promise<Task>;
   cancelTask(id: string): Promise<{ ok: boolean; task?: Task; note?: string }>;

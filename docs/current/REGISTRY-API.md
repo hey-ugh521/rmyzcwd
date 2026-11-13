@@ -184,6 +184,42 @@ Workflow items include `format` (`api_prompt` / `ui_workflow`), `node_count`,
 `class_types`, `used_by`, `source` and `checksum`. No execution or import is
 performed in Phase 1.
 
+## Management (Phase 2A)
+
+Draft-only import/validation endpoints. They create `draft` resources; they do
+not publish and do not switch Runtime.
+
+```text
+POST /api/registry/manage/import/legacy
+POST /api/registry/manage/characters/import   {"card": {...}, "id": "optional"}
+POST /api/registry/manage/workflows/validate  {"payload": {...}}
+POST /api/registry/manage/workflows/import    {"payload": {...}, "id": "optional", "name": "optional"}
+```
+
+`workflows/validate` returns:
+
+```json
+{
+  "ok": true,
+  "validation": {
+    "format": "api_prompt",
+    "status": "valid",
+    "errors": [],
+    "warnings": [],
+    "parameters": [
+      {"nodeId": "2", "input": "steps", "expectedType": "number", "min": 1, "max": 64}
+    ],
+    "requirements": {"node_classes": ["KSampler", "SaveImage"], "high_risk_nodes": []},
+    "node_count": 2,
+    "checksum": "..."
+  }
+}
+```
+
+Only API Prompt JSON is accepted. UI Workflow JSON is rejected with an explicit
+error. High-risk node classes are reported as warnings; execution is still not
+available in Phase 2A.
+
 ## Runtime read contract
 
 `RegistryService.resolve(type, id)` returns a `ResolvedResource` pointing at

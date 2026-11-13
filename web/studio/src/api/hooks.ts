@@ -9,7 +9,7 @@ import { friendlyError, isActive } from "./normalize";
 import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
   ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, ProviderInfo, Character, ConstitutionResponse,
-  RegistryIndex,
+  RegistryIndex, RegistryResourceType, RegistryResourceSummary, RegistryResourceDetail,
   ChatSession, ChatMessage, GenerateRequest, TtsRequest,
 } from "./types";
 import type { LogsResponse, HistoryItem } from "./index";
@@ -41,6 +41,8 @@ export const qk = {
   characters: (m: string) => [...root(m), "characters"],
   constitution: (m: string, id: string) => [...root(m), "constitution", id],
   registryIndex: (m: string) => [...root(m), "registry-index"],
+  registryResources: (m: string, type: string) => [...root(m), "registry-resources", type],
+  registryResource: (m: string, type: string, id: string) => [...root(m), "registry-resource", type, id],
   tasks: (m: string) => [...root(m), "tasks"],
   task: (m: string, id: string) => [...root(m), "task", id],
   sessions: (m: string) => [...root(m), "sessions"],
@@ -172,6 +174,82 @@ export function useRegistryIndex() {
     queryKey: qk.registryIndex(mode),
     queryFn: () => getApi().getRegistryIndex(),
     staleTime: 30000,
+  });
+}
+
+export function useRegistryResources(type: RegistryResourceType) {
+  const mode = useApiMode();
+  return useQuery<{ items: RegistryResourceSummary[]; total: number }>({
+    queryKey: qk.registryResources(mode, type),
+    queryFn: () => getApi().getRegistryResources(type),
+    staleTime: 5000,
+  });
+}
+
+export function useRegistryResource(type: RegistryResourceType, id: string | null) {
+  const mode = useApiMode();
+  return useQuery<RegistryResourceDetail>({
+    queryKey: qk.registryResource(mode, type, id ?? ""),
+    queryFn: () => getApi().getRegistryResource(type, id!),
+    enabled: !!id,
+    staleTime: 3000,
+  });
+}
+
+export function useRegistryRevisions(type: RegistryResourceType, id: string | null) {
+  const mode = useApiMode();
+  return useQuery({
+    queryKey: [...qk.registryResource(mode, type, id ?? ""), "revisions"],
+    queryFn: () => getApi().getRegistryRevisions(type, id!),
+    enabled: !!id,
+    staleTime: 3000,
+  });
+}
+
+export function useImportLegacyRegistry() {
+  const mode = useApiMode();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => getApi().importLegacyRegistry(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.registryIndex(mode) });
+      qc.invalidateQueries({ queryKey: qk.registryResources(mode, "character") });
+      qc.invalidateQueries({ queryKey: qk.registryResources(mode, "voice_profile") });
+      qc.invalidateQueries({ queryKey: qk.registryResources(mode, "workflow") });
+      toast.success("旧资源已导入为 Registry 草稿");
+    },
+    onError: (e) => toast.error("导入失败", errText(e)),
+  });
+}
+
+export function useSaveRegistryResource() {
+  const qc = useQueryClient();
+  const mode = useApiMode();
+  return useMutation({
+    mutationFn: (vars: { type: RegistryResourceType; id: string; payload: Record<string, unknown>; expectedRevision: number }) =>
+      getApi().saveRegistryResource(vars.type, vars.id, vars.payload, vars.expectedRevision),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: qk.registryResource(mode, vars.type, vars.id) });
+      qc.invalidateQueries({ queryKey: qk.registryResources(mode, vars.type) });
+      qc.invalidateQueries({ queryKey: qk.registryIndex(mode) });
+      toast.success("已保存为新的 draft revision");
+    },
+    onError: (e) => toast.error("保存失败", errText(e)),
+  });
+}
+
+export function usePublishRegistryResource() {
+  const qc = useQueryClient();
+  const mode = useApiMode();
+  return useMutation({
+    mutationFn: (vars: { type: RegistryResourceType; id: string; revision: number; expectedCurrent: number; expectedPublished: number | null }) =>
+      getApi().publishRegistryResource(vars.type, vars.id, vars.revision, vars.expectedCurrent, vars.expectedPublished),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: qk.registryResource(mode, vars.type, vars.id) });
+      qc.invalidateQueries({ queryKey: qk.registryResources(mode, vars.type) });
+      toast.success(`已发布 revision ${vars.revision}`);
+    },
+    onError: (e) => toast.error("发布失败", errText(e)),
   });
 }
 
