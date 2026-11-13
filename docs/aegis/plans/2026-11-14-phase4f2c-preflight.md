@@ -53,6 +53,9 @@
 设计稿当前选择 **A**，待审查：
 [`/api/identity/me` 设计](2026-11-14-phase4f2c-identity-me-design.md)。
 
+2B 遗留问题：
+[2B 后续问题清单](2026-11-14-phase2b-followups.md)。
+
 同时必须写清：
 
 - [ ] 未认证/未知 key/revoked/disabled 的返回语义

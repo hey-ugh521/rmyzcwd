@@ -1,44 +1,62 @@
 # Phase 4F-2C 设计稿：`/api/identity/me`
 
 - 日期：2026-11-14
-- 状态：**Draft for design review；未实施**
+- 状态：**设计修订版；未实施，未授权编码**
 - 输入：
   - [4F 设计计划 §8](2026-11-13-phase4f-identity-authorization.md)
   - [Identity Data Model](../current/IDENTITY-DATA-MODEL.md)
   - [4F-2C 前置检查清单](2026-11-14-phase4f2c-preflight.md)
-  - [4F-2B PG 验证报告](../reports/PHASE4F2B-PG-SHADOW-VALIDATION-REPORT.md)
+  - [2B 后续问题清单](2026-11-14-phase2b-followups.md)
 
 ## 1. 目标
 
-提供一个**只读身份查询**：
+只读身份查询：
 
 ```text
-请求携带 Bearer
-  -> 只读解析 Credential
-  -> 返回既有 Principal 的公开身份信息
+GET /api/identity/me
+Authorization: Bearer <legacy_api_key>
+  -> 只读解析既有 Credential
+  -> 返回既有 Principal 的公开身份
 ```
 
-本阶段不授权、不登录、不创建身份、不改变 Legacy 认证。
+不授权、不登录、不创建身份、不改变 Legacy 放行、不写 Shadow Event。
 
-## 2. D1：身份来源
+## 2. D1：身份来源采用 A
 
-采用 **方案 A**：
-
-- `/api/identity/me` 自行只读解析 `Authorization: Bearer`
-- 不依赖 `request.state.legacy_auth`
-- 原因是 loopback GET 在 Legacy auth 中不认证，`legacy_auth` 永远是匿名
-- 复用 4F-2A 的 `identity.inspect_legacy_api_key()` 只读路径
-- 不调用会创建身份的 `resolve_legacy_api_key()`
-
-边界：
+`/api/identity/me` 自行解析 Bearer，不依赖 `request.state.legacy_auth`。
 
 | 组件 | 职责 |
 |---|---|
-| Legacy Middleware | 决定原有请求是否放行，不改变 |
-| `/api/identity/me` | 读取当前 Bearer 对应的身份，只读 |
-| Shadow Middleware | 独立观察，不参与本 endpoint 的返回 |
+| Legacy Middleware | 决定原有请求是否放行；不改变 |
+| `/api/identity/me` | 读取当前 Bearer 对应的既有身份；只读 |
+| Shadow Middleware | 独立观察；不参与 endpoint 返回 |
 
-## 3. Endpoint 契约
+## 3. D1 补充：`inspect_legacy_api_key()` 契约
+
+实现依据：[core/identity.py:616](../../core/identity.py#L616)
+
+| 检查 | 实际行为 | 返回状态 |
+|---|---|---|
+| 配置 key 存在 | `configured_legacy_key()` 为空 → unmapped | `unmapped` |
+| Bearer 是否等于 configured key | `hmac.compare_digest` 常量时间比较 | 不匹配 → `unmapped` |
+| Credential 是否存在 | 按 `sha256(configured)[:16]` 查 `lookup_prefix` | 无 → `mapping_missing` |
+| 完整 key 是否匹配 | `_verify_secret` 校验 salted hash | 不匹配 → `conflict` |
+| Credential 是否撤销 | `revoked_at` 非空 | `revoked` |
+| Credential 是否过期 | `expires_at <= now` | `expired` |
+| Principal 是否存在 | `service-legacy` 查询 | 缺 → `mapping_missing` |
+| Principal 是否启用 | `enabled` | `principal_disabled` |
+| Mapping 是否合法 | kind=machine 且 role=service | 否则 `conflict` |
+| 多条 mapping | `lookup_prefix` 有 UNIQUE；固定 principal | 无多映射路径 |
+
+重要区分：
+
+- 该函数**不验证 Bearer header 语法**；header 解析由 endpoint 负责。
+- 该函数**不更新 `last_used_at`**，不写 credential/session/cache。
+- 该函数**不调用** `resolve_legacy_api_key()`，不会创建/复活身份。
+- 数据库异常会向上传播；endpoint 必须映射为 500，而不是 401。
+- 原始 key 不写入日志；错误日志只记录异常类型和请求 ID。
+
+## 4. Endpoint 契约
 
 ```text
 GET /api/identity/me
@@ -55,9 +73,6 @@ Authorization: Bearer <legacy_api_key>
     "id": "service-legacy",
     "kind": "machine",
     "role": "service"
-  },
-  "credential": {
-    "id": "cred_..."
   }
 }
 ```
@@ -71,133 +86,149 @@ Authorization: Bearer <legacy_api_key>
 }
 ```
 
-约束：
+HTTP 细节：
 
-- 不返回 `secret_hash`、`lookup_prefix`、原始 Key、Token
-- 不返回 display_name/metadata（除非未来单独批准）
-- 不返回 unknown/revoked/disabled 的区别
+- 401 带 `WWW-Authenticate: Bearer`
+- 不附加 `error="invalid_token"` 或任何状态原因
+- 500 不伪装成认证失败：
+
+```json
+500 {
+  "ok": false,
+  "error": "identity_unavailable"
+}
+```
+
+- 500 不在响应中返回异常详情或 key
+- 成功/失败均 `Cache-Control: no-store`
 - 不设置 Cookie
 - 不创建 Session
 - 不修改 `request.state.legacy_auth`
-- 不改变任何 Legacy 放行结果
 
-## 4. D2：凭据状态响应
+## 5. D2：凭据状态响应
 
-对外统一：
+对外统一 401：
 
 | 输入 | 响应 |
 |---|---|
-| 无 Bearer | 401 `unauthenticated` |
-| 未知 key | 401 `unauthenticated` |
-| 错误 key | 401 `unauthenticated` |
-| revoked | 401 `unauthenticated` |
-| expired | 401 `unauthenticated` |
-| principal disabled | 401 `unauthenticated` |
-| service-legacy 缺失 | 401 `unauthenticated` |
+| 无 Bearer / 格式错误 | 401 `unauthenticated` |
+| 未知/错误 key | 401 |
+| revoked | 401 |
+| expired | 401 |
+| principal disabled | 401 |
+| mapping 缺失 | 401 |
+| conflict | 401 |
 | resolved | 200 |
 
-内部诊断可区分原因，但不能进入响应；避免密钥枚举。
+内部可以区分状态用于日志/测试，但不进入响应，避免凭据枚举。
 
-## 5. D3：只读保证
+数据库/内部异常：
 
-- 使用 `inspect_legacy_api_key()`：只 SELECT
-- 不使用 `authenticate_credential()`：该校验会更新 `last_used_at`
-- 不写 audit
-- 不写 Shadow Event
-- 不写身份表
-- 不调用 `resolve_legacy_api_key()`
+- 返回 500 `identity_unavailable`
+- 不返回 401
+- 记录异常类型、请求 ID；不记录 key/token
 
-Verification：
+## 6. D3：字段最小化
 
-- endpoint 前后 `principals` / `credentials` / `admin_sessions` /
-  `bootstrap_tokens` 行数不变
-- endpoint 前后 credential `last_used_at` 不变
+首版只返回：
 
-## 6. D4：与 Legacy 隔离
+```json
+{
+  "ok": true,
+  "identity_mode": "legacy",
+  "principal": {
+    "id": "service-legacy",
+    "kind": "machine",
+    "role": "service"
+  }
+}
+```
 
-- `auth_mw` 不改
-- `request.state.legacy_auth` 不改
-- `/api/identity/me` 返回 401 不改变其他请求认证
-- endpoint 不是路由授权开关
-- Shadow 开启时，该 endpoint 仍可能被全局 Shadow 观察为
-  `not_evaluated`；本阶段不修改 Shadow 行为
+- `principal.id`：身份主体
+- `principal.kind`：主体类型
+- `principal.role`：**描述性属性，不是授权结果、permission 或 scope**
+- **不返回 `credential.id`**：首版没有客户端使用场景；避免暴露内部稳定标识
+- 不返回 display_name、metadata、hash、prefix、原始 key
+- 不返回 `last_used_at`、created_at 等内部时间
 
-## 7. D5：请求 ID / 事件关联
+如果未来需要 `credential.id`，必须单独证明客户端用途并重新评审。
 
-当前 4F-2C endpoint 不写 Shadow Event，因此不需要 request_id 关联。
+## 7. D3 只读保证
 
-但下次 Shadow 窗口需要：
+- 只调用 `inspect_legacy_api_key()` 的 SELECT 路径
+- 不调用 `authenticate_credential()`，避免 `last_used_at` 更新
+- 不调用 `_map_legacy_key()` / `resolve_legacy_api_key()`
+- 不写 principals / credentials / admin_sessions / bootstrap_tokens
+- 不写 audit / Shadow Event
+- 不写缓存
+- 请求前后数据库行数不变，且关键字段（尤其 `last_used_at`）不变
 
-- 受控请求带 `X-Request-Id`
-- 格式和唯一性在测试中校验
-- 事件与请求按 header 关联
-- 不把未带 header 的 NULL 解释为代码断链
+## 8. D4：与 Legacy 隔离
 
-该项不修改 2B 冻结代码。
+强约束：
 
-## 8. D6：Shadow 异常可观测性
+- 查询成功不得让其他请求获得额外权限
+- 查询失败不得让其他请求被拒绝
+- 不修改 `request.state.legacy_auth`
+- 不修改 Legacy Mapping
+- 不把查询结果缓存为全局认证状态
 
-**不在 4F-2C 实现。**
+测试必须覆盖：
 
-当前缺口属于 4F-2B 后续变更：
+- endpoint 成功/失败后，原有 Legacy 路由响应与认证行为不变
+- 不是只检查 `auth_mw` 文件未修改，而是跑真实回归
 
-- 求值失败
-- 写库失败
-- worker 静默 `except Exception: pass`
-- 无事件/日志/失败计数
+## 9. D5：Shadow Event 描述
 
-4F-2C 设计只记录要求：
+精确区分：
 
-- 故障不能影响 Legacy
-- 失败必须可观测
-- 不能依赖再写 Shadow Event 作为唯一失败证据
+| 行为 | 是否发生 |
+|---|---|
+| endpoint 主动写 Shadow Event | 否 |
+| Shadow 开启时全局 Middleware 观察该请求 | 可能发生 |
+| 观察结果影响 endpoint 响应 | 否 |
+| 观察结果影响 Legacy 放行 | 否 |
 
-如要修复，必须单独立项并单独审批，不作为 4F-2C 的默认组成。
+因此：
 
-## 9. D7：Worker 生命周期
+- endpoint 本身不调用 `record_shadow_event`
+- 不承诺“该 endpoint 永远不产生 Shadow Event”
+- Shadow 开启时按现有全局规则允许 `not_evaluated`
+- 不为 4F-2C 特殊排除该路由；修改全局观察属于 2B 后续变更
 
-**不在 4F-2C 实现。**
+## 10. D6/D7/D8：独立 2B 后续问题
 
-需要单独处理的 2B 后续问题：
+不进入 4F-2C 实现：
 
-- daemon 线程超时后是否继续
-- 请求取消后资源释放
-- worker 积压/队列上限
-- Shadow 关闭后确认无遗留线程
-- Core 重启时未完成任务
+- Shadow 求值/写库异常静默
+- worker 超时/积压/退出
+- `latency_ms` 语义与实现
 
-同样必须单独审批，不得借 4F-2C 修改冻结 2B 代码。
+详见：
 
-## 10. D8：`latency_ms`
+[2026-11-14-phase2b-followups.md](2026-11-14-phase2b-followups.md)
 
-**不在 4F-2C 实现。**
-
-先决定语义：
-
-- Shadow evaluation 耗时
-- Shadow persistence 耗时
-- 还是两者分别记录
-
-不把历史 NULL 回填为 0，不把未采集描述为已验证。
+这些问题不得在 4F-2C PR 中顺手修复；需要单独审批和验收。
 
 ## 11. D9：配置、清理与审计
 
-- 下次窗口必须有开启态脱敏配置快照
+- 下次 Shadow 窗口必须有开启态脱敏配置快照
 - Shadow Event 清理必须批准、先导出证据、记录独立操作
 - 不删除正式安全审计
 - 误创建 permission 的审计痕迹保留
-- 4F-2C 不自行清理生产事件
+- 4F-2C 不清理生产 Shadow Event
+- endpoint 不写 audit
 
 ## 12. D10：响应基线规则
 
-未来比较应区分：
+未来窗口比较：
 
 - 必须一致：安全/语义 Header、Cookie 名称/属性
 - 允许变化：Date、请求追踪类动态 Header
 - 明确忽略：非关键字段
 
-保存原始采样、归一化规则和比较结果；当前 PG 报告没有 headers/cookies
-基线，不能回填为已验证。
+保存原始采样、归一化规则和比较结果。当前 PG 报告只有 status/body，
+headers/cookies 没有基线，不能回填为已验证。
 
 ## 13. D11：冻结边界
 
@@ -217,19 +248,49 @@ Verification：
 - 运行正确
 - 生产行为正确
 
-分别记录；不得用单元测试代替生产证据，也不得用报告代替故障注入。
+分别记录；单元测试不能替代生产证据，报告不能替代故障注入。
 
-## 15. 测试计划（设计阶段）
+## 15. 测试计划
 
-- 有效 key + mapping -> 200，字段精确
-- 未知/错误/revoked/expired/disabled -> 统一 401
-- 无 Bearer -> 401
-- 前后身份表行数不变
+功能：
+
+- 有效 key + resolved mapping → 200，字段精确
+- 无 Bearer / 格式错误 → 401
+- 未知/错误 key → 401
+- revoked / expired / disabled → 统一 401
+- mapping 缺失 / conflict → 401
+- 500 内部异常不伪装成 401
+
+只读：
+
+- 并发查询前后行数不变
 - `last_used_at` 不变
-- 响应不含 secret/prefix/hash
-- 不设置 Cookie
-- 不改变 Legacy 响应
-- Shadow 关闭时不产生事件
+- 相关表关键字段不变
+- 不新增 Principal/Credential
+- 不写 Shadow Event
+
+隔离：
+
+- endpoint 成功/失败后 Legacy 路由行为不变
+- 不修改 `request.state.legacy_auth`
+- 不修改 mapping
+
+HTTP 语义：
+
+- 401 `WWW-Authenticate: Bearer`
+- 401 无 `invalid_token`
+- 成功/失败 `Cache-Control: no-store`
+- 500 无异常详情/无 key
+
+脱敏：
+
+- 响应、日志、异常均无原始 Key/Token/hash
+- credential.id 不出现
+
+Shadow：
+
+- Shadow 关闭：endpoint 不产生 Shadow Event
+- Shadow 开启：允许全局 `not_evaluated`，不影响 endpoint 响应或 Legacy 放行
 
 ## 16. 不进入 4F-2C
 
@@ -238,15 +299,15 @@ Verification：
 - Default Deny
 - 修改 4F-2A mapping
 - 修改 4F-2B Shadow/认证/放行
+- 2B 可观测性/worker/latency 修复
 - 生产故障注入
-- Shadow worker/latency 重构
+- `credential.id` 暴露
 
-## 17. 设计审查问题
+## 17. 待审查问题
 
-请审查：
-
-1. D1 = A 是否接受？
-2. 401 统一响应是否接受？
-3. 是否接受 4F-2C 不修复 2B 可观测性/worker/latency，而另立变更？
-4. 响应字段是否只保留 principal id/kind/role/credential id？
-5. 是否要求 endpoint 在 Shadow 开启时显式不产生事件，还是接受现有全局观察？
+1. D1 方案 A 及 `inspect_legacy_api_key()` 契约是否接受？
+2. 统一 401 + `WWW-Authenticate: Bearer` 是否接受？
+3. 500 `identity_unavailable` 是否接受？
+4. 首版删除 `credential.id` 是否接受？
+5. 2B 问题独立立项是否接受？
+6. Shadow 开启时允许全局 `not_evaluated` 是否接受？

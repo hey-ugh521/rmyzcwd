@@ -55,6 +55,7 @@
 - PG Shadow 验证结果：[Validation Report](reports/PHASE4F2B-PG-SHADOW-VALIDATION-REPORT.md)
 - 4F-2C 前置检查：[4F-2C Preflight](aegis/plans/2026-11-14-phase4f2c-preflight.md)
 - 4F-2C 设计稿：[`/api/identity/me` 设计](aegis/plans/2026-11-14-phase4f2c-identity-me-design.md)
+- 2B 后续问题（不并入 4F-2C）：[2B Followups](aegis/plans/2026-11-14-phase2b-followups.md)
 - 2B-3 前置检查：[Phase 4F-2B-3 前置检查清单](aegis/plans/2026-11-13-phase4f2b3-preflight.md)
 - 测试可复现性：[3.13 复跑报告](reports/TEST-REPRODUCIBILITY-2026-11-13.md)
 - 阶段报告：[Phase 0](reports/PHASE0-REGISTRY-REPORT.md)、[Phase 0.1](reports/PHASE0.1-REGISTRY-HARDENING-REPORT.md)、[Phase 1](reports/PHASE1-REGISTRY-READONLY-REPORT.md)、[Phase 2A](reports/PHASE2A-REGISTRY-MANAGEMENT-REPORT.md)、[Phase 2C](reports/PHASE2C-WORKFLOW-VOICE-FORM-REPORT.md)、[Phase 3A](reports/PHASE3A-RUNTIME-RESOLVER-REPORT.md)、[Phase 3B](reports/PHASE3B-MIGRATION-LEGACY-CLOSE-REPORT.md)、[Phase 4A](reports/PHASE4A-CAPABILITY-INVOCATION-REPORT.md)、[Phase 4B](reports/PHASE4B-CAPABILITY-POLICY-REPORT.md)、[Phase 4C](reports/PHASE4C-PROVIDER-HEALTH-REPORT.md)、[Phase 4D](reports/PHASE4D-POLICY-STUDIO-SCOPE-REPORT.md)、[Phase 4E](reports/PHASE4E-POLICY-VALIDATION-REPORT.md)、[Phase 4F-1](reports/PHASE4F1-IDENTITY-DATA-REPORT.md)、[Phase 4F-2A](reports/PHASE4F2A-LEGACY-MAPPING-REPORT.md)、[Live hot update](reports/REGISTRY-LIVE-HOTUPDATE-REPORT.md)
