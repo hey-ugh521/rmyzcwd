@@ -102,8 +102,14 @@ loopback GET 是匿名只读。
   - policy_state
   - policy_version
   - reason
-- 已知字段缺口：`request_id` / `latency_ms` / `error_class` 当前未写入；
-  事件与请求无法按 request_id 关联，延迟只能由客户端测量
+- 已知字段缺口：
+  - `request_id` 已接线（`X-Request-Id` → evaluate → record）；本次 8/8 NULL
+    是因为受控请求没有带该 header，属于**输入缺失**，不是代码断链
+  - `latency_ms` 当前是死字段：定义但从未写入
+  - `error_class` 只在 `policy_version()` 异常时写入；正常态 NULL 是预期
+  - Shadow worker 的求值/写库异常被 `except Exception: pass` 吞掉，异常时
+    可能**没有事件、没有日志、没有 error_class**；这是可观测性缺口，
+    不等于正常态缺字段
 - 无新增 Principal/Credential
 - 事件表无 Authorization/API Key/Token hash 字段或值
 

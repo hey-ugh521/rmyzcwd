@@ -101,11 +101,16 @@ Shadow 同步写入在本地受控请求中约几十毫秒级；未做高负载�
 
 事件表字段限制：
 
-- `latency_ms`、`request_id`、`error_class` 当前均未写入（8/8 NULL）
-- 延迟是客户端测量，不是事件表字段
-- 事件无法按 request_id 与请求一一关联，重复路径只能靠 `ts`
+- `request_id` **已接线**：`core/server.py` 从 `X-Request-Id` 取值，
+  `evaluate_shadow` 传入 `record_shadow_event`；本次 8/8 NULL 是因为
+  受控请求没有带该 header。下次窗口应显式带 `X-Request-Id`，零代码改动
+  即可建立关联。
+- `latency_ms` 当前是死字段：定义但从未写入；报告中的延迟来自客户端测量。
+- `error_class` 不是死字段：`policy_version()` 异常时会写入；正常态 NULL
+  是预期。真正的缺口是 Shadow worker 的 `except Exception: pass` 会吞掉
+  求值/写库异常，导致异常时可能没有事件、日志或 error_class。
 - Shadow 采用 daemon 线程 + 0.25s wait_for；超时后线程可能继续运行，
-  生产开启前需评估线程堆积风险
+  生产开启前需评估线程堆积风险。
 
 ## 7. 故障隔离
 
@@ -142,7 +147,7 @@ test_shadow_exception_does_not_change_response
 - [x] 关键 Legacy 响应一致（6/7 静态；services 动态不计）
 - [x] Shadow 关闭后不再新增事件
 - [x] 无凭证秘密泄露
-- [ ] Shadow 写入失败不影响认证 —— 隔离测试证据，非生产故障注入
+- [ ] Shadow 写入失败不影响认证 —— 隔离测试证据接受，无生产故障注入
 - [x] 已恢复 Shadow 关闭状态
 - [x] 报告和 Git 提交
 
