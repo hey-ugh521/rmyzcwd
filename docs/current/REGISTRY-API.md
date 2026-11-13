@@ -144,6 +144,46 @@ POST /api/registry/{source_type}/{source_id}/references
 DELETE /api/registry/{source_type}/{source_id}/references?target_type=voice_profile&target_id=bronya_voice
 ```
 
+## Read-only index (Phase 1)
+
+These endpoints never write DB or legacy files. They project existing character
+JSON, ComfyUI workflow JSON, `models.json` and character voice settings.
+
+```text
+GET /api/registry/index
+GET /api/registry/index/characters
+GET /api/registry/index/characters/{id}
+GET /api/registry/index/voices
+GET /api/registry/index/voices/{id}
+GET /api/registry/index/workflows
+GET /api/registry/index/workflows/{id}
+GET /api/registry/index/image-models
+```
+
+`GET /api/registry/index` returns one aggregate payload:
+
+```json
+{
+  "ok": true,
+  "summary": {
+    "characters": 13,
+    "voices": 4,
+    "workflows": 9,
+    "image_models": 6,
+    "read_only": true,
+    "workflow_dir": "D:\\AI\\comic\\workflows"
+  },
+  "characters": [],
+  "voices": [],
+  "workflows": [],
+  "image_models": []
+}
+```
+
+Workflow items include `format` (`api_prompt` / `ui_workflow`), `node_count`,
+`class_types`, `used_by`, `source` and `checksum`. No execution or import is
+performed in Phase 1.
+
 ## Runtime read contract
 
 `RegistryService.resolve(type, id)` returns a `ResolvedResource` pointing at

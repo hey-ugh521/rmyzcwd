@@ -214,6 +214,81 @@ export interface ConstitutionResponse {
   fallback: string;
 }
 
+export interface RegistryIndexCharacter {
+  id: string;
+  name: string;
+  aliases?: string[];
+  workflow?: string;
+  checkpoint?: string;
+  size?: [number, number];
+  loras?: unknown[];
+  voice?: { engine?: string; voice?: string; speed?: number };
+  media_policy?: Record<string, boolean>;
+  notes?: string;
+  source: string;
+  source_kind: string;
+  status: string;
+  checksum?: string;
+  error?: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface RegistryIndexVoice {
+  id: string;
+  name: string;
+  engine?: string;
+  voice?: string;
+  speed?: number;
+  model?: string;
+  weight?: number | null;
+  language?: string;
+  status: string;
+  used_by: string[];
+}
+
+export interface RegistryIndexWorkflow {
+  id: string;
+  name: string;
+  source: string;
+  source_kind: string;
+  status: string;
+  format: "api_prompt" | "ui_workflow" | "unknown";
+  node_count: number;
+  class_types: string[];
+  checksum?: string;
+  used_by?: string[];
+  error?: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface RegistryIndexModel {
+  id: string;
+  name: string;
+  workflow?: string;
+  checkpoint?: string;
+  style?: string;
+  available?: boolean;
+  default?: boolean;
+  vram_gb?: number;
+  source: string;
+  status: string;
+}
+
+export interface RegistryIndex {
+  summary: {
+    characters: number;
+    voices: number;
+    workflows: number;
+    image_models: number;
+    read_only: boolean;
+    workflow_dir: string | null;
+  };
+  characters: RegistryIndexCharacter[];
+  voices: RegistryIndexVoice[];
+  workflows: RegistryIndexWorkflow[];
+  image_models: RegistryIndexModel[];
+}
+
 export interface ChatSession {
   session_id: string;
   title?: string;

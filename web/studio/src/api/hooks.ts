@@ -9,6 +9,7 @@ import { friendlyError, isActive } from "./normalize";
 import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
   ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, ProviderInfo, Character, ConstitutionResponse,
+  RegistryIndex,
   ChatSession, ChatMessage, GenerateRequest, TtsRequest,
 } from "./types";
 import type { LogsResponse, HistoryItem } from "./index";
@@ -39,6 +40,7 @@ export const qk = {
   workflows: (m: string) => [...root(m), "workflows"],
   characters: (m: string) => [...root(m), "characters"],
   constitution: (m: string, id: string) => [...root(m), "constitution", id],
+  registryIndex: (m: string) => [...root(m), "registry-index"],
   tasks: (m: string) => [...root(m), "tasks"],
   task: (m: string, id: string) => [...root(m), "task", id],
   sessions: (m: string) => [...root(m), "sessions"],
@@ -161,6 +163,15 @@ export function useCharacters() {
     queryKey: qk.characters(mode),
     queryFn: () => getApi().getCharacters(),
     staleTime: 60000,
+  });
+}
+
+export function useRegistryIndex() {
+  const mode = useApiMode();
+  return useQuery<RegistryIndex>({
+    queryKey: qk.registryIndex(mode),
+    queryFn: () => getApi().getRegistryIndex(),
+    staleTime: 30000,
   });
 }
 

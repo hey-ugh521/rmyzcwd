@@ -2,7 +2,7 @@ import type { Api, LogsResponse, HistoryItem } from "../index";
 import type {
   SystemStatus, ServicesResponse, ServiceInfo, MediaConfig, MediaResources,
   Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
-  ChatSession, ChatMessage, ChatRequest, ChatEvent, Character, ConstitutionResponse,
+  ChatSession, ChatMessage, ChatRequest, ChatEvent, Character, ConstitutionResponse, RegistryIndex,
 } from "../types";
 import { ApiError } from "../client";
 import { normalizeStatus } from "../normalize";
@@ -204,6 +204,53 @@ export class MockBackend implements Api {
   async getVoices() { return { voices: VOICES.map((v) => ({ ...v })) }; }
   async getWorkflows() { return { workflows: WORKFLOWS.map((w) => ({ ...w })) }; }
   async getCharacters() { return { characters: this.characters.map((c) => ({ ...c })) }; }
+  async getRegistryIndex(): Promise<RegistryIndex> {
+    const chars = this.characters.map((c) => ({
+      id: c.id, name: c.name || c.id, aliases: c.aliases ?? [],
+      workflow: c.workflow, checkpoint: c.checkpoint, size: c.size,
+      loras: c.loras ?? [], voice: c.voice ?? {}, media_policy: c.media_policy ?? {},
+      notes: c.notes ?? "", source: `data/characters/${c.id}.json`,
+      source_kind: "legacy_character_json", status: "legacy", payload: c as Record<string, unknown>,
+    }));
+    const voiceMap = new Map<string, any>();
+    for (const c of chars) {
+      const v = c.voice;
+      if (!v.engine && !v.voice) continue;
+      const key = `${v.engine}|${v.voice}|${v.speed ?? 1}`;
+      const item = voiceMap.get(key) ?? {
+        id: `voice_${Math.abs([...key].reduce((a, ch) => ((a * 31 + ch.charCodeAt(0)) | 0), 7)).toString(36)}`,
+        name: v.voice || v.engine, engine: v.engine, voice: v.voice, speed: v.speed ?? 1,
+        status: "legacy", used_by: [],
+      };
+      item.used_by.push(c.id);
+      voiceMap.set(key, item);
+    }
+    const workflowUse = new Map<string, string[]>();
+    for (const c of chars) {
+      if (c.workflow) workflowUse.set(c.workflow, [...(workflowUse.get(c.workflow) ?? []), c.id]);
+    }
+    const workflows = WORKFLOWS.map((w) => ({
+      id: w.id, name: w.name || w.id, source: `configs/workflows/${w.id}.json`,
+      source_kind: "legacy_workflow_json", status: "legacy", format: "api_prompt" as const,
+      node_count: 5, class_types: ["KSampler", "CheckpointLoaderSimple", "VAEDecode"],
+      used_by: [...(workflowUse.get(w.id) ?? []), ...(workflowUse.get(w.id.replace(/^comic-/, "")) ?? [])]
+        .filter((x, i, a) => a.indexOf(x) === i),
+    }));
+    return {
+      summary: {
+        characters: chars.length, voices: voiceMap.size, workflows: workflows.length,
+        image_models: MODELS.length, read_only: true, workflow_dir: "configs/workflows",
+      },
+      characters: chars,
+      voices: [...voiceMap.values()],
+      workflows,
+      image_models: MODELS.map((m) => ({
+        id: m.id, name: m.name || m.id, workflow: m.workflow, checkpoint: m.checkpoint,
+        style: m.notes ?? "", available: m.available !== false, default: !!m.default,
+        vram_gb: undefined, source: "configs/workflows/models.json", status: "legacy",
+      })),
+    };
+  }
   async getCharacter(id: string) {
     const c = this.characters.find((x) => x.id === id);
     if (!c) throw new ApiError("character_not_found", `未知角色 ${id}`, 404);

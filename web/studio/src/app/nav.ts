@@ -1,6 +1,6 @@
 import type { ComponentType, SVGProps } from "react";
 import {
-  IconStudio, IconCreate, IconTasks, IconGallery, IconChat, IconSystem, IconSettings, IconCharacters,
+  IconStudio, IconCreate, IconTasks, IconGallery, IconChat, IconSystem, IconSettings, IconCharacters, IconLayers,
 } from "../components/icons";
 
 export interface NavItem {
@@ -18,6 +18,7 @@ export const NAV: NavItem[] = [
   { to: "/tasks", label: "任务", desc: "队列与执行状态", icon: IconTasks, keywords: "tasks queue 任务 队列 进度 取消" },
   { to: "/gallery", label: "作品", desc: "成果库与收藏", icon: IconGallery, keywords: "gallery works 作品 图片 收藏 库" },
   { to: "/characters", label: "角色", desc: "角色卡与系统提示词", icon: IconCharacters, keywords: "characters character card persona prompt 角色 人格 系统提示词 卡" },
+  { to: "/registry", label: "能力库", desc: "只读资源索引", icon: IconLayers, keywords: "registry resources index voices workflows 能力库 索引 资源 工作流 音色" },
   { to: "/chat", label: "对话", desc: "本机创作助手", icon: IconChat, keywords: "chat assistant 对话 聊天 助手 小莫 凛" },
   { to: "/system", label: "系统", desc: "服务健康与资源", icon: IconSystem, keywords: "system health services gpu 系统 服务 健康 资源 显存" },
   { to: "/settings", label: "设置", desc: "外观与连接", icon: IconSettings, keywords: "settings theme connection 设置 外观 主题 连接 偏好" },

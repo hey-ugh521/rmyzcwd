@@ -3,6 +3,7 @@ import { coreFetch, gwFetch, CORE_BASE, ApiError } from "./client";
 import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
   GenerateRequest, GenerateResponse, TtsRequest, TtsResponse, Character, ConstitutionResponse,
+  RegistryIndex,
   ChatSession, ChatMessage, ChatRequest, ChatEvent,
 } from "./types";
 import { uid } from "../lib/utils";
@@ -56,6 +57,7 @@ export class LiveBackend implements Api {
       method: "PUT", body: JSON.stringify({ text, note }),
     }) as Promise<{ ok: boolean; constitution: unknown }>;
   }
+  async getRegistryIndex() { return coreFetch("/api/registry/index") as Promise<RegistryIndex>; }
   async getTasks(params?: { limit?: number; status?: string; source?: string }) {
     const qs = new URLSearchParams();
     qs.set("limit", String(params?.limit ?? 100));

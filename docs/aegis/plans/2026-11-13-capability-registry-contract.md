@@ -1,7 +1,7 @@
 # Capability Registry 架构契约 v2
 
-> 状态：Phase 0 / 0.1 已完成 Registry 基础设施；Phase 1 尚未开始。  
-> 取代：[v1 设计稿](../../archive/aegis/2026-11-13-capability-registry-design-v1.md) 中关于生命周期、工作流安全、Prompt 编译、音色素材、迁移和阶段验收的部分。  
+> 状态：Phase 0 / 0.1 已完成 Registry 基础设施；Phase 1 只读索引与 Studio 能力库页已实现，运行时仍未切换。
+> 取代：[v1 设计稿](../../archive/aegis/2026-11-13-capability-registry-design-v1.md) 中关于生命周期、工作流安全、Prompt 编译、音色素材、迁移和阶段验收的部分。
 > 原稿的 UI 页面分组、导入向导、组件复用建议保留。
 
 ## 0. 结论
