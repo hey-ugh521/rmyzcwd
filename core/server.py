@@ -31,6 +31,7 @@ from .agent import Agent
 from .qq_adapter import QQAdapter
 from .capabilities import init_schema as init_capability_schema, prune_invocations
 from .identity import init_schema as init_identity_schema
+from .identity_shadow import init_schema as init_shadow_schema, prune_shadow_events
 from .capabilities_api import router as capabilities_router
 from .registry import RegistryError, init_schema as init_registry_schema
 from .registry_api import registry_error_handler, router as registry_router
@@ -159,6 +160,11 @@ async def lifespan(_: FastAPI):
     init_registry_schema()
     init_capability_schema()
     init_identity_schema()
+    init_shadow_schema()
+    try:
+        prune_shadow_events()
+    except Exception:  # noqa: BLE001 - retention must not block startup
+        pass
     try:
         prune_invocations()
     except Exception:  # noqa: BLE001 - retention must not block startup
