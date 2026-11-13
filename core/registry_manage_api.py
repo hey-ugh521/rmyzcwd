@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, Request, UploadFile
 
-from . import registry_manage, registry_runtime, voice_assets
+from . import registry_manage, registry_migration, registry_runtime, voice_assets
 from .registry import RegistryError, RegistryService
 from .services import GatewayClient
 
@@ -32,6 +32,28 @@ def _workflow_payload(body: dict[str, Any]) -> Any:
 @router.get("/runtime/status")
 async def runtime_status():
     return {"ok": True, **registry_runtime.status()}
+
+
+@router.get("/migration/status")
+async def migration_status():
+    return {"ok": True, **registry_migration.status()}
+
+
+@router.post("/migration/compare")
+async def migration_compare():
+    return {"ok": True, **registry_migration.compare()}
+
+
+@router.post("/migration/advance")
+async def migration_advance(request: Request, body: dict[str, Any] = Body(...)):
+    target = str(body.get("target") or "")
+    try:
+        result = registry_migration.advance(
+            target, actor=_actor(request), note=str(body.get("note") or ""),
+        )
+    except ValueError as exc:
+        raise RegistryError("migration_transition_rejected", str(exc), 409) from exc
+    return {"ok": True, **result}
 
 
 @router.post("/import/legacy")

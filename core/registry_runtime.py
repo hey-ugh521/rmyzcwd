@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from . import store
+from . import registry_migration, store
 from .registry import RegistryService
 
 MODES = {"off", "shadow", "enforce"}
@@ -68,17 +68,59 @@ def _voice(resource: dict[str, Any] | None, legacy_voice: dict[str, Any] | None)
     return dict(legacy_voice or {})
 
 
+def _published_character_by_key(key: str) -> dict[str, Any] | None:
+    """Resolve a published character without reading legacy character files."""
+    direct = _published("character", key)
+    if direct is not None:
+        return direct
+    needle = key.strip().lower()
+    if not needle:
+        return None
+    try:
+        listed = _service().list("character", limit=100)["items"]
+    except Exception:  # noqa: BLE001
+        return None
+    for item in listed:
+        if item.get("published_revision") is None or item.get("status") != "active":
+            continue
+        try:
+            resource = _service().get("character", item["id"], include_snapshot=True)
+        except Exception:  # noqa: BLE001
+            continue
+        payload = resource.get("published", {}).get("payload") or {}
+        identity = payload.get("identity") or {}
+        names = [identity.get("name"), *(identity.get("aliases") or [])]
+        if any(str(n).strip().lower() == needle for n in names if n):
+            return resource
+    return None
+
+
 def character(key: str | None) -> dict[str, Any] | None:
-    legacy = store.get_character(key)
-    if not enabled() or legacy is None:
-        return legacy
-    rid = str(legacy.get("id") or key or "")
-    resource = _published("character", rid) if rid else None
-    if resource is None:
-        store.audit("system", "registry.runtime.fallback", {
-            "type": "character", "id": rid, "mode": mode(),
-        }, source="runtime")
-        return legacy
+    fallback = registry_migration.legacy_fallback_enabled()
+    if enabled() and not fallback:
+        lookup = str(key or (store.CFG.get("default_character") or "")).strip()
+        resource = _published_character_by_key(lookup) if lookup else None
+        if resource is None:
+            store.audit("system", "registry.runtime.required_missing", {
+                "type": "character", "key": lookup, "mode": mode(),
+            }, source="runtime")
+            return None
+        legacy: dict[str, Any] = {}
+    else:
+        legacy = store.get_character(key)
+        if not enabled() or legacy is None:
+            return legacy
+        rid = str(legacy.get("id") or key or "")
+        resource = _published("character", rid) if rid else None
+        if resource is None:
+            store.audit("system", "registry.runtime.fallback", {
+                "type": "character", "id": rid, "mode": mode(),
+                "legacy_fallback": fallback,
+            }, source="runtime")
+            if not fallback:
+                return None
+            return legacy
+    rid = str(resource["id"] or key or "")
     payload = resource["published"]["payload"] or {}
     identity = payload.get("identity") or {}
     image = payload.get("image_defaults") or {}

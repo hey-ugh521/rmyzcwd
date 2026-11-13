@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator
 import httpx
 
 from . import store
-from . import registry_runtime
+from . import registry_migration, registry_runtime
 from .services import GatewayClient, MediaDisabled, ServiceError, Supervisor
 
 def _legacy_task_owner() -> bool:
@@ -208,6 +208,12 @@ class Agent:
             return {"ok": False, "error": "本轮已生成过一张图，请直接使用"}
         char_key = str(args.get("character") or "").strip()
         ch = registry_runtime.character(char_key) if char_key else None
+        if char_key and ch is None:
+            return {"ok": False, "error": "character_not_found",
+                    "hint": f"角色 {char_key} 未在已发布 Registry 中解析到"}
+        if registry_runtime.mode() == "enforce" and not registry_migration.legacy_fallback_enabled() and ch is None:
+            return {"ok": False, "error": "registry_required",
+                    "hint": "legacy fallback 已关闭，且没有已发布角色"}
         char_id = (ch or {}).get("id")
         policy = (ch or {}).get("media_policy") or {}
         if policy.get("allow_image") is False:
@@ -235,6 +241,10 @@ class Agent:
         registry_workflow = None
         if registry_runtime.mode() == "enforce":
             registry_workflow = registry_runtime.workflow((ch or {}).get("workflow"))
+        if (char_id and registry_runtime.mode() == "enforce" and registry_workflow is None
+                and not registry_migration.legacy_fallback_enabled()):
+            return {"ok": False, "error": "registry_workflow_required",
+                    "hint": f"角色 {char_id} 的 workflow 没有已发布 Registry 版本，legacy fallback 已关闭"}
         extra = {}
         if registry_workflow:
             extra["workflow"] = f"registry:{registry_workflow['id']}"
@@ -320,6 +330,10 @@ class Agent:
         if not text:
             return {"ok": False, "error": "text 为空"}
         ch = registry_runtime.character(ctx.get("character") or store.CFG.get("default_character")) or {}
+        if (not ch and registry_runtime.mode() == "enforce"
+                and not registry_migration.legacy_fallback_enabled()):
+            return {"ok": False, "error": "registry_required",
+                    "hint": "legacy fallback 已关闭，且没有已发布角色 VoiceProfile"}
         voice_cfg = ch.get("voice") or {}
         voice = args.get("voice") or voice_cfg.get("voice") or ""
         engine = voice_cfg.get("engine") or "kokoro"
