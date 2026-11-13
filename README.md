@@ -85,6 +85,7 @@ start http://127.0.0.1:8900/console
 - Phase 2A/2B 已完成旧资源导入、角色卡导入、API workflow 校验（含可选 ComfyUI `/object_info` 节点依赖检查）/导入、draft/publish/rollback 管理页；Runtime 尚未接入。
 - Phase 2C 已完成 workflow 试跑、VoiceAsset 素材库、角色表单；已受控热更新到 `D:\AI\Mobius`。
 - Phase 3A 已启用 Registry runtime resolver（`enforce`）：已发布角色/音色/workflow 走 Registry，未发布资源回退 legacy；旧文件读路径仍在。
+- Phase 3B 已完成迁移状态机与旧读关闭：生产状态 `LEGACY_READ_DISABLED`，13 角色 / 4 音色 / 9 workflow 全量对照通过；Agent 不再读 legacy 角色/音色文件。
 - M3 干净安装仍在收口；生产安装与开发仓库分开。
 
 ## 验证

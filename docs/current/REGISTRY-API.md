@@ -196,6 +196,9 @@ POST /api/registry/manage/workflows/validate  {"payload": {...}, "live_check": t
 POST /api/registry/manage/workflows/import    {"payload": {...}, "id": "optional", "name": "optional"}
 GET  /api/registry/manage/comfyui/nodes
 GET  /api/registry/manage/runtime/status
+GET  /api/registry/manage/migration/status
+POST /api/registry/manage/migration/compare
+POST /api/registry/manage/migration/advance   {"target": "...", "note": "..."}
 POST /api/registry/manage/workflows/{id}/test
 GET  /api/registry/manage/voice-assets
 POST /api/registry/manage/voice-assets          multipart: file, kind, source, consent, reuse_policy
@@ -215,6 +218,13 @@ delete the stored file.
 `runtime/status` reports `off|shadow|enforce`; in `enforce` only resources with a
 published revision are used by Agent, and unpublished resources fall back to
 legacy files.
+
+`migration/status` reports the persisted migration state and coverage. `compare`
+checks characters, voice profiles and workflows against legacy projections.
+`advance` only accepts the next state, and refuses `REGISTRY_VERIFIED` /
+`LEGACY_READ_DISABLED` unless comparison and coverage pass. In
+`LEGACY_READ_DISABLED`, Agent no longer reads legacy character files and fails
+closed for unpublished resources.
 
 `live_check` fetches ComfyUI `/object_info`; if ComfyUI is down the validation
 returns `dependencies.status = "unchecked"` instead of pretending nodes exist.
