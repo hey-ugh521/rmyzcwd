@@ -312,8 +312,58 @@ def _allowed_sources() -> set[str] | None:
 
 
 class CapabilityService:
-    def __init__(self, gateway: GatewayClient | None = None) -> None:
+    _PROVIDER_SERVICE = {"comfyui": "comfyui", "kokoro": "kokoro", "gpt-sovits": "gsv"}
+    _ENGINE_BY_PROVIDER = {"kokoro": "kokoro", "gpt-sovits": "mobius"}
+
+    def __init__(self, gateway: GatewayClient | None = None,
+                 supervisor: Any | None = None) -> None:
         self.gateway = gateway or GatewayClient()
+        self.supervisor = supervisor
+        self._health_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+    async def provider_health(self, provider: str) -> dict[str, Any]:
+        service = self._PROVIDER_SERVICE.get(provider)
+        if self.supervisor is None or service is None:
+            return {"provider": provider, "service": service, "state": "unknown",
+                    "available": True, "checked_at": time.time(), "reason": "no_supervisor"}
+        ttl = float(_config().get("provider_health_ttl_sec") or 15)
+        now = time.time()
+        cached = self._health_cache.get(provider)
+        if cached and now - cached[0] < ttl:
+            return cached[1]
+        try:
+            state = await self.supervisor.probe(service)
+            status = str((state or {}).get("state") or "unknown")
+            entry = {
+                "provider": provider, "service": service, "state": status,
+                "available": status == "ready", "checked_at": now,
+                "error": (state or {}).get("error") or "",
+            }
+        except Exception as exc:  # noqa: BLE001
+            entry = {"provider": provider, "service": service, "state": "error",
+                     "available": False, "checked_at": now,
+                     "error": f"{type(exc).__name__}: {exc}"}
+        self._health_cache[provider] = (now, entry)
+        return entry
+
+    async def choose_healthy_provider(self, capability: str,
+                                      requested: str | None = None) -> dict[str, Any]:
+        rows = [r for r in provider_rows()
+                if r.get("capability") == capability and r.get("enabled")]
+        if requested:
+            rows.sort(key=lambda r: (r.get("provider") != requested,
+                                     int(r.get("priority") or 100)))
+        else:
+            rows.sort(key=lambda r: (int(r.get("priority") or 100), str(r.get("provider"))))
+        checked: list[dict[str, Any]] = []
+        for row in rows:
+            health = await self.provider_health(str(row.get("provider")))
+            checked.append({"provider": row.get("provider"), **health})
+            if health.get("available"):
+                return {**row, "health": health, "checked": checked}
+        raise CapabilityError("provider_unavailable",
+                              f"{capability} 没有可用 Provider", 503,
+                              {"providers": checked})
 
     def _check_source(self, source: str) -> None:
         allowed = _allowed_sources()
@@ -363,7 +413,7 @@ class CapabilityService:
                     **extra: Any) -> dict:
         self._check_source(source)
         self._check_permission("image.generate", actor=actor, source=source, user_id=user_id)
-        provider = choose_provider("image.generate")
+        provider = await self.choose_healthy_provider("image.generate")
         ch = self._character(character_key, character)
         if (ch.get("media_policy") or {}).get("allow_image") is False:
             raise CapabilityError("media_policy_denied", "角色未开放生图", 403)
@@ -409,10 +459,10 @@ class CapabilityService:
                     source: str = "core", actor: str = "agent", **extra: Any) -> dict:
         self._check_source(source)
         self._check_permission("voice.synthesize", actor=actor, source=source, user_id=user_id)
-        chosen = choose_provider("voice.synthesize", requested=engine)
+        chosen = await self.choose_healthy_provider("voice.synthesize", requested=engine)
         provider = str(chosen.get("provider"))
-        if provider in {"kokoro", "gpt-sovits"}:
-            engine = provider
+        if provider in self._ENGINE_BY_PROVIDER:
+            engine = self._ENGINE_BY_PROVIDER[provider]
         ch = self._character(character_key, character)
         if (ch.get("media_policy") or {}).get("allow_voice") is False:
             raise CapabilityError("media_policy_denied", "角色未开放语音", 403)

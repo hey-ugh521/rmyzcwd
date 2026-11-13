@@ -97,7 +97,7 @@ class Agent:
     def __init__(self, sup: Supervisor, gw: GatewayClient):
         self.sup = sup
         self.gw = gw
-        self.capabilities = CapabilityService(gw)
+        self.capabilities = CapabilityService(gw, supervisor=sup)
         llm = store.CFG.get("llm", {})
         self.base_url = llm.get("base_url", "https://api.deepseek.com/v1").rstrip("/")
         self.api_key = llm.get("api_key", "")

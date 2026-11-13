@@ -17,6 +17,14 @@ os.environ.setdefault("CORE_DB_BACKEND", "sqlite")
 from core import capabilities, registry, registry_manage, registry_migration, registry_runtime, store  # noqa: E402
 
 
+class _HealthSupervisor:
+    def __init__(self, states):
+        self.states = states
+
+    async def probe(self, service):
+        return {"state": self.states.get(service, "ready")}
+
+
 class CapabilityTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
@@ -131,7 +139,7 @@ class CapabilityTest(unittest.TestCase):
         out = asyncio.run(svc.voice(text="hi", voice="zf_xiaobei", engine="kokoro",
                                      character=ch, source="test", actor="test"))
         self.assertTrue(out["ok"])
-        self.assertIn("gpt-sovits", self.gateway.tts.call_args.kwargs["engine"])
+        self.assertIn("mobius", self.gateway.tts.call_args.kwargs["engine"])
 
     def test_retention_prune(self):
         import time
@@ -147,6 +155,25 @@ class CapabilityTest(unittest.TestCase):
         result = capabilities.prune_invocations(retention_days=30, max_records=10)
         self.assertGreaterEqual(result["deleted_by_age"], 1)
         self.assertFalse(any(x["id"] == "old" for x in capabilities.list_invocations()))
+
+    def test_dynamic_health_fails_image(self):
+        ch = registry_runtime.character("bronya")
+        sup = _HealthSupervisor({"comfyui": "down"})
+        svc = capabilities.CapabilityService(self.gateway, supervisor=sup)
+        import asyncio
+        with self.assertRaises(capabilities.CapabilityError) as cm:
+            asyncio.run(svc.image(prompt="x", character=ch, source="test"))
+        self.assertEqual(cm.exception.code, "provider_unavailable")
+
+    def test_dynamic_health_degrades_voice(self):
+        ch = registry_runtime.character("bronya")
+        sup = _HealthSupervisor({"kokoro": "down", "gsv": "ready"})
+        svc = capabilities.CapabilityService(self.gateway, supervisor=sup)
+        import asyncio
+        out = asyncio.run(svc.voice(text="hi", voice="zf_xiaobei", engine="kokoro",
+                                     character=ch, source="test", actor="test"))
+        self.assertTrue(out["ok"])
+        self.assertEqual(self.gateway.tts.call_args.kwargs["engine"], "mobius")
 
 
 if __name__ == "__main__":

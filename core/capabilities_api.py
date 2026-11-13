@@ -61,6 +61,18 @@ async def providers():
     return {"ok": True, "items": capabilities.provider_rows()}
 
 
+@router.get("/provider-health")
+async def provider_health():
+    from .services import Supervisor
+    svc = capabilities.CapabilityService(supervisor=Supervisor())
+    seen: dict[str, Any] = {}
+    for row in capabilities.provider_rows():
+        provider = str(row.get("provider"))
+        if provider not in seen:
+            seen[provider] = await svc.provider_health(provider)
+    return {"ok": True, "items": list(seen.values())}
+
+
 @router.post("/providers")
 async def set_provider(body: dict[str, Any] = Body(...)):
     row = capabilities.set_provider(
