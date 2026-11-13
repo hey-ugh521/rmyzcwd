@@ -91,6 +91,7 @@ start http://127.0.0.1:8900/console
 - Phase 4C 已加入 Provider 动态健康检查与服务降级：Kokoro 不可用时 voice 自动降级到 GPT-SoVITS。
 - Phase 4D 已完成 Studio 策略管理页与 permission scope：可按角色/来源/用户限制能力权限。
 - Phase 4E 已完成策略 P0/P1 验收：权限优先级/默认授权/管理接口安全/并发 version/审计 before-after。
+- Phase 4F-1 已完成身份数据模型与凭证生命周期：Principal/Credential/Admin Session/Bootstrap Token、scrypt 哈希、同事务审计；尚未改变 HTTP 认证与路由授权。
 - M3 干净安装仍在收口；生产安装与开发仓库分开。
 
 ## 验证

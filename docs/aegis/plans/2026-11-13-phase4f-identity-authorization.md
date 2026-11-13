@@ -107,11 +107,11 @@ Cookie：
 
 **旧 `/studio` cookie 不再天然等于管理员。** 它最多作为“本机 Studio 已连接”的读会话；策略写必须重新建立 admin session。
 
-## 3. 角色与权限矩阵（建议）
+## 3. 角色与权限矩阵（建议，未冻结）
 
 初始只做静态角色，不引入角色表。
 
-Action：
+Action 需要区分运行时控制粒度：
 
 ```text
 identity.read
@@ -120,7 +120,9 @@ policy.write
 provider.read
 provider.write
 runtime.read
-runtime.control
+runtime.task.cancel
+runtime.service.control
+runtime.provider.control
 audit.read
 capability.read
 capability.invoke
@@ -130,20 +132,26 @@ capability.invoke
 
 | Action | admin | operator | service |
 |---|---:|---:|---:|
-| identity.read | ✓ | ✓ |  |
+| identity.read | ✓ | 受限 |  |
 | policy.read | ✓ | ✓ |  |
 | policy.write | ✓ |  |  |
 | provider.read | ✓ | ✓ |  |
 | provider.write | ✓ |  |  |
 | runtime.read | ✓ | ✓ | ✓ |
-| runtime.control | ✓ | ✓ |  |
-| audit.read | ✓ | ✓ |  |
+| runtime.task.cancel | ✓ | 受限（仅自己的任务） |  |
+| runtime.service.control | ✓ |  |  |
+| runtime.provider.control | ✓ |  |  |
+| audit.read | ✓ |  |  |
 | capability.read | ✓ | ✓ | ✓ |
-| capability.invoke | ✓ |  | ✓ |
+| capability.invoke | ✓ | 按需 | ✓ |
 
 `service` 是机器身份，不等于低权限管理员：它只能调用能力和读运行时状态，不能读策略、不能改策略、不能读审计。
 
+`capability.invoke` 还要经过 Capability Policy Engine 的第二次授权判断，不能仅凭角色直接放行。
+
 `studio-local` 不是 principal；Studio 登录成功后映射到具体 human principal（通常 admin）。
+
+矩阵在 4F-2/4F-3 实际测试后再冻结。
 
 ## 4. 认证与授权管线
 
@@ -316,14 +324,23 @@ Phase 4F 完成条件：
 - admin bootstrap/recovery 可用
 - secrets 不出现在 API/日志/审计
 
-## 10. 需要先确认的设计决策
+## 10. 已确认/待确认决策
 
-1. Admin 登录 v1：一次性 bootstrap token，还是本机密码，还是两者？
-2. 旧 API_KEY 是否确认只映射 `service`，不做任何 admin 兼容？
-3. 角色矩阵是否按上表冻结？
-4. `studio-local` 是否只作为 session 来源，不再作为 principal？
-5. 默认拒绝候选规则是否必须人工逐条确认，还是允许按 source 批量确认？
-6. 审计 append-only 在 4F 只做 API 层，还是同时做 DB 权限？
-7. 管理员恢复是否只允许本机 elevated CLI，还是允许本机文件 token？
+已确认：
 
-以上确认后再进入 4F-1 编码。
+1. Bootstrap 与 recovery 分离：`bootstrap-admin` 首次创建，`recover-admin` 恢复。
+2. 旧 `API_KEY` 只映射 `service`，没有任何隐式 admin 路径。
+3. `studio-local` 只作为 Admin Session 来源，不是 Principal。
+4. 默认拒绝候选按 source 批量生成，但逐条审批；候选保留 policy_version 与证据时间范围。
+5. 4F 审计先 API 层 append-only；管理变更与审计同事务。
+6. 恢复只允许本机，不允许网络；是否需要提权取决于安装目录/数据权限，不无条件要求 UAC。
+7. 恢复 token 一次性、消费失效、必须审计，不能通过普通 API 触发。
+
+暂缓冻结：
+
+- 角色矩阵中 `runtime.task.cancel` / `runtime.service.control` /
+  `runtime.provider.control` 的 operator 边界；
+- `audit.read` 初版只给 admin；
+- 等 4F-2/4F-3 测试结果后冻结。
+
+以上决策已转入 [Identity Data Model Contract](../current/IDENTITY-DATA-MODEL.md)。4F-1 编码已开始。
