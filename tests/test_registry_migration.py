@@ -50,6 +50,7 @@ class RegistryMigrationTest(unittest.TestCase):
         self.voice_id = registry_index.index()["voices"][0]["id"]
 
     def tearDown(self) -> None:
+        store.close_anchor()
         (store.DB_BACKEND, store.DB_PATH, store.CHARS_DIR, store.DATA_DIR,
          old_wf, old_mode) = self.old
         if old_wf is None:

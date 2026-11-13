@@ -34,6 +34,7 @@ UNIT_SUITES = [
     "tests.test_registry_api",
     "tests.test_registry_index",
     "tests.test_store_concurrency",
+    "tests.test_store_multiprocess",
 ]
 
 # Not a unittest class; kept as a standalone script.

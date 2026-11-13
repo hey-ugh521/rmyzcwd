@@ -32,6 +32,7 @@ class RegistryApiTest(unittest.TestCase):
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
+        store.close_anchor()
         store.DB_BACKEND = self.old_backend
         store.DB_PATH = self.old_path
         self.tmp.cleanup()

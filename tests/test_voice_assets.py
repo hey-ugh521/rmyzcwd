@@ -34,6 +34,7 @@ class VoiceAssetTest(unittest.TestCase):
         registry.init_schema()
 
     def tearDown(self) -> None:
+        store.close_anchor()
         store.DB_BACKEND = self.old_backend
         store.DB_PATH = self.old_path
         if self.old_cfg is None:

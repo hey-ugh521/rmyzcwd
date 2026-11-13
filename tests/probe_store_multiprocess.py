@@ -25,6 +25,7 @@ def _child(db_path: str, i: int, barrier, q) -> None:
     store.DB_BACKEND = "sqlite"
     store.DB_PATH = Path(db_path)
     try:
+        store.init_db()
         barrier.wait()
         c = store.conn()
         c.execute("BEGIN IMMEDIATE")
@@ -48,6 +49,7 @@ def main() -> int:
             store.DB_BACKEND = "sqlite"
             store.DB_PATH = Path(db)
             store.init_db()
+            store.close_anchor()
             ctx = mp.get_context("spawn")
             barrier = ctx.Barrier(4)
             q = ctx.Queue()

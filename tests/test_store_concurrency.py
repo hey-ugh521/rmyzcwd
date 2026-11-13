@@ -33,6 +33,7 @@ class StoreConcurrencyTest(unittest.TestCase):
         store.init_db()
 
     def tearDown(self) -> None:
+        store.close_anchor()
         store.DB_BACKEND = self.old_backend
         store.DB_PATH = self.old_path
         self.tmp.cleanup()

@@ -33,6 +33,7 @@ class IdentityTest(unittest.TestCase):
                                                  role="service", principal_id="svc-qq")
 
     def tearDown(self) -> None:
+        store.close_anchor()
         store.DB_BACKEND = self.old_backend
         store.DB_PATH = self.old_path
         if self.old_core is None:

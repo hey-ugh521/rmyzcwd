@@ -62,6 +62,7 @@ class CapabilityTest(unittest.TestCase):
                          expected_published_revision=None)
 
     def tearDown(self) -> None:
+        store.close_anchor()
         (store.DB_BACKEND, store.DB_PATH, store.CHARS_DIR, store.DATA_DIR, old_mode) = self.old
         if old_mode is None:
             os.environ.pop("MOBIUS_REGISTRY_RUNTIME", None)

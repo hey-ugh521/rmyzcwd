@@ -3,6 +3,7 @@
 config.json
 data/*.db
 data/*.db-*
+data/*.init.lock
 logs/
 media_gateway/logs/
 media_gateway/tts_output/

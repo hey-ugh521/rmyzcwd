@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import atexit
 import hashlib
 import json
 import os
@@ -11,6 +12,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +57,10 @@ _lock = threading.RLock()
 # classified read-only before BEGIN IMMEDIATE. Lock order is _lock -> _conn_lock;
 # no path takes _conn_lock then _lock.
 _conn_lock = threading.Lock()
+# Process-lifetime SQLite anchor. It keeps -wal/-shm alive so a last close in
+# another thread/process cannot delete shared memory between concurrent opens.
+_anchor: sqlite3.Connection | None = None
+_anchor_key: tuple[str, str] | None = None
 
 
 def now() -> float:
@@ -130,21 +136,117 @@ class _ClosingConnection(sqlite3.Connection):
         return False
 
 
+def _open_sqlite_connection() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    c = sqlite3.connect(DB_PATH, timeout=30, factory=_ClosingConnection)
+    c.row_factory = sqlite3.Row
+    c.execute("PRAGMA foreign_keys=ON")
+    c.execute("PRAGMA busy_timeout=30000")
+    c.execute("PRAGMA synchronous=NORMAL")
+    return c
+
+
+@contextmanager
+def _db_process_lock():
+    """Serialize cross-process SQLite initialization.
+
+    Threads in one process are already covered by _lock/_conn_lock. The file
+    lock closes the separate window where two processes both initialize a WAL
+    database and race on -shm creation.
+    """
+    if DB_BACKEND == "pg":
+        yield
+        return
+    lock_path = DB_PATH.with_name(DB_PATH.name + ".init.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(lock_path, "a+b")
+    locked = False
+    try:
+        fh.seek(0, 2)
+        if fh.tell() == 0:
+            fh.write(b"\0")
+            fh.flush()
+        fh.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            deadline = time.time() + 30
+            while True:
+                try:
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                    locked = True
+                    break
+                except OSError:
+                    if time.time() >= deadline:
+                        raise TimeoutError("SQLite DB 初始化锁超时")
+                    time.sleep(0.02)
+        else:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            locked = True
+        yield
+    finally:
+        if locked:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+        fh.close()
+
+
+def _ensure_anchor() -> None:
+    global _anchor, _anchor_key
+    if DB_BACKEND == "pg":
+        return
+    key = (DB_BACKEND, str(DB_PATH))
+    with _lock:
+        if _anchor is not None and _anchor_key == key:
+            return
+        if _anchor is not None:
+            _anchor.close()
+            _anchor = None
+            _anchor_key = None
+        with _db_process_lock():
+            c = _open_sqlite_connection()
+            try:
+                c.execute("PRAGMA journal_mode=WAL")
+            except Exception:
+                c.close()
+                raise
+            _anchor = c
+            _anchor_key = key
+
+
+def close_anchor() -> None:
+    """Close the process-lifetime anchor; primarily for test/process teardown."""
+    global _anchor, _anchor_key
+    with _lock:
+        if _anchor is not None:
+            try:
+                _anchor.close()
+            finally:
+                _anchor = None
+                _anchor_key = None
+
+
+atexit.register(close_anchor)
+
+
 def conn():
     if DB_BACKEND == "pg":
         return _PgConnection()
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_anchor()
     with _conn_lock:
-        c = sqlite3.connect(DB_PATH, timeout=30, factory=_ClosingConnection)
-        c.row_factory = sqlite3.Row
-        # Do not switch journal_mode per connection. WAL is a persistent database
-        # property and concurrent PRAGMA journal_mode=WAL calls can race, leaving a
-        # connection in a read-only view before BEGIN IMMEDIATE. init_db() sets WAL
-        # once under _lock.
-        c.execute("PRAGMA foreign_keys=ON")
-        c.execute("PRAGMA busy_timeout=30000")
-        c.execute("PRAGMA synchronous=NORMAL")
-        return c
+        return _open_sqlite_connection()
 
 
 SCHEMA = """
@@ -257,24 +359,41 @@ def _migrate_tasks(c) -> None:
 
 
 def init_db() -> None:
+    global _anchor, _anchor_key
+    if DB_BACKEND == "pg":
+        with _lock:
+            c = _PgConnection()
+            try:
+                script = SCHEMA.replace(
+                    "INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY"
+                ).replace("REAL", "DOUBLE PRECISION")
+                c.executescript(script)
+                _migrate_tasks(c)
+                c.commit()
+            finally:
+                c.close()
+        return
+    key = (DB_BACKEND, str(DB_PATH))
     with _lock:
-        c = conn()
-        try:
-            if DB_BACKEND != "pg":
-                # WAL is a database-level persistent property. Set it exactly
-                # once here, serialized by _lock, instead of on every conn().
+        if _anchor is not None:
+            _anchor.close()
+            _anchor = None
+            _anchor_key = None
+        with _db_process_lock():
+            c = _open_sqlite_connection()
+            try:
+                # WAL is a database-level persistent property. Set it under the
+                # cross-process init lock; keep this connection as the process
+                # anchor so -shm survives other connections' last close.
                 c.execute("PRAGMA journal_mode=WAL")
-            script = SCHEMA
-            if DB_BACKEND == "pg":
-                script = script.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
-                # PG REAL=float4（单精度），epoch 秒在 1.7e9 处 ulp≈128s，租约/时间比较会失真；
-                # sqlite REAL 本就是 float8，故 PG 统一升为 DOUBLE PRECISION 保持跨后端一致。
-                script = script.replace("REAL", "DOUBLE PRECISION")
-            c.executescript(script)
-            _migrate_tasks(c)
-            c.commit()
-        finally:
-            c.close()
+                c.executescript(SCHEMA)
+                _migrate_tasks(c)
+                c.commit()
+            except Exception:
+                c.close()
+                raise
+            _anchor = c
+            _anchor_key = key
 
 
 def _rows(cur) -> list[dict]:

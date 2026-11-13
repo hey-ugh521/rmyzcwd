@@ -38,6 +38,7 @@ class RegistryRuntimeTest(unittest.TestCase):
         self.svc = registry.RegistryService()
 
     def tearDown(self) -> None:
+        store.close_anchor()
         store.DB_BACKEND = self.old_backend
         store.DB_PATH = self.old_path
         store.CHARS_DIR = self.old_chars

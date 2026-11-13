@@ -37,6 +37,7 @@ class RegistryCoreAuthTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        store.close_anchor()
         cls.coreserver.API_KEY = cls.old_key
         store.DB_BACKEND = cls.old_backend
         store.DB_PATH = cls.old_path
