@@ -89,7 +89,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 
 ## 6. 测试
 
-`tests/test_identity_api.py`：22/22
+`tests/test_identity_api.py`：23/23
 
 覆盖：
 
@@ -113,7 +113,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 完整入口：
 
 ```text
-Ran 144 tests ... OK
+Ran 145 tests ... OK
 webhook 5/5
 ```
 
@@ -128,6 +128,8 @@ CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告�
 - 未在 PG 生产运行 endpoint
 - 未开启 Shadow
 - 未修复 2B 后续问题（独立立项）
+- 4F-2C 线程池/超时资源语义未做容量治理（见
+  [4F-2C 后续问题](../aegis/plans/2026-11-14-phase4f2c-followups.md)）
 - 未启用 Admin Login / 路由授权 / Default Deny
 - 未修改 4F-1/2A/2B 冻结内容
 

@@ -263,6 +263,8 @@ HTTP 细节：
 - 默认 5s 超时；超时返回 500 `identity_unavailable`
 - 超时后后台线程可能继续运行，但不得写身份表；该风险与 2B worker 生命周期
   分开记录
+- 线程池容量、超时后 worker 回收、PG timeout 与监控见
+  [4F-2C 后续问题](2026-11-14-phase4f2c-followups.md)；部署前必须确认
 - 回归测试必须验证慢 DB 不拖慢同一事件循环上的其他请求
 
 ## 8. D4：与 Legacy 隔离
