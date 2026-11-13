@@ -19,7 +19,8 @@ Authorization: Bearer <legacy_api_key>
   -> 返回既有 Principal 的公开身份
 ```
 
-不授权、不登录、不创建身份、不改变 Legacy 放行、不写 Shadow Event。
+不授权、不登录、不创建身份、不改变 Legacy 放行。Endpoint 自身不写 Shadow Event；
+Shadow Middleware 仍按现有全局规则独立观察。
 
 ## 2. D1：身份来源采用 A
 
@@ -59,20 +60,39 @@ Authorization: Bearer <legacy_api_key>
 ### 3.1 服务端配置缺失与凭据无效
 
 `inspect_legacy_api_key()` 当前把“配置缺失”返回为 `unmapped`。为避免把
-部署故障伪装成客户端认证失败，endpoint 适配层必须先做一次**只读配置门禁**：
+部署故障伪装成客户端认证失败，endpoint 适配层必须先做一次**只读配置门禁**，
+并保证一次请求使用一致的配置视图：
 
 ```text
 parse Bearer -> 401 if missing/malformed
-configured = identity.configured_legacy_key()
+
+configured = identity.configured_legacy_key()       # snapshot
 if not configured -> 500 configuration_unavailable
-call identity.inspect_legacy_api_key(request_key)
+if not constant_time_equal(request_key, configured) -> 401
+
+state = identity.inspect_legacy_api_key(request_key)
+
+configured_after = identity.configured_legacy_key() # guard
+if configured_after != configured -> 500 configuration_changed
 ```
 
 - 该检查只读 `store.CFG`，不修改 4F-2A mapping 或 frozen 代码
 - 配置缺失时**不调用** inspect
-- 内部状态 `configuration_unavailable`；对外 500 `identity_unavailable`
-- 配置在进程内一次性加载，endpoint 一次请求使用同一配置快照
+- request_key 与 snapshot 不匹配时直接 401，不调用 inspect
+- inspect 返回后再比对配置；配置变化则 500，避免“检查一个 Key、验证另一个 Key”
+- 配置在进程内一次性加载，无 reload endpoint；生产不允许运行时替换
+- `configured_legacy_key()` 与 `inspect_legacy_api_key()` 都读取同一个
+  模块级 `store.CFG`，没有第二份配置副本
+- 该模块没有依赖注入的配置对象；测试替换必须在隔离进程/临时库中完成
+- 内部状态 `configuration_unavailable` / `configuration_changed`；
+  对外统一 500 `identity_unavailable`
 - 不引入配置 reload；不要求修改 4F-2A/2B
+
+严格边界：
+
+- `inspect_legacy_api_key()` 内部仍会读取配置；本设计不声称它是参数化快照函数
+- 一致性由 endpoint 的 snapshot + pre/post guard 保证，而不是靠“配置通常不变”
+- 如果未来需要严格单快照，必须单独批准给冻结函数增加只读参数，不能在本阶段顺手改
 
 响应判定：
 
@@ -80,6 +100,7 @@ call identity.inspect_legacy_api_key(request_key)
 |---|---|---|
 | 请求无/错 Bearer | `unauthenticated` | 401 |
 | 服务端未配置 Legacy Key | `configuration_unavailable` | 500 |
+| 配置在请求内发生变化 | `configuration_changed` | 500 |
 | 数据库不可用 | `database_unavailable` | 500 |
 | 凭据不匹配/撤销/过期/禁用/mapping 缺失 | 对应 inspect 状态 | 401 |
 
@@ -92,10 +113,14 @@ Authorization: Bearer <legacy_api_key>
 
 ### 4.1 Bearer Header 解析
 
+遵循标准 HTTP 认证语法，不从 `request.headers.get()` 的合并结果猜测重复字段：
+
+- 直接检查原始 ASGI header 列表
 - Authorization 缺失 → 401
-- Scheme 大小写不敏感，但只接受 `Bearer`
-- Scheme 与凭据之间必须有且仅有一个合法分隔
-- 空凭据、格式错误、多个 Authorization 值 → 401
+- Scheme 大小写不敏感，只接受 `Bearer`
+- Scheme 与凭据之间允许一个或多个空格（标准认证语法），但不允许多个
+  相互冲突的 Authorization header
+- 空凭据、格式错误、重复/多值 Authorization → 401
 - 不接受 Query、Cookie、Body 回退读取
 - 不 trim/大小写转换/截断凭据内容
 - 不对原始 key 做日志输出
@@ -104,8 +129,9 @@ Authorization: Bearer <legacy_api_key>
 
 - `X-Request-Id` 只用于日志，不是身份凭据
 - 可接受字符集和长度受限（建议 `[A-Za-z0-9._:-]`，最多 128）
-- 非法/过长 header 不用作日志关联，由服务端生成替代 ID
+- 非法/过长/non-ASCII header 不用作日志关联，由服务端生成替代 ID
 - 不将未净化的 header 写入日志或响应
+- 异常日志只记录异常类型和服务端/校验后的请求 ID，不记录原始异常文本
 
 ### 4.2 成功
 
@@ -167,6 +193,7 @@ HTTP 细节：
 | mapping 缺失 | 401 |
 | conflict | 401 |
 | 服务端未配置 Legacy Key | 500 `identity_unavailable` |
+| 配置请求内发生变化 | 500 `identity_unavailable` |
 | 数据库/内部异常 | 500 `identity_unavailable` |
 | resolved | 200 |
 
@@ -210,9 +237,14 @@ HTTP 细节：
 - 不调用 `authenticate_credential()`，避免 `last_used_at` 更新
 - 不调用 `_map_legacy_key()` / `resolve_legacy_api_key()`
 - 不写 principals / credentials / admin_sessions / bootstrap_tokens
-- 不写 audit / Shadow Event
+- endpoint 自身不写 audit / Shadow Event
+- Shadow Middleware 开启时仍可能按全局规则写 `not_evaluated`
 - 不写缓存
 - 请求前后数据库行数不变，且关键字段（尤其 `last_used_at`）不变
+- 只读性除运行快照外，必须做完整调用链审计：
+  `endpoint -> inspect_legacy_api_key -> store.conn SELECT`
+  不存在 INSERT/UPDATE/DELETE 或隐式写入
+- 数据库只读事务可作为辅助证据，但不引入本阶段数据库架构变更
 
 ## 8. D4：与 Legacy 隔离
 
@@ -322,7 +354,10 @@ headers/cookies 没有基线，不能回填为已验证。
 - `last_used_at` 不变
 - 相关表关键字段不变
 - 不新增 Principal/Credential
-- 不写 Shadow Event
+- endpoint handler 不主动写 Shadow Event
+- 调用链审计确认无 INSERT/UPDATE/DELETE
+- 配置门禁与 inspect 使用同一 endpoint snapshot；配置变化返回 500
+- 原始 ASGI header 列表中的重复 Authorization 被拒绝
 
 隔离：
 
@@ -346,7 +381,9 @@ HTTP 语义：
 Shadow：
 
 - Shadow 关闭：endpoint 不产生 Shadow Event
-- Shadow 开启：允许全局 `not_evaluated`，不影响 endpoint 响应或 Legacy 放行
+- Shadow 开启：允许全局 Middleware 产生 `not_evaluated`，但 endpoint 响应
+  不依赖 Shadow Event 写入成功，也不依赖 worker 状态
+- 全局 Shadow 失败不影响 endpoint 200/401/500 结果
 
 ## 16. 不进入 4F-2C
 
