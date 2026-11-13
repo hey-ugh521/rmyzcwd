@@ -34,6 +34,7 @@ from .capabilities import init_schema as init_capability_schema, prune_invocatio
 from .identity import init_schema as init_identity_schema
 from . import identity_shadow as shadow
 from .identity_shadow import init_schema as init_shadow_schema, prune_shadow_events
+from .identity_api import router as identity_router
 from .capabilities_api import router as capabilities_router
 from .registry import RegistryError, init_schema as init_registry_schema
 from .registry_api import registry_error_handler, router as registry_router
@@ -60,6 +61,7 @@ app.include_router(capabilities_router)
 app.include_router(registry_index_router)
 app.include_router(registry_manage_router)
 app.include_router(registry_router)
+app.include_router(identity_router)
 
 # 后台任务引用集合（防止 asyncio 任务被 GC；不等待完成）
 _BACKGROUND: set = set()
