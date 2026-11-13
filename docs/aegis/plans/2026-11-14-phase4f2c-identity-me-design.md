@@ -1,7 +1,7 @@
 # Phase 4F-2C 设计稿：`/api/identity/me`
 
 - 日期：2026-11-14
-- 状态：**设计修订版；未实施，未授权编码**
+- 状态：**设计已定稿；本地实现完成，未部署生产**
 - 输入：
   - [4F 设计计划 §8](2026-11-13-phase4f-identity-authorization.md)
   - [Identity Data Model](../../current/IDENTITY-DATA-MODEL.md)
@@ -93,6 +93,9 @@ if configured_after != configured -> 500 configuration_changed
 - `inspect_legacy_api_key()` 内部仍会读取配置；本设计不声称它是参数化快照函数
 - 一致性由 endpoint 的 snapshot + pre/post guard 保证，而不是靠“配置通常不变”
 - 如果未来需要严格单快照，必须单独批准给冻结函数增加只读参数，不能在本阶段顺手改
+- post-guard 的实际保护范围：只能发现进程内 `store.CFG` 在请求期间被改动；
+  配置文件本身变化不会被已运行进程感知，也不会被该 guard 捕获
+- 本 endpoint 不提供配置热加载；配置文件变更仍需重启
 
 响应判定：
 
@@ -199,6 +202,13 @@ HTTP 细节：
 
 内部可以区分状态用于日志/测试，但不进入响应，避免凭据枚举。
 
+### 5.1 401 契约适用范围
+
+上述 401 是 **endpoint 自身返回**的契约。Core 绑定 `127.0.0.1`，非回环或
+被 `auth_mw` 提前拒绝的请求可能得到 Legacy 的 `{"error":"unauthorized"}`，
+不带本契约的 `WWW-Authenticate`/`Cache-Control`。不得把 Legacy 拦截响应
+误读为 `/api/identity/me` 的响应契约；这也不要求修改 `auth_mw`。
+
 数据库/内部异常：
 
 - 返回 500 `identity_unavailable`
@@ -246,6 +256,15 @@ HTTP 细节：
   不存在 INSERT/UPDATE/DELETE 或隐式写入
 - 数据库只读事务可作为辅助证据，但不引入本阶段数据库架构变更
 
+### 7.1 事件循环隔离
+
+- endpoint 的 Bearer 解析和配置快速检查在事件循环内完成
+- 同步 DB 调用通过 `run_in_threadpool` 执行，不能直接在 `async def` 中阻塞事件循环
+- 默认 5s 超时；超时返回 500 `identity_unavailable`
+- 超时后后台线程可能继续运行，但不得写身份表；该风险与 2B worker 生命周期
+  分开记录
+- 回归测试必须验证慢 DB 不拖慢同一事件循环上的其他请求
+
 ## 8. D4：与 Legacy 隔离
 
 强约束：
@@ -278,6 +297,8 @@ HTTP 细节：
 - 不承诺“该 endpoint 永远不产生 Shadow Event”
 - Shadow 开启时按现有全局规则允许 `not_evaluated`
 - 不为 4F-2C 特殊排除该路由；修改全局观察属于 2B 后续变更
+- endpoint 无 `X-Request-Id` 时自生成的 request ID 仅用于自身日志，
+  与 Shadow Event 的 request_id 不是同一来源，不能互相校验
 
 ## 10. D6/D7/D8：独立 2B 后续问题
 
@@ -340,6 +361,7 @@ headers/cookies 没有基线，不能回填为已验证。
 - 有效 key + resolved mapping → 200，字段精确
 - 无 Bearer / 格式错误 → 401
 - Scheme 大小写、空凭据、多 Authorization → 401
+- 尾部换行/控制字符 → 401
 - 不从 Query/Cookie/Body 回退取 Key
 - 未知/错误 key → 401
 - revoked / expired / disabled → 统一 401
@@ -347,6 +369,8 @@ headers/cookies 没有基线，不能回填为已验证。
 - 服务端 Legacy Key 未配置 → 500 `identity_unavailable`
 - 数据库/内部异常 → 500，不伪装成 401
 - 无效/过长 `X-Request-Id` 不进入日志，使用服务端替代 ID
+- 慢 DB 不阻塞同一事件循环的其他请求
+- DB 超时 → 500，且不阻塞其他请求
 
 只读：
 
@@ -364,6 +388,11 @@ headers/cookies 没有基线，不能回填为已验证。
 - endpoint 成功/失败后 Legacy 路由行为不变
 - 不修改 `request.state.legacy_auth`
 - 不修改 mapping
+- 非回环被 `auth_mw` 拦截的 401 属于 Legacy，不得断言为 endpoint 契约
+
+平台：
+
+- 3.12 / 3.13 本地复跑；CI 是否覆盖 3.12 必须单列，不能把本地手跑当 CI 证据
 
 HTTP 语义：
 
@@ -396,11 +425,20 @@ Shadow：
 - 生产故障注入
 - `credential.id` 暴露
 
-## 17. 待审查问题
+## 17. 审查裁决
 
-1. D1 方案 A 及 `inspect_legacy_api_key()` 契约是否接受？
-2. 统一 401 + `WWW-Authenticate: Bearer` 是否接受？
-3. 500 `identity_unavailable` 是否接受？
-4. 首版删除 `credential.id` 是否接受？
-5. 2B 问题独立立项是否接受？
-6. Shadow 开启时允许全局 `not_evaluated` 是否接受？
+| 问题 | 裁决 |
+|---|---|
+| D1 方案 A 及只读契约 | 接受 |
+| 统一 401 + `WWW-Authenticate: Bearer` | 接受 |
+| 500 `identity_unavailable` | 接受 |
+| 删除 `credential.id` | 接受 |
+| 2B 问题独立立项 | 接受 |
+| Shadow 开启全局 `not_evaluated` | 接受 |
+
+实现状态：
+
+- 本地实现完成
+- 未部署生产
+- 生产配置、Shadow、4F-1/2A/2B 未改变
+- 部署需要单独授权

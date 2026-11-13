@@ -55,6 +55,11 @@ Authorization: Bearer <legacy_api_key>
 - 200/401/500：`Cache-Control: no-store`
 - 不返回 credential.id、hash、prefix、原始 key
 
+**适用范围：** 以上是 endpoint 自身返回的契约。Core 绑定 `127.0.0.1`；
+非回环或被 `auth_mw` 提前拒绝的请求可能得到 Legacy 的
+`{"error":"unauthorized"}`，不带本契约 headers。该 Legacy 响应不作为
+endpoint 契约，也不要求修改 `auth_mw`。
+
 ## 4. 身份解析
 
 - 直接解析原始 ASGI Authorization header
@@ -70,6 +75,8 @@ Authorization: Bearer <legacy_api_key>
 - 调用后再次检查配置；变化 → 500
 - 只读状态：resolved → 200；unmapped/mapping_missing/conflict/revoked/
   expired/principal_disabled → 401
+- 同步 DB 解析通过 `run_in_threadpool`，默认 5s 超时；慢 DB 不阻塞事件循环
+- Bearer 解析使用 `fullmatch`，尾部换行/控制字符拒绝
 
 ## 5. 只读与隔离
 
@@ -82,31 +89,38 @@ Authorization: Bearer <legacy_api_key>
 
 ## 6. 测试
 
-`tests/test_identity_api.py`：14/14
+`tests/test_identity_api.py`：22/22
 
 覆盖：
 
 - 成功响应字段
 - 缺少/错误/格式错误 Bearer
 - scheme 大小写、多空格
+- 尾部换行/控制字符拒绝
 - 重复 Authorization
 - Query/Cookie 回退拒绝
 - 配置缺失 → 500
 - 数据库异常 → 500
 - 配置请求内变化 → 500
-- revoked → 401
+- revoked / expired / disabled / mapping missing → 401
 - 只读快照：行数与关键字段不变
+- 慢 DB 不阻塞同一事件循环的其他请求
+- DB 超时 → 500
 - endpoint 200/401/500 后 Legacy 回归
 - Shadow 关闭无事件
+- Shadow 开启时允许全局 not_evaluated，endpoint 响应不变
 
 完整入口：
 
 ```text
-Ran 136 tests ... OK
+Ran 144 tests ... OK
 webhook 5/5
 ```
 
-Python 3.12 / 3.13 均通过。
+Python 3.12 / 3.13 本地通过。
+
+CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告不把本地
+3.12 手跑当作 CI 通过。
 
 ## 7. 未做
 

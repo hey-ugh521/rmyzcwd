@@ -55,6 +55,8 @@
   - 受控请求带 `X-Request-Id`
   - 校验格式/唯一性
   - 事件可按 request_id 关联
+- 4F-2C endpoint 在无 header 时会自生成日志 ID；该 ID 与 Shadow Event
+  不是同一来源，不能互相校验
 - 归属：验证输入规范，不修改冻结代码
 - 独立审批：不需要代码变更；窗口执行规则
 
