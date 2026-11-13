@@ -67,27 +67,33 @@ Get-NetTCPConnection -LocalPort 8900 |
    - 事件表仍为 0
    - 没有客户端连接
 
-## 5. 预定义请求
+## 5. 预定义请求（执行后修正）
 
-使用生产 API Key 从本机发送；不打印 Key。
+原计划假设“GET + Bearer 会认证并 evaluated”。实际 `auth_mw` 对 loopback
+只读请求不认证，因此 GET + Bearer 得到 `legacy_anonymous`，不会进入
+Identity Mapping。执行时按以下修正后的清单进行：
 
-| # | 请求 | 预期 legacy | 预期 Shadow |
+| # | 请求 | 实际 legacy | 实际 Shadow |
 |---|---|---|---|
-| 1 | `GET /api/capabilities/permissions` + Bearer | 200 | `evaluated` / route / deny |
-| 2 | `GET /api/registry/character` + Bearer | 200 | `evaluated` / route / deny |
+| 1 | `GET /api/capabilities/permissions` + Bearer | 200 | `legacy_anonymous` |
+| 2 | `GET /api/registry/character` + Bearer | 200 | `legacy_anonymous` |
 | 3 | `GET /api/services` + Bearer | 200 | `not_evaluated` |
 | 4 | `GET /v1/models` + Bearer | 200 | `not_evaluated` |
-| 5 | `POST /api/capabilities/permissions` + 错误 Bearer | 401 | `legacy_denied` |
-| 6 | `GET /api/registry/character` 无 Bearer | 200 | `legacy_anonymous` |
+| 5 | `POST /api/capabilities/permissions` + Bearer + 非法 body | 422 | `evaluated` / route / deny |
+| 6 | `POST /api/capabilities/permissions` + 错误 Bearer | 401 | `legacy_denied` |
+| 7 | `GET /api/registry/character` 无 Bearer | 200 | `legacy_anonymous` |
 
-请求 1/2 预期 service 角色被 Route Policy deny；这是观察结果，不是阻断。
+只有第 5 条（合法 Bearer 的变更请求）产生 resolved/evaluated 证据；其余
+loopback GET 是匿名只读。
+
+原 §5 的 6 条预期不适用于实际 Legacy 语义；2C 设计必须按本修正表理解。
 
 ## 6. PG 证据
 
 使用独立 PG 连接，不使用 Core 连接：
 
 - 事件已提交可见
-- 事件数量等于受控请求数
+- 事件数量等于受控请求数（执行时另有 1 条 `/api/shutdown` 控制事件，需单列）
 - 每条事件：
   - route_id / action
   - identity_state
@@ -96,6 +102,8 @@ Get-NetTCPConnection -LocalPort 8900 |
   - policy_state
   - policy_version
   - reason
+- 已知字段缺口：`request_id` / `latency_ms` / `error_class` 当前未写入；
+  事件与请求无法按 request_id 关联，延迟只能由客户端测量
 - 无新增 Principal/Credential
 - 事件表无 Authorization/API Key/Token hash 字段或值
 

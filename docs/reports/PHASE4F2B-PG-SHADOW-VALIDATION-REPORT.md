@@ -99,6 +99,14 @@ Shadow 开启 vs 关闭：
 
 Shadow 同步写入在本地受控请求中约几十毫秒级；未做高负载长稳。
 
+事件表字段限制：
+
+- `latency_ms`、`request_id`、`error_class` 当前均未写入（8/8 NULL）
+- 延迟是客户端测量，不是事件表字段
+- 事件无法按 request_id 与请求一一关联，重复路径只能靠 `ts`
+- Shadow 采用 daemon 线程 + 0.25s wait_for；超时后线程可能继续运行，
+  生产开启前需评估线程堆积风险
+
 ## 7. 故障隔离
 
 生产环境**没有注入 PG 故障**。
@@ -120,21 +128,23 @@ test_shadow_exception_does_not_change_response
 - 为受控验证清空过一次 Shadow Event（此前为 readiness/控制请求产生）
 - 最终事件表保留 8 条验证证据，未删除
 - 配置已恢复为无 `identity` 段
+- 备份 `...bak-shadow-20261113-235131` 是**关闭态**快照；开启态配置没有
+  单独留档，窗口参数只能由 ADR-017、计划和事件反推
 - 服务已恢复：gateway/comfyui/kokoro ready，langbot down
 - Studio/Edge 已关闭，验证后未自动重开
 
 ## 9. Exit Criteria
 
 - [x] PG 事件成功写入并提交
-- [x] 事件语义与预期策略一致
+- [x] 事件语义与**修正后**的 auth/计划 §5 一致
 - [x] policy_version 正确且稳定
 - [x] 无新增身份记录
-- [x] 关键 Legacy 响应一致
+- [x] 关键 Legacy 响应一致（6/7 静态；services 动态不计）
 - [x] Shadow 关闭后不再新增事件
 - [x] 无凭证秘密泄露
 - [ ] Shadow 写入失败不影响认证 —— 隔离测试证据，非生产故障注入
 - [x] 已恢复 Shadow 关闭状态
-- [x] 报告和 Git 提交（待提交）
+- [x] 报告和 Git 提交
 
 ## 10. 结论
 
