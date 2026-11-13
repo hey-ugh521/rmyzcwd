@@ -22,10 +22,15 @@ Included suites:
 - registry lifecycle
 - registry API
 - registry index
-- store concurrency
+- store concurrency (including connection-creation serialization)
 - QQ webhook
 
 ## Not covered by the unit runner
+
+`tests/probe_store_multiprocess.py` is a diagnostic probe for cross-process
+WAL startup. It is intentionally excluded from CI until a process-level policy
+exists; a failing probe documents a known gap rather than turning it into a
+green test.
 
 These remain manual/integration suites because they need real components,
 configuration, or a disposable PostgreSQL database:
