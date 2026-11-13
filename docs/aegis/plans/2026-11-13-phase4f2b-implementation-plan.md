@@ -99,7 +99,7 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 
 ## 任务分解
 
-### 2B-1 Shadow 记录与保留
+### 2B-1 Shadow 记录与保留（已完成）
 
 - 新表 `identity_shadow_events` + 索引
 - 字段：request_id、method、path、route_id、route_action、resource_type、
@@ -108,6 +108,7 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
   policy_result、policy_version、reason、error_class、latency_ms
 - retention 清理函数：30 天/10000 条，批次上限 500，失败隔离
 - 测试：schema 幂等、保留期、批处理、无敏感字段、事件表与审计表分离
+- 报告：[PHASE4F2B1-SHADOW-EVENT-REPORT.md](../reports/PHASE4F2B1-SHADOW-EVENT-REPORT.md)
 
 ### 2B-2 观察器与权限评估
 

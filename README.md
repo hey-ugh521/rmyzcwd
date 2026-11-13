@@ -94,7 +94,7 @@ start http://127.0.0.1:8900/console
 - Phase 4F-1 已完成身份数据模型与凭证生命周期：Principal/Credential/Admin Session/Bootstrap Token、salted SHA-256 高熵凭证哈希、同事务审计；尚未改变 HTTP 认证与路由授权。
 - 4F-1 已验收通过并冻结；4F-2A（Legacy Identity Mapping）已完成，仍未接入 HTTP 认证。
 - 4F-2A 将旧 API_KEY 映射为固定 `service-legacy` 机器主体，未知 key 不创建身份，旧 key 永远不会成为 admin。
-- 4F-2A 已冻结；4F-2B Identity Shadow 设计审查稿已提交，未开始实现。
+- 4F-2A 已冻结；4F-2B Shadow 设计审查通过，2B-1 Shadow Event 数据模型已完成，未接中间件。
 - 单元测试可移植入口：`python tests/run_unit.py`；CI workflow 已加入 `.github/workflows/unit-tests.yml`。
 - 已修复 SQLite WAL last-close 后并发连接创建竞态（`_conn_lock` + 进程 anchor + 跨进程初始化锁）；本机并发/多进程回归通过。
 - M3 干净安装仍在收口；生产安装与开发仓库分开。
