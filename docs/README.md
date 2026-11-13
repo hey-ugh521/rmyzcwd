@@ -55,6 +55,7 @@
 - PG Shadow 验证结果：[Validation Report](reports/PHASE4F2B-PG-SHADOW-VALIDATION-REPORT.md)
 - 4F-2C 前置检查：[4F-2C Preflight](aegis/plans/2026-11-14-phase4f2c-preflight.md)
 - 4F-2C 设计稿：[`/api/identity/me` 设计](aegis/plans/2026-11-14-phase4f2c-identity-me-design.md)
+- 4F-2C 实施报告：[Identity API](reports/PHASE4F2C-IDENTITY-API-REPORT.md)
 - 2B 后续问题（不并入 4F-2C）：[2B Followups](aegis/plans/2026-11-14-phase2b-followups.md)
 - 2B-3 前置检查：[Phase 4F-2B-3 前置检查清单](aegis/plans/2026-11-13-phase4f2b3-preflight.md)
 - 测试可复现性：[3.13 复跑报告](reports/TEST-REPRODUCIBILITY-2026-11-13.md)

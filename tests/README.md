@@ -25,6 +25,7 @@ Included suites:
 - store concurrency (including connection-creation serialization)
 - store multiprocess startup
 - identity shadow middleware
+- identity API `/api/identity/me`
 - QQ webhook
 
 ## Negative-path check
