@@ -43,7 +43,7 @@ class IdentityTest(unittest.TestCase):
             row = c.execute("SELECT secret_hash FROM credentials WHERE id=?",
                             (made["credential"]["id"],)).fetchone()
         self.assertNotIn(token, row["secret_hash"])
-        self.assertIn("scrypt$", row["secret_hash"])
+        self.assertIn("sha256-v1$", row["secret_hash"])
         auth = identity.authenticate_credential(token)
         self.assertIsNotNone(auth)
         self.assertEqual(auth["principal"]["id"], "svc-qq")

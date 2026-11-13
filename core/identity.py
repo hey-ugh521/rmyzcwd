@@ -129,9 +129,12 @@ def init_schema() -> None:
 
 
 def _hash_secret(secret: str) -> str:
+    # Credentials are 256-bit random tokens, not human passwords. A salted
+    # SHA-256 is sufficient here and keeps per-request authentication fast;
+    # human passwords (future) must use scrypt/argon2 instead.
     salt = os.urandom(16)
-    digest = hashlib.scrypt(secret.encode("utf-8"), salt=salt, n=2**14, r=8, p=1, dklen=32)
-    return "scrypt$16384$8$1$%s$%s" % (
+    digest = hashlib.sha256(salt + secret.encode("utf-8")).digest()
+    return "sha256-v1$%s$%s" % (
         base64.urlsafe_b64encode(salt).decode("ascii"),
         base64.urlsafe_b64encode(digest).decode("ascii"),
     )
@@ -139,14 +142,19 @@ def _hash_secret(secret: str) -> str:
 
 def _verify_secret(secret: str, encoded: str) -> bool:
     try:
-        algo, n, r, p, salt_b64, hash_b64 = encoded.split("$", 5)
-        if algo != "scrypt":
-            return False
+        algo, salt_b64, hash_b64 = encoded.split("$", 2)
         salt = base64.urlsafe_b64decode(salt_b64.encode("ascii"))
         expected = base64.urlsafe_b64decode(hash_b64.encode("ascii"))
-        actual = hashlib.scrypt(secret.encode("utf-8"), salt=salt, n=int(n), r=int(r),
-                                p=int(p), dklen=len(expected))
-        return hmac.compare_digest(actual, expected)
+        if algo == "sha256-v1":
+            actual = hashlib.sha256(salt + secret.encode("utf-8")).digest()
+            return hmac.compare_digest(actual, expected)
+        if algo == "scrypt-v1":
+            # Legacy/compat only; credentials created by 4F-1 use sha256-v1.
+            n, r, p = 2**14, 8, 1
+            actual = hashlib.scrypt(secret.encode("utf-8"), salt=salt, n=n, r=r,
+                                    p=p, dklen=len(expected))
+            return hmac.compare_digest(actual, expected)
+        return False
     except Exception:  # noqa: BLE001
         return False
 
@@ -244,7 +252,7 @@ def create_credential(*, principal_id: str, kind: str = "api_key",
             "expires_at,revoked_at,last_used_at,created_at,rotated_from) "
             "VALUES(?,?,?,?,?,?,?,NULL,NULL,?,?)",
             (cid, principal_id, kind, prefix, _hash_secret(token),
-             "scrypt-v1", expires_at, now, rotated_from),
+             "sha256-v1", expires_at, now, rotated_from),
         )
         _audit(c, actor=actor, action="identity.credential.create",
                detail={"credential_id": cid, "principal_id": principal_id, "kind": kind,
@@ -306,7 +314,7 @@ def rotate_credential(credential_id: str, *, actor: str = "cli") -> dict[str, An
             "expires_at,revoked_at,last_used_at,created_at,rotated_from) "
             "VALUES(?,?,?,?,?,?,?,NULL,NULL,?,?)",
             (new_id, old["principal_id"], old["kind"], prefix, _hash_secret(token),
-             "scrypt-v1", old.get("expires_at"), now, credential_id),
+             "sha256-v1", old.get("expires_at"), now, credential_id),
         )
         c.execute("UPDATE credentials SET revoked_at=? WHERE id=?", (now, credential_id))
         _audit(c, actor=actor, action="identity.credential.rotate",
@@ -332,7 +340,7 @@ def _create_bootstrap_token(*, purpose: str, principal_id: str, ttl: int,
         c.execute(
             "INSERT INTO bootstrap_tokens(id,lookup_prefix,token_hash,hash_algo,purpose,"
             "principal_id,expires_at,consumed_at,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
-            (tid, prefix, _hash_secret(token), "scrypt-v1", purpose, principal_id,
+            (tid, prefix, _hash_secret(token), "sha256-v1", purpose, principal_id,
              now + ttl, None, now),
         )
         _audit(c, actor=actor, action="identity.bootstrap.create",
