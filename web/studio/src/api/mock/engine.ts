@@ -226,6 +226,10 @@ export class MockBackend implements Api {
     return { ok: true, validation: { status: "invalid", errors: ["演示模式不执行工作流验证"] } };
   }
   async importRegistryWorkflow() { return { ok: true, mocked: true }; }
+  async testRegistryWorkflow(_id: string) { return { ok: false, error: "演示模式不执行 workflow 试跑" }; }
+  async listVoiceAssets() { return { items: [] }; }
+  async uploadVoiceAsset(_file: File, _opts: any) { return { ok: false, item: {} as any }; }
+  async deleteVoiceAsset(_id: string) { return { ok: false, item: {} as any }; }
   async getRegistryIndex(): Promise<RegistryIndex> {
     const chars = this.characters.map((c) => ({
       id: c.id, name: c.name || c.id, aliases: c.aliases ?? [],

@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+from unittest.mock import AsyncMock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -21,6 +22,7 @@ from core import registry, registry_index, registry_manage, store  # noqa: E402
 from core.registry import RegistryError  # noqa: E402
 from core.registry_api import registry_error_handler  # noqa: E402
 from core.registry_manage_api import router  # noqa: E402
+from core import registry_manage_api  # noqa: E402
 
 
 class RegistryManageTest(unittest.TestCase):
@@ -147,6 +149,24 @@ class RegistryManageTest(unittest.TestCase):
         result = registry_manage.import_workflow(self.svc, good, workflow_id="wf-test")
         self.assertEqual(result["resource"]["current_revision"], 1)
         self.assertEqual(result["resource"]["published_revision"], None)
+
+    def test_workflow_test_endpoint(self):
+        good = {
+            "1": {"class_type": "KSampler", "inputs": {"steps": 20}},
+            "2": {"class_type": "SaveImage", "inputs": {}},
+        }
+        registry_manage.import_workflow(self.svc, good, workflow_id="wf-run")
+        app = FastAPI()
+        app.add_exception_handler(RegistryError, registry_error_handler)
+        app.include_router(router)
+        c = TestClient(app)
+        with mock.patch.object(registry_manage_api.gateway, "test_workflow",
+                               new=AsyncMock(return_value={"ok": True, "result": {"url": "/img?x=1"}})):
+            r = c.post("/api/registry/manage/workflows/wf-run/test")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()["ok"])
+        self.assertEqual(r.json()["revision"], 1)
+        self.assertEqual(r.json()["result"]["result"]["url"], "/img?x=1")
 
     def test_management_api(self):
         app = FastAPI()

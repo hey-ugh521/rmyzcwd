@@ -246,6 +246,22 @@ def init_schema(*, _after_ddl: Any = None) -> None:
           FOREIGN KEY(target_type,target_id) REFERENCES registry_resources(type,id) ON DELETE RESTRICT
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS registry_voice_assets(
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          filename TEXT NOT NULL,
+          stored_path TEXT NOT NULL,
+          checksum TEXT NOT NULL,
+          size INTEGER NOT NULL,
+          mime TEXT,
+          source TEXT,
+          consent TEXT,
+          reuse_policy TEXT NOT NULL,
+          created_at REAL NOT NULL,
+          deleted INTEGER NOT NULL DEFAULT 0
+        )
+        """,
         "CREATE INDEX IF NOT EXISTS idx_registry_resources_type ON registry_resources(type,status,updated_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_registry_revisions_type ON registry_revisions(type,id,revision DESC)",
         "CREATE INDEX IF NOT EXISTS idx_registry_refs_target ON registry_references(target_type,target_id)",

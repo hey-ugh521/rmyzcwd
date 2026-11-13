@@ -2,7 +2,7 @@ import type {
   SystemStatus, ServicesResponse, ServiceInfo, MediaConfig, MediaResources,
   ProviderInfo, ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, Character,
   ConstitutionResponse, RegistryIndex, RegistryResourceSummary, RegistryResourceDetail,
-  RegistryRevisionList, RegistryResourceType,
+  RegistryRevisionList, RegistryResourceType, VoiceAsset,
   Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
   ChatSession, ChatMessage, ChatRequest, ChatEvent,
 } from "./types";
@@ -47,6 +47,10 @@ export interface Api {
   importRegistryCharacter(card: Record<string, unknown>, id?: string): Promise<Record<string, unknown>>;
   validateRegistryWorkflow(payload: Record<string, unknown>, liveCheck?: boolean): Promise<Record<string, unknown>>;
   importRegistryWorkflow(payload: Record<string, unknown>, id?: string, name?: string): Promise<Record<string, unknown>>;
+  testRegistryWorkflow(id: string): Promise<Record<string, unknown>>;
+  listVoiceAssets(): Promise<{ items: VoiceAsset[] }>;
+  uploadVoiceAsset(file: File, opts: { kind?: string; source?: string; consent?: string; reusePolicy?: string }): Promise<{ ok: boolean; item: VoiceAsset }>;
+  deleteVoiceAsset(id: string): Promise<{ ok: boolean; item: VoiceAsset }>;
   getTasks(params?: { limit?: number; status?: string; source?: string }): Promise<{ tasks: Task[] }>;
   getTask(id: string): Promise<Task>;
   cancelTask(id: string): Promise<{ ok: boolean; task?: Task; note?: string }>;

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, File, Form, Request, UploadFile
 
-from . import registry_manage
+from . import registry_manage, voice_assets
 from .registry import RegistryError, RegistryService
+from .services import GatewayClient
 
 router = APIRouter(prefix="/api/registry/manage", tags=["registry-manage"])
 service = RegistryService()
+gateway = GatewayClient()
 
 
 def _actor(request: Request) -> str:
@@ -73,3 +75,70 @@ async def import_workflow(request: Request, body: dict[str, Any] = Body(...)):
         actor=_actor(request),
     )
     return {"ok": True, **result}
+
+
+@router.post("/workflows/{workflow_id}/test")
+async def test_workflow(workflow_id: str):
+    """Run the current draft/published graph once through Media Gateway.
+
+    This does not create a TaskStore task or publish anything.
+    """
+    resource = service.get("workflow", workflow_id, include_snapshot=True)
+    current = resource.get("current")
+    if not current:
+        raise RegistryError("revision_not_found", "workflow 没有当前 revision", 409)
+    payload = current.get("payload") or {}
+    graph = registry_manage.workflow_nodes(payload)
+    validation = registry_manage.validate_workflow(payload.get("graph") if isinstance(payload, dict) else payload)
+    if validation["status"] != "valid":
+        raise RegistryError("workflow_invalid", "工作流验证失败", 422, validation)
+    try:
+        result = await gateway.test_workflow(graph)
+    except Exception as exc:  # noqa: BLE001
+        raise RegistryError("workflow_test_failed", f"试跑失败: {type(exc).__name__}: {exc}", 502) from exc
+    return {"ok": True, "revision": current.get("revision"), "validation": validation, "result": result}
+
+
+# ------------------------------------------------------------------ VoiceAsset
+
+@router.get("/voice-assets")
+async def list_voice_assets():
+    return {"ok": True, "items": voice_assets.list_assets()}
+
+
+@router.get("/voice-assets/{asset_id}")
+async def get_voice_asset(asset_id: str):
+    row = voice_assets.get_asset(asset_id)
+    if row is None:
+        raise RegistryError("asset_not_found", "素材不存在", 404)
+    return {"ok": True, "item": row}
+
+
+@router.post("/voice-assets")
+async def upload_voice_asset(
+    request: Request,
+    file: UploadFile = File(...),
+    kind: str = Form("reference_audio"),
+    source: str = Form(""),
+    consent: str = Form(""),
+    reuse_policy: str = Form("private"),
+):
+    data = await file.read()
+    try:
+        row = voice_assets.create_asset(
+            kind=kind, filename=file.filename or "asset", data=data,
+            mime=file.content_type or "", source=source, consent=consent,
+            reuse_policy=reuse_policy,
+        )
+    except voice_assets.AssetError as exc:
+        raise RegistryError(exc.code, exc.message, exc.status, exc.details) from exc
+    return {"ok": True, "item": row, "actor": _actor(request)}
+
+
+@router.delete("/voice-assets/{asset_id}")
+async def delete_voice_asset(asset_id: str):
+    try:
+        row = voice_assets.delete_asset(asset_id)
+    except voice_assets.AssetError as exc:
+        raise RegistryError(exc.code, exc.message, exc.status, exc.details) from exc
+    return {"ok": True, "item": row}

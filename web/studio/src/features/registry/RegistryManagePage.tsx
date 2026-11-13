@@ -3,13 +3,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { RegistryResourceType } from "../../api/types";
 import {
   useImportLegacyRegistry, usePublishRegistryResource, useRegistryResource,
-  useRegistryResources, useRegistryRevisions, useSaveRegistryResource,
+  useRegistryResources, useRegistryRevisions, useSaveRegistryResource, useTestRegistryWorkflow,
+  useVoiceAssets, useUploadVoiceAsset, useDeleteVoiceAsset,
 } from "../../api/hooks";
 import { getApi } from "../../api";
 import { useApiMode } from "../../api/hooks";
 import { toast } from "../../store/feedback";
 import { Badge, Button, Card, EmptyState, Field, Textarea } from "../../components/ui";
-import { IconCharacters, IconImage, IconPlus, IconRefresh, IconUpload, IconVolume, IconWarning } from "../../components/icons";
+import { CharacterForm } from "./CharacterForm";
+import { IconCharacters, IconImage, IconPlus, IconRefresh, IconUpload, IconVolume, IconWarning, IconTrash } from "../../components/icons";
 
 const TYPES: { type: RegistryResourceType; label: string; icon: typeof IconCharacters }[] = [
   { type: "character", label: "角色", icon: IconCharacters },
@@ -23,9 +25,11 @@ export function RegistryManagePage() {
   const [type, setType] = useState<RegistryResourceType>("character");
   const [selected, setSelected] = useState<string | null>(null);
   const [jsonText, setJsonText] = useState("");
+  const [testResult, setTestResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const charFile = useRef<HTMLInputElement>(null);
   const workflowFile = useRef<HTMLInputElement>(null);
+  const voiceFile = useRef<HTMLInputElement>(null);
 
   const list = useRegistryResources(type);
   const detail = useRegistryResource(type, selected);
@@ -33,6 +37,10 @@ export function RegistryManagePage() {
   const importLegacy = useImportLegacyRegistry();
   const save = useSaveRegistryResource();
   const publish = usePublishRegistryResource();
+  const test = useTestRegistryWorkflow();
+  const assets = useVoiceAssets();
+  const uploadAsset = useUploadVoiceAsset();
+  const deleteAsset = useDeleteVoiceAsset();
 
   useEffect(() => {
     const payload = detail.data?.current?.payload;
@@ -44,6 +52,7 @@ export function RegistryManagePage() {
     setType(next);
     setSelected(null);
     setJsonText("");
+    setTestResult(null);
   };
 
   const invalidate = () => {
@@ -115,6 +124,20 @@ export function RegistryManagePage() {
     });
   };
 
+  const runTest = async () => {
+    if (!selected) return;
+    try {
+      const res = await test.mutateAsync(selected);
+      setTestResult(res);
+    } catch {
+      setTestResult(null);
+    }
+  };
+
+  const uploadVoice = (file: File) => {
+    uploadAsset.mutate({ file, kind: "reference_audio", source: "studio-upload" });
+  };
+
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-end gap-3">
@@ -163,7 +186,7 @@ export function RegistryManagePage() {
           ) : (
             <div className="divide-y divide-line-soft/60">
               {list.data.items.map((r) => (
-                <button key={r.id} onClick={() => setSelected(r.id)}
+                <button key={r.id} onClick={() => { setSelected(r.id); setTestResult(null); }}
                   className={`flex w-full items-center gap-2 px-4 py-3 text-left ${selected === r.id ? "bg-brand/10" : "hover:bg-raised/40"}`}>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-ink">{r.id}</span>
@@ -201,12 +224,26 @@ export function RegistryManagePage() {
                   loading={publish.isPending} disabled={!detail.data.current}>
                   发布当前
                 </Button>
+                {type === "workflow" && (
+                  <Button variant="soft" size="sm" onClick={runTest} loading={test.isPending}>
+                    试跑 workflow
+                  </Button>
+                )}
               </div>
+
+              {type === "character" && detail.data.current?.payload && (
+                <CharacterForm
+                  payload={detail.data.current.payload as Record<string, any>}
+                  saving={save.isPending}
+                  onSave={(payload) => save.mutate({
+                    type, id: detail.data.id, payload, expectedRevision: detail.data.current_revision,
+                  })}
+                />
+              )}
 
               <Field label="当前 revision payload（JSON）" hint="保存会创建新 draft；不会改变 published。">
                 <Textarea rows={14} value={jsonText} onChange={(e) => setJsonText(e.target.value)} className="font-mono text-xs" />
-              </Field>
-              <div className="mt-3 flex flex-wrap gap-2">
+              </Field>              <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="soft" size="sm" onClick={saveDraft} loading={save.isPending}>保存为 draft</Button>
                 <Button variant="ghost" size="sm" onClick={() => setJsonText(JSON.stringify(detail.data?.current?.payload ?? {}, null, 2))}>还原</Button>
               </div>
@@ -231,6 +268,17 @@ export function RegistryManagePage() {
                 </div>
               ) : null}
 
+              {testResult?.result?.result?.url && (
+                <div className="mt-5 border-t border-line-soft pt-4">
+                  <p className="text-xs font-medium text-ink">试跑结果</p>
+                  <img src={testResult.result.result.url} alt="workflow test result"
+                    className="mt-2 max-h-72 rounded-lg border border-line-soft object-contain" />
+                  <p className="mt-1 text-[11px] text-faint">
+                    {testResult.result.result.filename} · {testResult.result.seconds}s
+                  </p>
+                </div>
+              )}
+
               {detail.data.published_revision === null && (
                 <p className="mt-4 flex items-start gap-2 rounded-lg border border-warning/25 bg-warning/10 p-3 text-[11px] text-warning">
                   <IconWarning size={14} className="mt-0.5 flex-none" />
@@ -241,6 +289,40 @@ export function RegistryManagePage() {
           )}
         </Card>
       </div>
+
+      {type === "voice_profile" && (
+        <Card className="p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div>
+              <p className="text-sm font-semibold text-ink">VoiceAsset 素材库</p>
+              <p className="mt-1 text-[11px] text-muted">参考音频、模型权重、预览缓存；软删除，不直接删除文件。</p>
+            </div>
+            <input ref={voiceFile} type="file" accept=".wav,.mp3,.flac,.ogg,.safetensors,.pt,.pth,.bin,.json" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadVoice(f); e.currentTarget.value = ""; }} />
+            <Button variant="soft" size="sm" className="ml-auto" icon={<IconUpload size={14} />}
+              loading={uploadAsset.isPending} onClick={() => voiceFile.current?.click()}>
+              上传素材
+            </Button>
+          </div>
+          {!assets.data?.items.length ? (
+            <p className="mt-4 text-xs text-faint">还没有 VoiceAsset。</p>
+          ) : (
+            <div className="mt-3 divide-y divide-line-soft/60">
+              {assets.data.items.map((a) => (
+                <div key={a.id} className="flex items-center gap-2 py-2 text-xs">
+                  <span className="font-mono text-faint">{a.id}</span>
+                  <span className="truncate text-ink">{a.filename}</span>
+                  <Badge tone="muted">{a.kind}</Badge>
+                  <span className="text-faint">{(a.size / 1024).toFixed(1)} KB</span>
+                  <button className="ml-auto text-danger hover:underline" onClick={() => deleteAsset.mutate(a.id)}>
+                    <IconTrash size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

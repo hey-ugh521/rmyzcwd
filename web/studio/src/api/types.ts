@@ -321,6 +321,21 @@ export interface RegistryRevisionList {
   items: Omit<RegistryRevisionMeta, "payload">[];
 }
 
+export interface VoiceAsset {
+  id: string;
+  kind: "reference_audio" | "generated_audio" | "speaker_model" | "model_weight" | "preview_cache";
+  filename: string;
+  stored_path: string;
+  checksum: string;
+  size: number;
+  mime?: string;
+  source?: string;
+  consent?: string;
+  reuse_policy: "private" | "this_profile" | "this_character" | "workspace";
+  created_at: number;
+  deleted?: number;
+}
+
 export interface ChatSession {
   session_id: string;
   title?: string;

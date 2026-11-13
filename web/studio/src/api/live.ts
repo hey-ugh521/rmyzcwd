@@ -4,6 +4,7 @@ import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
   GenerateRequest, GenerateResponse, TtsRequest, TtsResponse, Character, ConstitutionResponse,
   RegistryIndex, RegistryResourceType, RegistryResourceDetail, RegistryRevisionList,
+  VoiceAsset,
   ChatSession, ChatMessage, ChatRequest, ChatEvent,
 } from "./types";
 import { uid } from "../lib/utils";
@@ -98,6 +99,30 @@ export class LiveBackend implements Api {
     return coreFetch("/api/registry/manage/workflows/import", {
       method: "POST", body: JSON.stringify({ payload, id, name }),
     }) as Promise<Record<string, unknown>>;
+  }
+  async testRegistryWorkflow(id: string) {
+    return coreFetch(`/api/registry/manage/workflows/${encodeURIComponent(id)}/test`, {
+      method: "POST", body: JSON.stringify({}),
+    }) as Promise<Record<string, unknown>>;
+  }
+  async listVoiceAssets() {
+    return coreFetch("/api/registry/manage/voice-assets") as Promise<{ items: VoiceAsset[] }>;
+  }
+  async uploadVoiceAsset(file: File, opts: { kind?: string; source?: string; consent?: string; reusePolicy?: string }) {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("kind", opts.kind ?? "reference_audio");
+    form.append("source", opts.source ?? "");
+    form.append("consent", opts.consent ?? "");
+    form.append("reuse_policy", opts.reusePolicy ?? "private");
+    return coreFetch("/api/registry/manage/voice-assets", {
+      method: "POST", body: form, json: false,
+    }) as Promise<{ ok: boolean; item: VoiceAsset }>;
+  }
+  async deleteVoiceAsset(id: string) {
+    return coreFetch(`/api/registry/manage/voice-assets/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }) as Promise<{ ok: boolean; item: VoiceAsset }>;
   }
   async getTasks(params?: { limit?: number; status?: string; source?: string }) {
     const qs = new URLSearchParams();

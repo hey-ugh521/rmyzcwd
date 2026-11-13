@@ -9,7 +9,7 @@ import { friendlyError, isActive } from "./normalize";
 import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
   ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, ProviderInfo, Character, ConstitutionResponse,
-  RegistryIndex, RegistryResourceType, RegistryResourceSummary, RegistryResourceDetail,
+  RegistryIndex, RegistryResourceType, RegistryResourceSummary, RegistryResourceDetail, VoiceAsset,
   ChatSession, ChatMessage, GenerateRequest, TtsRequest,
 } from "./types";
 import type { LogsResponse, HistoryItem } from "./index";
@@ -43,6 +43,7 @@ export const qk = {
   registryIndex: (m: string) => [...root(m), "registry-index"],
   registryResources: (m: string, type: string) => [...root(m), "registry-resources", type],
   registryResource: (m: string, type: string, id: string) => [...root(m), "registry-resource", type, id],
+  voiceAssets: (m: string) => [...root(m), "voice-assets"],
   tasks: (m: string) => [...root(m), "tasks"],
   task: (m: string, id: string) => [...root(m), "task", id],
   sessions: (m: string) => [...root(m), "sessions"],
@@ -250,6 +251,53 @@ export function usePublishRegistryResource() {
       toast.success(`已发布 revision ${vars.revision}`);
     },
     onError: (e) => toast.error("发布失败", errText(e)),
+  });
+}
+
+export function useTestRegistryWorkflow() {
+  return useMutation({
+    mutationFn: (id: string) => getApi().testRegistryWorkflow(id),
+    onSuccess: (res: any) => {
+      if (res?.ok) toast.success("Workflow 试跑完成");
+      else toast.error("Workflow 试跑失败", res?.error || "执行失败");
+    },
+    onError: (e) => toast.error("Workflow 试跑失败", errText(e)),
+  });
+}
+
+export function useVoiceAssets() {
+  const mode = useApiMode();
+  return useQuery<{ items: VoiceAsset[] }>({
+    queryKey: qk.voiceAssets(mode),
+    queryFn: () => getApi().listVoiceAssets(),
+    staleTime: 5000,
+  });
+}
+
+export function useUploadVoiceAsset() {
+  const qc = useQueryClient();
+  const mode = useApiMode();
+  return useMutation({
+    mutationFn: (vars: { file: File; kind?: string; source?: string; consent?: string; reusePolicy?: string }) =>
+      getApi().uploadVoiceAsset(vars.file, vars),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.voiceAssets(mode) });
+      toast.success("VoiceAsset 已上传");
+    },
+    onError: (e) => toast.error("VoiceAsset 上传失败", errText(e)),
+  });
+}
+
+export function useDeleteVoiceAsset() {
+  const qc = useQueryClient();
+  const mode = useApiMode();
+  return useMutation({
+    mutationFn: (id: string) => getApi().deleteVoiceAsset(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.voiceAssets(mode) });
+      toast.success("VoiceAsset 已软删除");
+    },
+    onError: (e) => toast.error("删除失败", errText(e)),
   });
 }
 

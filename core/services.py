@@ -1090,6 +1090,10 @@ class GatewayClient:
             "text": text, "voice": voice, "engine": engine, "speed": speed,
         }, timeout=180)
 
+    async def test_workflow(self, graph: dict, timeout: float = 300.0) -> dict:
+        return await self._request("POST", "/api/workflows/test", json={"graph": graph},
+                                   timeout=timeout)
+
     async def wait_task(self, task_id: str, timeout: float = 240.0,
                         interval: float = 2.0) -> dict:
         deadline = now() + timeout

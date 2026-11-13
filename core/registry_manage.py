@@ -267,6 +267,18 @@ def validate_workflow(payload: Any, *, object_info: dict[str, Any] | None = None
     }
 
 
+def workflow_nodes(payload: Any) -> dict[str, Any]:
+    """Return the executable node map from a validated Registry workflow payload."""
+    if not isinstance(payload, dict):
+        return {}
+    raw = payload.get("graph") if isinstance(payload.get("graph"), dict) else payload
+    if isinstance(raw.get("nodes"), dict):
+        return {str(k): v for k, v in raw["nodes"].items()
+                if isinstance(v, dict) and v.get("class_type")}
+    return {str(k): v for k, v in raw.items()
+            if isinstance(v, dict) and v.get("class_type")}
+
+
 def import_workflow(service: RegistryService, payload: Any, *, workflow_id: str = "",
                     name: str = "", actor: str = "phase2-import") -> dict[str, Any]:
     validation = validate_workflow(payload)

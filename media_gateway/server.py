@@ -3099,6 +3099,55 @@ async def route_generate(request: Request) -> Response:
     return JSONResponse(result)
 
 
+@api_route("/api/workflows/test", ["POST"])
+async def route_workflow_test(request: Request) -> Response:
+    """Phase 2C: execute a draft API prompt graph as a one-off test.
+
+    No TaskStore record and no workflow publication decision is made here. Core
+    must only send a graph that passed Registry validation. This is intentionally
+    a local-only test surface (Gateway /api auth still applies).
+    """
+    body = await _read_json(request)
+    nodes = body.get("graph") or body.get("workflow") or body.get("payload")
+    if not isinstance(nodes, dict) or not nodes:
+        raise ApiError("invalid_workflow", "graph 必须是非空 object", 422)
+    if len(nodes) > 256:
+        raise ApiError("workflow_too_large", "workflow 节点数超过 256", 422)
+    ensure = await ensure_comfy(settings)
+    if not ensure.get("ok"):
+        raise ApiError(str(ensure.get("error") or "comfyui_unavailable"),
+                       str(ensure.get("hint") or ""), 503)
+    lease = await RESOURCES.acquire(
+        "gpu_heavy", owner="workflow-test",
+        timeout=float(os.environ.get("MOBIUS_RESOURCE_WAIT_TIMEOUT", "300")),
+    )
+    try:
+        started = time.time()
+        prompt_id = await comfy_submit(settings, nodes)
+        output = await comfy_wait_output(
+            settings, prompt_id, timeout=float(os.environ.get("MOBIUS_TASK_TIMEOUT", "900"))
+        )
+        query = urllib.parse.urlencode({
+            "filename": output["filename"],
+            "subfolder": output.get("subfolder", ""),
+            "type": output.get("type", "output"),
+        })
+        return JSONResponse({
+            "ok": True,
+            "prompt_id": prompt_id,
+            "seconds": round(time.time() - started, 1),
+            "result": {
+                "url": f"{settings.public_base}/img?{query}",
+                "filename": output["filename"],
+                "subfolder": output.get("subfolder", ""),
+                "type": output.get("type", "output"),
+                "prompt_id": prompt_id,
+            },
+        })
+    finally:
+        RESOURCES.release(lease)
+
+
 @api_route("/api/tts", ["POST"])
 async def route_tts(request: Request) -> Response:
     body = await _read_json(request)
