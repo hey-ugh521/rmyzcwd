@@ -131,7 +131,10 @@ def conn():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DB_PATH, timeout=30, factory=_ClosingConnection)
     c.row_factory = sqlite3.Row
-    c.execute("PRAGMA journal_mode=WAL")
+    # Do not switch journal_mode per connection. WAL is a persistent database
+    # property and concurrent PRAGMA journal_mode=WAL calls can race, leaving a
+    # connection in a read-only view before BEGIN IMMEDIATE. init_db() sets WAL
+    # once under _lock.
     c.execute("PRAGMA foreign_keys=ON")
     c.execute("PRAGMA busy_timeout=30000")
     c.execute("PRAGMA synchronous=NORMAL")
@@ -251,6 +254,10 @@ def init_db() -> None:
     with _lock:
         c = conn()
         try:
+            if DB_BACKEND != "pg":
+                # WAL is a database-level persistent property. Set it exactly
+                # once here, serialized by _lock, instead of on every conn().
+                c.execute("PRAGMA journal_mode=WAL")
             script = SCHEMA
             if DB_BACKEND == "pg":
                 script = script.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")

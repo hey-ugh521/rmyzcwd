@@ -33,6 +33,7 @@ UNIT_SUITES = [
     "tests.test_registry_lifecycle",
     "tests.test_registry_api",
     "tests.test_registry_index",
+    "tests.test_store_concurrency",
 ]
 
 # Not a unittest class; kept as a standalone script.
