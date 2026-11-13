@@ -52,6 +52,7 @@
 - 2B 生产部署：[Shadow 关闭部署](reports/PHASE4F2B-PRODUCTION-DEPLOY-REPORT.md)
 - PG Shadow 验证计划：[维护窗口执行计划](aegis/plans/2026-11-13-pg-shadow-validation-plan.md)
 - PG Shadow 执行前证据：[Preflight Evidence](reports/PG-SHADOW-PREFLIGHT-EVIDENCE.md)
+- PG Shadow 验证结果：[Validation Report](reports/PHASE4F2B-PG-SHADOW-VALIDATION-REPORT.md)
 - 2B-3 前置检查：[Phase 4F-2B-3 前置检查清单](aegis/plans/2026-11-13-phase4f2b3-preflight.md)
 - 测试可复现性：[3.13 复跑报告](reports/TEST-REPRODUCIBILITY-2026-11-13.md)- 阶段报告：[Phase 0](reports/PHASE0-REGISTRY-REPORT.md)、[Phase 0.1](reports/PHASE0.1-REGISTRY-HARDENING-REPORT.md)、[Phase 1](reports/PHASE1-REGISTRY-READONLY-REPORT.md)、[Phase 2A](reports/PHASE2A-REGISTRY-MANAGEMENT-REPORT.md)、[Phase 2C](reports/PHASE2C-WORKFLOW-VOICE-FORM-REPORT.md)、[Phase 3A](reports/PHASE3A-RUNTIME-RESOLVER-REPORT.md)、[Phase 3B](reports/PHASE3B-MIGRATION-LEGACY-CLOSE-REPORT.md)、[Phase 4A](reports/PHASE4A-CAPABILITY-INVOCATION-REPORT.md)、[Phase 4B](reports/PHASE4B-CAPABILITY-POLICY-REPORT.md)、[Phase 4C](reports/PHASE4C-PROVIDER-HEALTH-REPORT.md)、[Phase 4D](reports/PHASE4D-POLICY-STUDIO-SCOPE-REPORT.md)、[Phase 4E](reports/PHASE4E-POLICY-VALIDATION-REPORT.md)、[Phase 4F-1](reports/PHASE4F1-IDENTITY-DATA-REPORT.md)、[Phase 4F-2A](reports/PHASE4F2A-LEGACY-MAPPING-REPORT.md)、[Live hot update](reports/REGISTRY-LIVE-HOTUPDATE-REPORT.md)
 - 已取代的 v1 设计在 [`archive/aegis/`](archive/aegis/)
