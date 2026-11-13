@@ -183,6 +183,7 @@ identity.session.create/revoke/expire
 python -m core.identity_cli bootstrap-admin
 python -m core.identity_cli recover-admin
 python -m core.identity_cli list-principals
+python -m core.identity_cli map-legacy-key
 python -m core.identity_cli create-credential --principal svc-qq --kind service_token
 python -m core.identity_cli rotate-credential --credential cred_xxx
 python -m core.identity_cli revoke-credential --credential cred_xxx
@@ -192,7 +193,31 @@ python -m core.identity_cli purge-sessions
 
 Secret/token 只在命令输出中出现一次；CLI 不写日志文件。
 
-## 11. 验收
+## 11. Legacy Identity Mapping (4F-2A)
+
+旧 API_KEY 只允许映射到固定机器主体：
+
+```text
+configured core.api_key
+  -> principal: service-legacy
+  -> kind: machine
+  -> role: service
+  -> credential lookup_prefix = sha256(api_key)[:16]
+  -> credential kind: service_token
+```
+
+约束：
+
+- 只映射当前 `core.api_key`；未知 key 返回 None，不创建 Principal/Credential。
+- 同一 key 每次映射到同一 Principal/Credential。
+- 不同 key 使用不同 lookup_prefix / Credential。
+- 绝不映射为 admin。
+- `service-legacy` 已存在但 kind/role 不是 machine/service → 拒绝，不覆盖。
+- 映射创建与审计同一事务；失败回滚。
+- 4F-2A 只建立数据映射，不接入 HTTP 认证、不改变请求放行结果。
+- 映射不是认证：未来认证管线仍需独立验证 Credential 和授权。
+
+## 12. 验收
 
 - Secret 不落库；哈希算法/版本可识别
 - 撤销、过期、轮换生效
