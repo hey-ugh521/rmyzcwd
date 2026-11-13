@@ -276,7 +276,10 @@ Agent media tools enter through `CapabilityService`:
 - route via `capability_providers` (image.comfyui / voice.kokoro|gpt-sovits)
 - record `capability_invocations` with character/workflow revision, provider, task id
 
-Permission defaults to allow (`capabilities.default_allow=true`). Retention defaults
+Permission defaults to allow (`capabilities.default_allow=true`). A permission row
+may include `scope` with `characters`, `sources` or `users` lists; all present
+constraints must match, and a non-matching row is ignored (not auto-deny).
+Retention defaults
 to 30 days / 10,000 rows and is pruned at Core startup plus a maintenance endpoint.
 Provider selection probes Core Supervisor service state with a short cache; an
 unavailable provider is skipped, and a requested provider falls back to the next

@@ -89,6 +89,7 @@ start http://127.0.0.1:8900/console
 - Phase 4A 已完成统一能力入口：Agent 图片/语音经 `CapabilityService`，带权限检查、Provider 路由和执行记录。
 - Phase 4B 已加入能力权限表、Provider 优先级策略、执行记录 30 天/10000 条保留策略。
 - Phase 4C 已加入 Provider 动态健康检查与服务降级：Kokoro 不可用时 voice 自动降级到 GPT-SoVITS。
+- Phase 4D 已完成 Studio 策略管理页与 permission scope：可按角色/来源/用户限制能力权限。
 - M3 干净安装仍在收口；生产安装与开发仓库分开。
 
 ## 验证
