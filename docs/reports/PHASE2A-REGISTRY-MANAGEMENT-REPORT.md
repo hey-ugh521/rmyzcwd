@@ -4,7 +4,7 @@
 - 状态：Phase 2A/2B 完成，等待审查；Runtime 未接入
 - 基础：[Registry 架构契约 v2](../aegis/plans/2026-11-13-capability-registry-contract.md)
 - 上一阶段：[Phase 1 报告](PHASE1-REGISTRY-READONLY-REPORT.md)
-- 代码提交：`e91bb01`
+- 代码提交：`e91bb01`（Phase 2A）、`a52a924`（Phase 2B 节点依赖检查）
 
 ## 1. 范围
 
