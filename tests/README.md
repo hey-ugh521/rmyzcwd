@@ -61,6 +61,15 @@ configuration, or a disposable PostgreSQL database:
 - M1/M3/E2E/console/gateway install and recovery suites
 - any test that starts real services or depends on local config
 
+## Isolated Shadow evidence
+
+```powershell
+python tests/shadow_evidence.py
+```
+
+Temporary SQLite + TestClient; enables Shadow only in-process, prints a JSON
+summary, and restores config. Not production evidence.
+
 ## CI
 
 `.github/workflows/unit-tests.yml` runs on `windows-latest` and

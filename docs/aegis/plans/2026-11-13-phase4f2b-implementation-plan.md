@@ -149,12 +149,12 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 - 不修改任何 401/403/status/headers/body
 - 报告：[PHASE4F2B3-SHADOW-MIDDLEWARE-REPORT.md](../reports/PHASE4F2B3-SHADOW-MIDDLEWARE-REPORT.md)
 
-### 2B-4 证据与冻结
+### 2B-4 证据与冻结（已完成）
 
 - 记录一次 shadow 运行摘要
 - 明确 allow/deny 只是观察结果
 - 更新报告和设计稿状态
-- 停止点：等待 4F-2B 验收后再讨论 4F-2C
+- 报告：[PHASE4F2B4-SHADOW-EVIDENCE-REPORT.md](../reports/PHASE4F2B4-SHADOW-EVIDENCE-REPORT.md)\n- 停止点：等待 4F-2B 验收后再讨论 4F-2C
 
 ## G-10 并行轨道
 
