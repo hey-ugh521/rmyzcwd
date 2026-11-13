@@ -7,8 +7,12 @@ on:
 
 jobs:
   unit:
-    runs-on: windows-latest
-    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,3 +23,5 @@ jobs:
         run: python -m pip install -r requirements-test.txt
       - name: Run portable unit suite
         run: python tests/run_unit.py
+      - name: Verify probe detects injected child failure
+        run: python tests/check_probe_negative.py

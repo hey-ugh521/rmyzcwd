@@ -103,18 +103,19 @@ def main() -> int:
                 p.start()
 
             _stop_processes(procs, barrier)
-            if any(p.exitcode != 0 for p in procs):
-                barrier.abort()
 
             results: dict[int, str | None] = {}
-            deadline = time.time() + 5
-            while len(results) < NPROC and time.time() < deadline:
+            for _ in range(NPROC):
                 try:
-                    idx, err = q.get(timeout=0.2)
+                    idx, err = q.get(timeout=1.0)
                 except queue.Empty:
                     break
                 if isinstance(idx, int):
                     results[idx] = err
+            try:
+                q.cancel_join_thread()
+            except Exception:  # noqa: BLE001
+                pass
             q.close()
 
             bad: list[str] = []

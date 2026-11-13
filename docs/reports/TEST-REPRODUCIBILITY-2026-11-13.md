@@ -101,6 +101,8 @@ GitHub Actions `unit-tests` 在 `c2c1236`、`683487e`、`fe9099e` 都是 success
 - CI 已跑绿，但**不能作为修复证据**
 - runner 没撞上竞态窗口
 - 新加的 `_conn_lock` 串行化回归会稳定抓住“没有锁”的实现，避免 CI 再次假绿
+- workflow 已扩为 Windows + Ubuntu 矩阵，并新增 `check_probe_negative.py`
+  负向步骤；该步骤要求注入故障时 probe 必须非零退出
 
 ## 4.2 跨进程探测
 
@@ -110,8 +112,11 @@ GitHub Actions `unit-tests` 在 `c2c1236`、`683487e`、`fe9099e` 都是 success
 - 当前本机 3 轮 0 错误
 - 4F-2A/4F-1 生产链路不受影响（生产是 PG）
 - 已提升为 `tests/test_store_multiprocess.py`，进入 unit runner
+- 子进程失败时快速 abort/terminate，不挂死
+- WSL Ubuntu 24.04 / Python 3.12（POSIX `fcntl.flock`）实跑：
+  concurrency 3/3、multiprocess 1/1
 
-`tests/run_unit.py` 包含该回归；CI 也会跑。
+`tests/run_unit.py` 包含该回归；CI 矩阵会跑。
 
 ## 5. 诊断命令结果
 
@@ -131,7 +136,8 @@ CORE_DB_BACKEND=sqlite 时 = sqlite
 ## 6. 仍然存在的缺口
 
 - anchor + 跨进程锁已实现并通过本机 probe；仍需在你的稳定失败环境复跑确认。
-- CI 已绿但曾放行 bug 版本；新的串行化/多进程回归必须在 CI 实跑通过后才能改变判断。
+- CI 已绿但曾放行 bug 版本；新的串行化/多进程/负向回归必须在 CI 实跑通过后才能改变判断。
+- POSIX 分支已用 WSL 跑过 concurrency/multiprocess；完整 unit 入口仍待 Ubuntu CI 实跑。
 - G-10 仍不能关闭：E2E、PG contract、安装/故障注入仍未进入 CI。
 - 进程异常终止时 `.init.lock` 由 OS 释放，残留文件本身不阻塞（下次可重新加锁）。
 - 生产 Core 仍是直接进程；不影响本次测试修复。
