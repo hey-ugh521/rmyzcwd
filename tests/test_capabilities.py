@@ -228,6 +228,14 @@ class CapabilityTest(unittest.TestCase):
         self.assertEqual(final_detail["before"]["effect"], "deny")
         self.assertEqual(final_detail["before"]["version"], 2)
 
+    def test_policy_audit_failure_rolls_back(self):
+        from unittest import mock
+        with mock.patch.object(capabilities, "_audit_tx", side_effect=RuntimeError("audit down")):
+            with self.assertRaises(capabilities.CapabilityError):
+                capabilities.set_permission(subject_type="source", subject="rollback",
+                                            capability="image.generate", effect="deny")
+        self.assertFalse(any(p["subject"] == "rollback" for p in capabilities.permission_rows()))
+
     def test_concurrent_permission_edit_one_winner(self):
         import threading
         base = capabilities.set_permission(subject_type="source", subject="race",

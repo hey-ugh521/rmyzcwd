@@ -175,8 +175,10 @@ def set_permission(*, subject_type: str, subject: str, capability: str,
                  json.dumps(scope or {}, ensure_ascii=False), priority,
                  1 if enabled else 0, 1, now, now),
             )
-        c.commit()
         row = c.execute("SELECT * FROM capability_permissions WHERE id=?", (pid,)).fetchone()
+        _audit_tx(c, actor=actor, action="capability.permission.set",
+                  detail={"before": before, "after": dict(row)})
+        c.commit()
     except CapabilityError as exc:
         c.rollback()
         store.audit(actor, "capability.permission.set", {
@@ -196,9 +198,6 @@ def set_permission(*, subject_type: str, subject: str, capability: str,
     finally:
         c.close()
     after = dict(row)
-    store.audit(actor, "capability.permission.set", {
-        "before": before, "after": after,
-    }, result="ok", source="core")
     return after
 
 
@@ -218,6 +217,8 @@ def delete_permission(permission_id: str, *, expected_version: int | None = None
                                   {"expected_version": expected_version,
                                    "current_version": before.get("version")})
         c.execute("DELETE FROM capability_permissions WHERE id=?", (permission_id,))
+        _audit_tx(c, actor=actor, action="capability.permission.delete",
+                  detail={"before": before, "after": None})
         c.commit()
     except CapabilityError as exc:
         c.rollback()
@@ -227,9 +228,6 @@ def delete_permission(permission_id: str, *, expected_version: int | None = None
         raise
     finally:
         c.close()
-    store.audit(actor, "capability.permission.delete", {
-        "before": before, "after": None,
-    }, result="ok", source="core")
 
 
 _SUBJECT_WEIGHT = {"*": 0, "source": 1, "actor": 2, "user": 3}
@@ -336,11 +334,13 @@ def set_provider(*, capability: str, provider: str, priority: int = 100,
                 (capability, provider, priority, 1 if enabled else 0, 1,
                  json.dumps(constraints or {}, ensure_ascii=False), now),
             )
-        c.commit()
         result = c.execute(
             "SELECT * FROM capability_providers WHERE capability=? AND provider=?",
             (capability, provider),
         ).fetchone()
+        _audit_tx(c, actor=actor, action="capability.provider.set",
+                  detail={"before": before, "after": dict(result)})
+        c.commit()
     except CapabilityError as exc:
         c.rollback()
         store.audit(actor, "capability.provider.set", {
@@ -356,8 +356,6 @@ def set_provider(*, capability: str, provider: str, priority: int = 100,
     finally:
         c.close()
     after = dict(result)
-    store.audit(actor, "capability.provider.set", {"before": before, "after": after},
-                result="ok", source="core")
     return after
 
 
@@ -404,6 +402,19 @@ def prune_invocations(*, retention_days: int | None = None,
     return {"deleted_by_age": deleted_age, "deleted_by_count": deleted_excess,
             "retention_days": days, "max_records": limit}
 
+
+
+def _audit_tx(c, *, actor: str, action: str, detail: dict[str, Any],
+              result: str = "ok", error: str = "") -> None:
+    """Audit in the same transaction as a policy mutation."""
+    import json
+    c.execute(
+        "INSERT INTO audit(id,ts,actor,character,action,detail,result,error,task_id,source) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        ("audit_" + uuid.uuid4().hex[:12], time.time(), actor, None, action,
+         json.dumps(detail, ensure_ascii=False, default=str), result, error or None,
+         None, "capability-policy"),
+    )
 
 
 def _record(*, capability: str, actor: str, user_id: str | None,
