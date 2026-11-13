@@ -40,6 +40,7 @@ role
 action
 policy_result
 policy_version
+policy_state
 reason
 error_class
 latency_ms

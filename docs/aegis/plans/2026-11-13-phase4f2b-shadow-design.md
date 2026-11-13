@@ -172,8 +172,11 @@ user_id / character_id（可解析时）
 管理路由第一版使用**显式的 route policy**：
 
 - 角色矩阵：admin / operator / service
-- route action：read / write / manage
-- resource type：registry / policy / provider / capability
+- route action：read / write
+- route action 由 HTTP method 决定：
+  - GET / HEAD / OPTIONS → read
+  - POST / PUT / PATCH / DELETE → write
+- 路径语义只进入 `route_id` / `resource_type`，不能覆盖 method 决定
 - 默认拒绝未定义 route action
 
 它不复用 capability permission 表，也不把 route action 写成 capability 名。
@@ -289,6 +292,16 @@ policy_version = SHA256(
 
 历史 Shadow 事件因此可解释：同一 policy_version 必须对应同一决策语义。
 
+### 5.7.2 policy_state
+
+- `ready`：policy_version 已成功计算
+- `unavailable`：策略快照读取失败；`evaluation_state=error`、
+  `policy_result=error`，禁止产出 `evaluated`
+- `not_required`：路由不在覆盖范围，未计算策略版本
+
+策略快照读取失败不能静默降级为空权限表；否则事件会被错误归因为
+“策略变更”。
+
 ### 5.8 保留与清理
 
 - 保留 30 天或 10000 条，以事件创建时间为准。
@@ -324,6 +337,7 @@ identity_shadow_events
   action
   policy_result
   policy_version
+  policy_state
   reason
   error_class
   latency_ms

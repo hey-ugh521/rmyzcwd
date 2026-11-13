@@ -127,6 +127,7 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
   - 不调用 `decide_permission()`（能力首版未接线）
   - 记录无 secret
 - 报告：[PHASE4F2B2-SHADOW-EVALUATOR-REPORT.md](../reports/PHASE4F2B2-SHADOW-EVALUATOR-REPORT.md)
+- 2B-3 前置检查：[2026-11-13-phase4f2b3-preflight.md](2026-11-13-phase4f2b3-preflight.md)
 
 ### 2B-3 中间件 Shadow 接线
 

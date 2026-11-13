@@ -1,7 +1,7 @@
 # Phase 4F-2B-2 报告：Shadow 观察器与 RoutePolicyEvaluator
 
 - 日期：2026-11-13
-- 状态：2B-2 完成；未接中间件、未改变认证/放行
+- 状态：2B-2 完成；已按验收意见收紧 action/边界/policy_state；未接中间件
 - 设计：[4F-2B Shadow 设计稿](../aegis/plans/2026-11-13-phase4f2b-shadow-design.md)
 - 计划：[4F-2B 实施计划](../aegis/plans/2026-11-13-phase4f2b-implementation-plan.md)
 
@@ -40,6 +40,12 @@
 | operator | allow | deny |
 | service | deny | deny |
 
+`route_action` 由 HTTP method 决定：
+
+- GET/HEAD/OPTIONS → read
+- POST/PUT/PATCH/DELETE → write
+
+路径语义只进入 `route_id` / `resource_type`，不能覆盖 method 决定。
 默认拒绝。该矩阵仅用于 Shadow 观察，不接真实授权。
 
 ## 4. 身份解析
@@ -78,14 +84,30 @@ sha256(canonical_json({
 - permissions 按 id 排序
 - 不包含请求上下文/时间/随机值
 - 修改 permission 行会改变版本
+- 策略快照读取失败不降级为空权限表：
+  - `evaluation_state=error`
+  - `policy_result=error`
+  - `policy_state=unavailable`
+  - `policy_version=None`
+  - 禁止产出 `evaluated`
+
+## 6.1 路由边界
+
+capabilities 分支使用段边界，不使用裸前缀：
+
+- `permissions-evil`、`providersXYZ`、`provider-healthz`、
+  `maintenancefoo` 都不覆盖
+- 未覆盖路由返回 `not_evaluated`
 
 ## 7. 测试
 
-`tests/test_identity_shadow_eval.py`：9/9
+`tests/test_identity_shadow_eval.py`：13/13
 
 覆盖：
 
 - route 覆盖/不覆盖
+- HTTP method 决定 action
+- capabilities 段边界
 - 角色矩阵
 - resolved service 管理路由 deny
 - unknown bearer 不写身份
@@ -93,12 +115,13 @@ sha256(canonical_json({
 - legacy anonymous 不 allow
 - capability 路径 not_evaluated 且不调用 `decide_permission()`
 - policy_version 稳定且随权限输入变化
+- 策略 DB 故障显式 error，不静默降级
 - 缺少 legacy 观测 → insufficient_context
 
 完整入口：
 
 ```text
-Ran 110 tests ... OK
+Ran 114 tests ... OK
 webhook 5/5
 ```
 
