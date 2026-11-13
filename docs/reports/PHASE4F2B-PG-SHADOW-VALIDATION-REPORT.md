@@ -1,7 +1,7 @@
 # Phase 4F-2B PG Shadow Validation 报告（维护窗口）
 
 - 日期：2026-11-13
-- 状态：**验证完成；Shadow 已关闭；事件表保留 8 条证据**
+- 状态：**验证完成；审查通过（2026-11-14）**
 - 决策：[ADR-017](../adr/ADR-017-pg-shadow-validation.md)
 - 计划：[PG Shadow Validation 执行计划](../aegis/plans/2026-11-13-pg-shadow-validation-plan.md)
 - 生产路径：`D:\AI\Mobius`
