@@ -11,6 +11,7 @@ import httpx
 
 from . import store
 from . import registry_migration, registry_runtime
+from .capabilities import CapabilityService
 from .services import GatewayClient, MediaDisabled, ServiceError, Supervisor
 
 def _legacy_task_owner() -> bool:
@@ -96,6 +97,7 @@ class Agent:
     def __init__(self, sup: Supervisor, gw: GatewayClient):
         self.sup = sup
         self.gw = gw
+        self.capabilities = CapabilityService(gw)
         llm = store.CFG.get("llm", {})
         self.base_url = llm.get("base_url", "https://api.deepseek.com/v1").rstrip("/")
         self.api_key = llm.get("api_key", "")
@@ -245,19 +247,16 @@ class Agent:
                 and not registry_migration.legacy_fallback_enabled()):
             return {"ok": False, "error": "registry_workflow_required",
                     "hint": f"角色 {char_id} 的 workflow 没有已发布 Registry 版本，legacy fallback 已关闭"}
-        extra = {}
-        if registry_workflow:
-            extra["workflow"] = f"registry:{registry_workflow['id']}"
-            extra["workflow_graph"] = registry_workflow["graph"]
-            extra["registry_revision"] = registry_workflow["revision"]
         try:
-            resp = await self.gw.generate(
-                character=char_id, prompt=prompt,
+            resp = await self.capabilities.image(
+                character=ch, character_key=char_key or char_id,
+                workflow_graph=(registry_workflow or {}).get("graph"),
+                prompt=prompt,
                 user_id=ctx["user_id"], session_id=ctx["session_id"],
+                source=ctx["source"], actor=ctx["source"],
                 # 每次工具调用是一个新的逻辑请求；不能复用 session 派生 key，
                 # 否则同会话下一张图会命中上一张图的 idempotency 并 409。
                 idempotency_key=f"core-image-{uuid.uuid4().hex}",
-                **{"async": True}, **extra,
             )
             task_id = resp.get("task_id") or resp.get("id")
             if not task_id:
@@ -356,8 +355,13 @@ class Agent:
             ctx["pending_events"].append(legacy_task)
         ctx["voice_done"] = True
         try:
-            resp = await self.gw.tts(text, voice=voice, engine=engine,
-                                     speed=float(voice_cfg.get("speed") or 1.0))
+            resp = await self.capabilities.voice(
+                text=text, voice=voice, engine=engine,
+                speed=float(voice_cfg.get("speed") or 1.0),
+                character=ch, character_key=str(ctx.get("character") or ch.get("id") or ""),
+                user_id=ctx["user_id"], session_id=ctx["session_id"],
+                source=ctx["source"], actor=ctx["source"],
+            )
             if not resp.get("ok"):
                 raise ServiceError(resp.get("error") or "tts failed")
             url = resp.get("audio_url")
