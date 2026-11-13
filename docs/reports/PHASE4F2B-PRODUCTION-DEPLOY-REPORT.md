@@ -31,6 +31,20 @@ D:\AI\Mobius\core\server.py.bak-20261113-232802
 
 ## 2. 部署后验证
 
+### 代码来源
+
+生产文件 SHA256 与本地当前文件一致：
+
+```text
+identity.py       A44E7CD2AA40B55C...
+identity_shadow.py ED33B94FB7424352...
+server.py         EF69986A526E3B33...
+```
+
+GitHub `f54c4e8` 只包含 README 和部署报告，不包含生产代码重新提交。
+生产代码来源是工作树中与 `4ab3f32` 一致的 2B 文件；后续报告必须分别追踪
+“Git 提交”和“生产实际文件哈希”。
+
 ### Schema
 
 ```text
@@ -71,6 +85,23 @@ langbot: down（保持关闭）
 - 请求前后 `identity_shadow_events` 保持 0
 - 没有创建 Shadow 线程
 - 没有写身份表
+
+### Shadow 开启时的作用范围（重要）
+
+当前实现**没有请求级隔离**：
+
+- `identity.shadow.enabled=True` 后，所有 `/api` 和 `/v1` 请求都会进入观察
+- 覆盖包括 `/api/status`、`/api/tasks`、`/api/services` 等非管理请求
+- 未覆盖路由会写 `not_evaluated` 事件，仍会触发 DB 写入
+- 没有 header/方法/路径白名单
+- 因此不能直接在生产打开全局开关做“受控测试”
+
+PG Shadow 验证必须先选择：
+
+- 维护窗口：暂停其他入口，只发测试请求
+- 或先实现请求级隔离（属于新增能力，需单独批准）
+
+当前不做请求级隔离，也不打开全局 Shadow。
 
 ## 3. 回滚
 
