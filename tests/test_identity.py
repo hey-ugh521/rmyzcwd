@@ -23,8 +23,10 @@ class IdentityTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.old_backend = store.DB_BACKEND
         self.old_path = store.DB_PATH
+        self.old_core = store.CFG.get("core")
         store.DB_BACKEND = "sqlite"
         store.DB_PATH = Path(self.tmp.name) / "identity.db"
+        store.CFG["core"] = {**(self.old_core or {}), "api_key": "legacy-test-key"}
         store.init_db()
         identity.init_schema()
         self.service = identity.create_principal(kind="machine", display_name="QQ",
@@ -33,7 +35,63 @@ class IdentityTest(unittest.TestCase):
     def tearDown(self) -> None:
         store.DB_BACKEND = self.old_backend
         store.DB_PATH = self.old_path
+        if self.old_core is None:
+            store.CFG.pop("core", None)
+        else:
+            store.CFG["core"] = self.old_core
         self.tmp.cleanup()
+
+    def test_legacy_mapping_stable_service_only(self):
+        self.assertIsNone(identity.resolve_legacy_api_key("unknown"))
+        self.assertFalse(any(p["id"] == "service-legacy" for p in identity.list_principals()))
+        first = identity.resolve_legacy_api_key("legacy-test-key")
+        second = identity.resolve_legacy_api_key("legacy-test-key")
+        self.assertIsNotNone(first)
+        self.assertEqual(first["principal"]["id"], "service-legacy")
+        self.assertEqual(first["principal"]["role"], "service")
+        self.assertEqual(first["principal"]["kind"], "machine")
+        self.assertEqual(first["credential"]["id"], second["credential"]["id"])
+        self.assertTrue(first["created"])
+        self.assertFalse(second["created"])
+        self.assertNotIn("secret_hash", first["credential"])
+        with store.conn() as c:
+            row = c.execute(
+                "SELECT secret_hash FROM credentials WHERE id=?",
+                (first["credential"]["id"],)).fetchone()
+        self.assertNotIn("legacy-test-key", row["secret_hash"])
+
+    def test_legacy_mapping_different_keys_different_credentials(self):
+        first = identity.map_configured_legacy_key()
+        store.CFG["core"]["api_key"] = "legacy-test-key-2"
+        second = identity.map_configured_legacy_key()
+        self.assertEqual(first["principal"]["id"], second["principal"]["id"])
+        self.assertNotEqual(first["credential"]["id"], second["credential"]["id"])
+        self.assertEqual(second["principal"]["role"], "service")
+
+    def test_legacy_mapping_audit_failure_rolls_back(self):
+        with store.conn() as c:
+            c.execute(
+                "CREATE TRIGGER fail_legacy_audit BEFORE INSERT ON audit "
+                "WHEN NEW.action='identity.legacy.mapping.create' "
+                "BEGIN SELECT RAISE(ABORT, 'audit blocked'); END")
+            c.commit()
+        try:
+            with self.assertRaises(Exception):
+                identity.map_configured_legacy_key()
+        finally:
+            with store.conn() as c:
+                c.execute("DROP TRIGGER fail_legacy_audit")
+                c.commit()
+        self.assertFalse(any(p["id"] == "service-legacy" for p in identity.list_principals()))
+        with store.conn() as c:
+            count = c.execute(
+                "SELECT COUNT(*) AS n FROM credentials WHERE principal_id='service-legacy'"
+            ).fetchone()["n"]
+        self.assertEqual(count, 0)
+
+    def test_legacy_mapping_rejects_unknown_key(self):
+        self.assertIsNone(identity.resolve_legacy_api_key("not-configured"))
+        self.assertFalse(any(p["id"] == "service-legacy" for p in identity.list_principals()))
 
     def test_secret_hashed_and_authenticated(self):
         made = identity.create_credential(principal_id="svc-qq", kind="api_key")

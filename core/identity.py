@@ -33,6 +33,7 @@ SESSION_RE = re.compile(r"^mob_sess_([A-Za-z0-9-]+)_(.+)$")
 _TOKEN_PREFIX_BYTES = 16
 _SECRET_BYTES = 32
 _BOOTSTRAP_ADVISORY_LOCK = 748391123
+LEGACY_PRINCIPAL_ID = "service-legacy"
 
 
 class IdentityError(Exception):
@@ -531,3 +532,89 @@ def purge_expired_sessions(*, actor: str = "system") -> int:
             _audit(c, actor=actor, action="identity.session.expire",
                    detail={"session_id": row["id"]})
     return len(rows)
+
+
+# ---------------------------------------------------------------- Legacy mapping
+
+
+def configured_legacy_key() -> str:
+    return str((store.CFG.get("core") or {}).get("api_key") or "")
+
+
+def _legacy_prefix(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+
+
+def _map_legacy_key(api_key: str, *, actor: str = "identity-cli") -> dict[str, Any]:
+    prefix = _legacy_prefix(api_key)
+    now = time.time()
+    with _tx() as c:
+        # The legacy identity is fixed and always service; never admin.
+        principal = _principal(c, LEGACY_PRINCIPAL_ID, lock=True)
+        principal_created = False
+        if principal is None:
+            principal = _insert_principal(
+                c, kind="machine", display_name="Legacy API Key",
+                role="service", actor=actor, principal_id=LEGACY_PRINCIPAL_ID,
+                metadata={"legacy": True},
+            )
+            principal_created = True
+        elif principal.get("kind") != "machine" or principal.get("role") != "service":
+            raise IdentityError("legacy_principal_conflict",
+                                "service-legacy principal 已被非 service 身份占用", 409)
+        if not principal.get("enabled"):
+            raise IdentityError("legacy_mapping_disabled", "service-legacy 已禁用", 409)
+
+        credential = _row(c, "SELECT * FROM credentials WHERE lookup_prefix=?", (prefix,))
+        if credential is not None:
+            if not _verify_secret(api_key, str(credential["secret_hash"])):
+                raise IdentityError("legacy_mapping_conflict",
+                                    "旧 API_KEY 前缀碰撞，拒绝覆盖已有凭证", 409)
+            if credential.get("revoked_at") or (
+                    credential.get("expires_at") is not None
+                    and float(credential["expires_at"]) <= now):
+                raise IdentityError("legacy_mapping_revoked", "旧 API_KEY 凭证已失效", 409)
+            if not principal.get("enabled"):
+                raise IdentityError("legacy_mapping_disabled", "service-legacy 已禁用", 409)
+            return {
+                "principal": _public(principal),
+                "credential": _public(credential),
+                "created": False,
+                "principal_created": principal_created,
+            }
+
+        cid = "cred_" + uuid.uuid4().hex[:12]
+        c.execute(
+            "INSERT INTO credentials(id,principal_id,kind,lookup_prefix,secret_hash,hash_algo,"
+            "expires_at,revoked_at,last_used_at,created_at,rotated_from) "
+            "VALUES(?,?,?,?,?,?,?,NULL,NULL,?,NULL)",
+            (cid, LEGACY_PRINCIPAL_ID, "service_token", prefix,
+             _hash_secret(api_key), "sha256-v1", None, now),
+        )
+        _audit(c, actor=actor, action="identity.legacy.mapping.create",
+               detail={"principal_id": LEGACY_PRINCIPAL_ID, "credential_id": cid,
+                       "lookup_prefix": prefix, "principal_created": principal_created})
+        credential = _row(c, "SELECT * FROM credentials WHERE id=?", (cid,))
+    return {
+        "principal": _public(principal),
+        "credential": _public(credential),
+        "created": True,
+        "principal_created": principal_created,
+    }
+
+
+def resolve_legacy_api_key(api_key: str, *, actor: str = "identity-cli") -> dict[str, Any] | None:
+    """Map only the configured legacy key; unknown keys are never materialized."""
+    configured = configured_legacy_key()
+    if not configured or not api_key:
+        return None
+    if not hmac.compare_digest(str(api_key).encode("utf-8"), configured.encode("utf-8")):
+        return None
+    return _map_legacy_key(configured, actor=actor)
+
+
+def map_configured_legacy_key(*, actor: str = "identity-cli") -> dict[str, Any] | None:
+    configured = configured_legacy_key()
+    if not configured:
+        return None
+    return _map_legacy_key(configured, actor=actor)

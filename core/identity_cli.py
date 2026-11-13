@@ -41,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="没有可恢复 admin 时显式创建新 admin")
 
     sub.add_parser("list-principals")
+    sub.add_parser("map-legacy-key")
 
     p = sub.add_parser("create-credential")
     p.add_argument("--principal", required=True)
@@ -72,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
             result["warning"] = "token 只显示一次；仅允许本机使用；消费后会重新启用目标 admin"
         elif args.command == "list-principals":
             result = {"principals": identity.list_principals()}
+        elif args.command == "map-legacy-key":
+            mapped = identity.map_configured_legacy_key(actor="identity-cli")
+            result = mapped or {"mapped": False, "reason": "core.api_key 未配置"}
         elif args.command == "create-credential":
             result = identity.create_credential(
                 principal_id=args.principal, kind=args.kind, actor="identity-cli")
