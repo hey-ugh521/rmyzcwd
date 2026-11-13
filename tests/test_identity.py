@@ -39,6 +39,7 @@ class IdentityTest(unittest.TestCase):
         made = identity.create_credential(principal_id="svc-qq", kind="api_key")
         token = made["secret"]
         self.assertIn("mob_cred_", token)
+        self.assertRegex(token, r"^mob_cred_[0-9a-f]{16}_")
         with store.conn() as c:
             row = c.execute("SELECT secret_hash FROM credentials WHERE id=?",
                             (made["credential"]["id"],)).fetchone()
@@ -48,6 +49,14 @@ class IdentityTest(unittest.TestCase):
         self.assertIsNotNone(auth)
         self.assertEqual(auth["principal"]["id"], "svc-qq")
         self.assertIsNone(identity.authenticate_credential(token + "x"))
+
+    def test_kind_role_combination_is_enforced(self):
+        with self.assertRaises(identity.IdentityError) as cm:
+            identity.create_principal(kind="machine", display_name="bad",
+                                      role="admin")
+        self.assertEqual(cm.exception.code, "invalid_role")
+        with self.assertRaises(identity.IdentityError):
+            identity.create_credential(principal_id="svc-qq", kind="recovery")
 
     def test_revoke_and_disable_invalidate(self):
         made = identity.create_credential(principal_id="svc-qq")
@@ -141,6 +150,51 @@ class IdentityTest(unittest.TestCase):
             identity.bootstrap_admin(ttl=300)
         self.assertEqual(cm.exception.code, "bootstrap_exists")
 
+    def test_bootstrap_concurrent_initialization_single_winner(self):
+        results = []
+        barrier = threading.Barrier(2)
+
+        def worker():
+            barrier.wait()
+            try:
+                identity.bootstrap_admin(ttl=300)
+                results.append("ok")
+            except identity.IdentityError as exc:
+                results.append(exc.code)
+
+        threads = [threading.Thread(target=worker), threading.Thread(target=worker)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(results.count("ok"), 1, results)
+        self.assertEqual(len(results), 2)
+        with store.conn() as c:
+            admins = c.execute("SELECT COUNT(*) AS n FROM principals WHERE role='admin'").fetchone()["n"]
+            tokens = c.execute("SELECT COUNT(*) AS n FROM bootstrap_tokens").fetchone()["n"]
+        self.assertEqual(admins, 1)
+        self.assertEqual(tokens, 1)
+
+    def test_bootstrap_audit_failure_rolls_back_all(self):
+        with store.conn() as c:
+            c.execute(
+                "CREATE TRIGGER fail_bootstrap_audit BEFORE INSERT ON audit "
+                "WHEN NEW.action='identity.bootstrap.create' "
+                "BEGIN SELECT RAISE(ABORT, 'audit blocked'); END")
+            c.commit()
+        try:
+            with self.assertRaises(Exception):
+                identity.bootstrap_admin(ttl=300)
+        finally:
+            with store.conn() as c:
+                c.execute("DROP TRIGGER fail_bootstrap_audit")
+                c.commit()
+        with store.conn() as c:
+            admins = c.execute("SELECT COUNT(*) AS n FROM principals WHERE role='admin'").fetchone()["n"]
+            tokens = c.execute("SELECT COUNT(*) AS n FROM bootstrap_tokens").fetchone()["n"]
+        self.assertEqual(admins, 0)
+        self.assertEqual(tokens, 0)
+
     def test_recovery_token_concurrent_single_winner(self):
         boot = identity.bootstrap_admin(ttl=300)
         identity.consume_bootstrap_token(boot["token"])
@@ -174,10 +228,17 @@ class IdentityTest(unittest.TestCase):
         import sqlite3
         made = identity.create_credential(principal_id="svc-qq")
         with store.conn() as c:
-            c.execute("PRAGMA foreign_keys=ON")
             with self.assertRaises(sqlite3.IntegrityError):
                 c.execute("DELETE FROM principals WHERE id='svc-qq'")
         self.assertIsNotNone(identity.authenticate_credential(made["secret"]))
+
+    def test_global_store_connection_enables_foreign_keys(self):
+        import sqlite3
+        identity.create_credential(principal_id="svc-qq")
+        with store.conn() as c:
+            # No explicit PRAGMA here: store.conn() must enable it globally.
+            with self.assertRaises(sqlite3.IntegrityError):
+                c.execute("DELETE FROM principals WHERE id='svc-qq'")
 
     def test_rotated_from_set_null(self):
         made = identity.create_credential(principal_id="svc-qq")
@@ -189,6 +250,16 @@ class IdentityTest(unittest.TestCase):
             row = c.execute("SELECT rotated_from FROM credentials WHERE id=?",
                             (rotated["credential"]["id"],)).fetchone()
         self.assertIsNone(row["rotated_from"])
+
+    def test_admin_session_requires_admin_role_on_auth(self):
+        identity.create_principal(kind="human", display_name="Admin",
+                                  role="admin", principal_id="admin-1")
+        session = identity.create_admin_session(principal_id="admin-1")
+        with store.conn() as c:
+            c.execute("UPDATE principals SET role='operator' WHERE id='admin-1'")
+            c.commit()
+        self.assertIsNone(identity.authenticate_admin_session(session["session_token"]))
+        self.assertFalse(identity.verify_csrf(session["session_id"], session["csrf_token"]))
 
     def test_admin_session_csrf_and_revoke(self):
         identity.create_principal(kind="human", display_name="Admin",

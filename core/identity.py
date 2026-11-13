@@ -22,11 +22,17 @@ from . import store
 
 ROLES = {"admin", "operator", "service"}
 KINDS = {"human", "machine", "local"}
-CREDENTIAL_KINDS = {"api_key", "service_token", "admin_bootstrap", "recovery"}
-TOKEN_RE = re.compile(r"^mob_(cred|boot)_([0-9a-f]{8})_(.+)$")
+KIND_ROLES = {
+    "human": {"admin", "operator"},
+    "machine": {"service"},
+    "local": {"admin", "operator"},
+}
+CREDENTIAL_KINDS = {"api_key", "service_token"}
+TOKEN_RE = re.compile(r"^mob_(cred|boot)_([0-9a-f]{16})_(.+)$")
 SESSION_RE = re.compile(r"^mob_sess_([A-Za-z0-9-]+)_(.+)$")
-_TOKEN_PREFIX_BYTES = 8
+_TOKEN_PREFIX_BYTES = 16
 _SECRET_BYTES = 32
+_BOOTSTRAP_ADVISORY_LOCK = 748391123
 
 
 class IdentityError(Exception):
@@ -185,28 +191,57 @@ def _public(row: dict[str, Any] | None,
     return {k: v for k, v in row.items() if k not in drop}
 
 
+def _insert_principal(c, *, kind: str, display_name: str, role: str,
+                      actor: str, principal_id: str | None,
+                      metadata: dict[str, Any] | None) -> dict[str, Any]:
+    if kind not in KINDS:
+        raise IdentityError("invalid_principal_kind", "principal kind 非法", 422)
+    if role not in ROLES or role not in KIND_ROLES[kind]:
+        raise IdentityError("invalid_role", f"role {role!r} 不允许用于 kind {kind!r}", 422)
+    pid = principal_id or f"{kind}-{uuid.uuid4().hex[:8]}"
+    now = time.time()
+    if _principal(c, pid) is not None:
+        raise IdentityError("principal_exists", "principal 已存在", 409)
+    c.execute(
+        "INSERT INTO principals(id,kind,display_name,role,enabled,created_at,metadata_json) "
+        "VALUES(?,?,?,?,1,?,?)",
+        (pid, kind, display_name, role, now,
+         json.dumps(metadata or {}, ensure_ascii=False)),
+    )
+    _audit(c, actor=actor, action="identity.principal.create",
+           detail={"principal_id": pid, "kind": kind, "role": role})
+    return _principal(c, pid) or {}
+
+
+def _insert_bootstrap_token(c, *, purpose: str, principal_id: str, ttl: int,
+                            actor: str) -> dict[str, Any]:
+    token, prefix = _token("boot")
+    tid = "boot_" + uuid.uuid4().hex[:12]
+    now = time.time()
+    principal = _principal(c, principal_id, lock=True)
+    if principal is None:
+        raise IdentityError("principal_not_found", "principal 不存在", 404)
+    if not principal.get("enabled") and purpose != "recovery":
+        raise IdentityError("principal_disabled", "principal 已禁用", 409)
+    c.execute(
+        "INSERT INTO bootstrap_tokens(id,lookup_prefix,token_hash,hash_algo,purpose,"
+        "principal_id,expires_at,consumed_at,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        (tid, prefix, _hash_secret(token), "sha256-v1", purpose, principal_id,
+         now + ttl, None, now),
+    )
+    _audit(c, actor=actor, action="identity.bootstrap.create",
+           detail={"purpose": purpose, "principal_id": principal_id,
+                   "token_id": tid, "expires_at": now + ttl})
+    return {"token": token, "token_id": tid, "principal_id": principal_id,
+            "purpose": purpose, "expires_at": now + ttl}
+
+
 def create_principal(*, kind: str, display_name: str, role: str,
                      actor: str = "cli", principal_id: str | None = None,
                      metadata: dict[str, Any] | None = None) -> dict[str, Any]:
-    if kind not in KINDS:
-        raise IdentityError("invalid_principal_kind", "principal kind 非法", 422)
-    if role not in ROLES:
-        raise IdentityError("invalid_role", "role 非法", 422)
-    pid = principal_id or f"{kind}-{uuid.uuid4().hex[:8]}"
-    now = time.time()
     with _tx() as c:
-        if _principal(c, pid) is not None:
-            raise IdentityError("principal_exists", "principal 已存在", 409)
-        c.execute(
-            "INSERT INTO principals(id,kind,display_name,role,enabled,created_at,metadata_json) "
-            "VALUES(?,?,?,?,1,?,?)",
-            (pid, kind, display_name, role, now,
-             json.dumps(metadata or {}, ensure_ascii=False)),
-        )
-        _audit(c, actor=actor, action="identity.principal.create",
-               detail={"principal_id": pid, "kind": kind, "role": role})
-        row = _principal(c, pid)
-    return row or {}
+        return _insert_principal(c, kind=kind, display_name=display_name, role=role,
+                                 actor=actor, principal_id=principal_id, metadata=metadata)
 
 
 def list_principals() -> list[dict[str, Any]]:
@@ -330,37 +365,29 @@ def admin_principals(*, include_disabled: bool = False) -> list[dict[str, Any]]:
             if p.get("role") == "admin" and (include_disabled or p.get("enabled"))]
 
 
+def _bootstrap_lock(c) -> None:
+    if store.DB_BACKEND == "pg":
+        c.execute("SELECT pg_advisory_xact_lock(?)", (_BOOTSTRAP_ADVISORY_LOCK,))
+
+
 def _create_bootstrap_token(*, purpose: str, principal_id: str, ttl: int,
                             actor: str) -> dict[str, Any]:
-    token, prefix = _token("boot")
-    tid = "boot_" + uuid.uuid4().hex[:12]
-    now = time.time()
     with _tx() as c:
-        principal = _principal(c, principal_id, lock=True)
-        if principal is None:
-            raise IdentityError("principal_not_found", "principal 不存在", 404)
-        if not principal.get("enabled") and purpose != "recovery":
-            raise IdentityError("principal_disabled", "principal 已禁用", 409)
-        c.execute(
-            "INSERT INTO bootstrap_tokens(id,lookup_prefix,token_hash,hash_algo,purpose,"
-            "principal_id,expires_at,consumed_at,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
-            (tid, prefix, _hash_secret(token), "sha256-v1", purpose, principal_id,
-             now + ttl, None, now),
-        )
-        _audit(c, actor=actor, action="identity.bootstrap.create",
-               detail={"purpose": purpose, "principal_id": principal_id,
-                       "token_id": tid, "expires_at": now + ttl})
-    return {"token": token, "token_id": tid, "principal_id": principal_id,
-            "purpose": purpose, "expires_at": now + ttl}
+        return _insert_bootstrap_token(c, purpose=purpose, principal_id=principal_id,
+                                       ttl=ttl, actor=actor)
 
 
 def bootstrap_admin(*, ttl: int = 900, actor: str = "cli") -> dict[str, Any]:
-    if any(p.get("role") == "admin" for p in list_principals()):
-        raise IdentityError("bootstrap_exists", "已存在 admin principal，请使用 recover", 409)
-    principal = create_principal(kind="human", display_name="bootstrap-admin",
-                                 role="admin", actor=actor)
-    return _create_bootstrap_token(purpose="bootstrap", principal_id=principal["id"],
-                                   ttl=ttl, actor=actor)
+    with _tx() as c:
+        _bootstrap_lock(c)
+        exists = c.execute("SELECT 1 FROM principals WHERE role='admin' LIMIT 1").fetchone()
+        if exists:
+            raise IdentityError("bootstrap_exists", "已存在 admin principal，请使用 recover", 409)
+        principal = _insert_principal(c, kind="human", display_name="bootstrap-admin",
+                                      role="admin", actor=actor, principal_id=None,
+                                      metadata=None)
+        return _insert_bootstrap_token(c, purpose="bootstrap", principal_id=principal["id"],
+                                       ttl=ttl, actor=actor)
 
 
 def recover_admin(*, principal_id: str | None = None, ttl: int = 900,
@@ -371,11 +398,13 @@ def recover_admin(*, principal_id: str | None = None, ttl: int = 900,
     not restore old credentials or sessions.
     """
     if create_new:
-        principal = create_principal(kind="human", display_name="recovered-admin",
-                                     role="admin", actor=actor,
-                                     metadata={"recovered": True})
-        return _create_bootstrap_token(purpose="recovery", principal_id=principal["id"],
-                                       ttl=ttl, actor=actor)
+        with _tx() as c:
+            _bootstrap_lock(c)
+            principal = _insert_principal(c, kind="human", display_name="recovered-admin",
+                                          role="admin", actor=actor, principal_id=None,
+                                          metadata={"recovered": True})
+            return _insert_bootstrap_token(c, purpose="recovery",
+                                           principal_id=principal["id"], ttl=ttl, actor=actor)
     admins = admin_principals(include_disabled=True)
     if not admins:
         raise IdentityError("admin_not_found", "没有可恢复的 admin principal", 404)
@@ -459,7 +488,7 @@ def authenticate_admin_session(token: str, *, touch: bool = True) -> dict[str, A
         if not _verify_secret(token, str(row["token_hash"])):
             return None
         principal = _principal(c, str(row["principal_id"]))
-        if principal is None or not principal.get("enabled"):
+        if principal is None or not principal.get("enabled") or principal.get("role") != "admin":
             return None
         if touch:
             last = float(row.get("last_seen_at") or 0)
@@ -474,6 +503,9 @@ def verify_csrf(session_id: str, csrf_token: str) -> bool:
         if row is None or row.get("revoked_at"):
             return False
         if float(row["expires_at"]) <= time.time():
+            return False
+        principal = _principal(c, str(row["principal_id"]))
+        if principal is None or not principal.get("enabled") or principal.get("role") != "admin":
             return False
         return _verify_secret(csrf_token, str(row["csrf_hash"]))
 

@@ -115,6 +115,7 @@ def conn():
     c = sqlite3.connect(DB_PATH, timeout=15)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA foreign_keys=ON")
     c.execute("PRAGMA synchronous=NORMAL")
     return c
 
