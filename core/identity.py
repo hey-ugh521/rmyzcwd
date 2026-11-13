@@ -613,6 +613,35 @@ def resolve_legacy_api_key(api_key: str, *, actor: str = "identity-cli") -> dict
     return _map_legacy_key(configured, actor=actor)
 
 
+def inspect_legacy_api_key(api_key: str) -> dict[str, Any]:
+    """Read-only resolution used by Shadow. Never creates or revives identity."""
+    configured = configured_legacy_key()
+    if not configured or not api_key:
+        return {"state": "unmapped", "principal": None, "credential": None}
+    if not hmac.compare_digest(str(api_key).encode("utf-8"), configured.encode("utf-8")):
+        return {"state": "unmapped", "principal": None, "credential": None}
+    prefix = _legacy_prefix(configured)
+    now = time.time()
+    with store.conn() as c:
+        principal = _principal(c, LEGACY_PRINCIPAL_ID)
+        credential = _row(c, "SELECT * FROM credentials WHERE lookup_prefix=?", (prefix,))
+    if credential is None:
+        return {"state": "mapping_missing", "principal": principal, "credential": None}
+    if not _verify_secret(api_key, str(credential["secret_hash"])):
+        return {"state": "conflict", "principal": principal, "credential": None}
+    if credential.get("revoked_at"):
+        return {"state": "revoked", "principal": principal, "credential": credential}
+    if credential.get("expires_at") is not None and float(credential["expires_at"]) <= now:
+        return {"state": "expired", "principal": principal, "credential": credential}
+    if principal is None:
+        return {"state": "mapping_missing", "principal": None, "credential": credential}
+    if not principal.get("enabled"):
+        return {"state": "principal_disabled", "principal": principal, "credential": credential}
+    if principal.get("kind") != "machine" or principal.get("role") != "service":
+        return {"state": "conflict", "principal": principal, "credential": credential}
+    return {"state": "resolved", "principal": principal, "credential": credential}
+
+
 def map_configured_legacy_key(*, actor: str = "identity-cli") -> dict[str, Any] | None:
     configured = configured_legacy_key()
     if not configured:

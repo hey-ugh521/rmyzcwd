@@ -6,12 +6,15 @@ bounded retention. It must never create identities or change authorization.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, Iterator
 
-from . import store
+from . import capabilities, identity, store
 
 SHADOW_EVENT_FIELDS = {
     "ts",
@@ -207,3 +210,184 @@ def prune_shadow_events(*, max_age_days: int = 30, max_rows: int = 10000,
                 )
                 deleted += int(cur.rowcount or 0)
     return deleted
+
+# ---------------------------------------------------------------- observation
+
+ROUTE_EVALUATOR_VERSION = "route-policy-v1"
+CAPABILITY_EVALUATOR_VERSION = "capability-policy-v1"
+POLICY_SCHEMA_VERSION = 1
+
+# Route authorization v1 is deliberately narrow. Capability invocation is not
+# evaluated in 4F-2B; it records not_evaluated.
+ROUTE_POLICY: dict[str, tuple[str, ...]] = {
+    "admin": ("read", "write"),
+    "operator": ("read",),
+    "service": (),
+}
+
+
+@dataclass(frozen=True)
+class RouteContext:
+    covered: bool
+    route_id: str | None = None
+    action: str | None = None
+    resource_type: str | None = None
+    resource_id: str | None = None
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
+class LegacyAuthObservation:
+    authenticated: bool
+    actor: str | None = None
+    reason: str = "not_applicable"
+
+
+def _method_action(method: str) -> str | None:
+    m = method.upper()
+    if m in ("GET", "HEAD", "OPTIONS"):
+        return "read"
+    if m in ("POST", "PUT", "PATCH", "DELETE"):
+        return "write"
+    return None
+
+
+def resolve_route(method: str, path: str) -> RouteContext:
+    action = _method_action(method)
+    p = (path or "/").split("?", 1)[0].rstrip("/") or "/"
+    if action is None:
+        return RouteContext(False, reason="unsupported_method")
+    if p == "/api/registry" or p.startswith("/api/registry/"):
+        tail = p[len("/api/registry"):].strip("/")
+        parts = [x for x in tail.split("/") if x]
+        resource_type = parts[0] if parts else None
+        resource_id = parts[1] if len(parts) > 1 else None
+        return RouteContext(True, route_id=f"registry.{action}", action=action,
+                            resource_type=resource_type, resource_id=resource_id)
+    if p.startswith("/api/capabilities"):
+        if p.startswith("/api/capabilities/invocations"):
+            return RouteContext(False, reason="capability_invocation_not_in_scope")
+        if p.startswith("/api/capabilities/permissions"):
+            return RouteContext(True, route_id=f"policy.permissions.{action}",
+                                action=action, resource_type="permission")
+        if p.startswith("/api/capabilities/provider-health"):
+            return RouteContext(True, route_id="provider.read", action="read",
+                                resource_type="provider")
+        if p.startswith("/api/capabilities/providers"):
+            return RouteContext(True, route_id=f"provider.{action}", action=action,
+                                resource_type="provider")
+        if p.startswith("/api/capabilities/maintenance"):
+            return RouteContext(True, route_id="policy.maintenance.write", action="write",
+                                resource_type="policy")
+        return RouteContext(False, reason="capability_route_not_in_scope")
+    if p == "/api/policy" or p.startswith("/api/policy/"):
+        return RouteContext(True, route_id=f"policy.{action}", action=action,
+                            resource_type="policy")
+    return RouteContext(False, reason="route_not_in_scope")
+
+
+def _canonical_policy_snapshot() -> dict[str, Any]:
+    try:
+        rows = capabilities.permission_rows()
+    except Exception:  # noqa: BLE001 - schema may not exist yet
+        rows = []
+    # Stable array ordering by permission id; all fields are explicit.
+    permissions = sorted(
+        [{k: row.get(k) for k in sorted(row.keys())} for row in rows],
+        key=lambda r: str(r.get("id") or ""),
+    )
+    cap_cfg = store.CFG.get("capabilities") or {}
+    return {
+        "route_policy": {role: list(actions) for role, actions in sorted(ROUTE_POLICY.items())},
+        "capability_policy": {
+            "permissions": permissions,
+            "default_allow": bool(cap_cfg.get("default_allow", True)),
+            "subject_weights": dict(sorted(
+                getattr(capabilities, "_SUBJECT_WEIGHT", {
+                    "source": 1, "actor": 2, "user": 3, "*": 0,
+                }).items()
+            )),
+            "scope_rule_version": "scope-v1",
+        },
+        "policy_schema_version": POLICY_SCHEMA_VERSION,
+        "evaluator_versions": {
+            "route": ROUTE_EVALUATOR_VERSION,
+            "capability": CAPABILITY_EVALUATOR_VERSION,
+        },
+    }
+
+
+def policy_snapshot() -> dict[str, Any]:
+    return _canonical_policy_snapshot()
+
+
+def policy_version() -> str:
+    canonical = json.dumps(
+        _canonical_policy_snapshot(), ensure_ascii=False, sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def route_decision(role: str, action: str) -> str:
+    return "allow" if action in ROUTE_POLICY.get(role, ()) else "deny"
+
+
+def _route_decision(role: str, action: str) -> str:
+    return route_decision(role, action)
+
+
+def evaluate_shadow(*, method: str, path: str, request_id: str | None = None,
+                    bearer_token: str | None = None,
+                    legacy_auth: LegacyAuthObservation | None = None) -> dict[str, Any]:
+    """Compute one observation without writing identity or shadow rows."""
+    route = resolve_route(method, path)
+    event: dict[str, Any] = {
+        "request_id": request_id,
+        "method": method,
+        "path": path,
+        "route_id": route.route_id,
+        "route_action": route.action,
+        "resource_type": route.resource_type,
+        "resource_id": route.resource_id,
+        "policy_version": policy_version(),
+        "policy_domain": "none",
+        "legacy_authenticated": bool(legacy_auth and legacy_auth.authenticated),
+        "legacy_actor": legacy_auth.actor if legacy_auth else None,
+    }
+    if not route.covered:
+        event.update(identity_state=None, evaluation_state="not_evaluated",
+                     policy_result="not_evaluated", reason=route.reason)
+        return event
+    if legacy_auth is None:
+        event.update(identity_state=None, evaluation_state="insufficient_context",
+                     policy_result="insufficient_context", reason="legacy_observation_missing")
+        return event
+    if not legacy_auth.authenticated:
+        state = "legacy_denied" if legacy_auth.reason == "denied" else "legacy_anonymous"
+        event.update(identity_state=state, evaluation_state="insufficient_context",
+                     policy_result="insufficient_context",
+                     reason=f"legacy_{legacy_auth.reason}")
+        return event
+    if not bearer_token:
+        event.update(identity_state="unmapped", evaluation_state="insufficient_context",
+                     policy_result="insufficient_context", reason="bearer_missing")
+        return event
+
+    inspected = identity.inspect_legacy_api_key(bearer_token)
+    state = str(inspected.get("state") or "unmapped")
+    principal = inspected.get("principal") or {}
+    credential = inspected.get("credential") or {}
+    event.update(identity_state=state, principal_id=principal.get("id"),
+                 credential_id=credential.get("id"), role=principal.get("role"))
+    if state != "resolved":
+        event.update(evaluation_state="insufficient_context",
+                     policy_result="insufficient_context", reason=state)
+        return event
+
+    role = str(principal.get("role") or "")
+    action = str(route.action or "")
+    result = _route_decision(role, action)
+    event.update(evaluation_state="evaluated", policy_domain="route",
+                 action=action, policy_result=result)
+    return event
