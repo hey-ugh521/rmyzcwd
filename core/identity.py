@@ -54,6 +54,7 @@ def _tx() -> Iterator[Any]:
     c = store.conn()
     try:
         if store.DB_BACKEND != "pg":
+            c.execute("PRAGMA foreign_keys=ON")
             c.execute("BEGIN IMMEDIATE")
         yield c
         c.commit()
@@ -93,8 +94,8 @@ def init_schema() -> None:
           last_used_at REAL,
           created_at REAL NOT NULL,
           rotated_from TEXT,
-          FOREIGN KEY(principal_id) REFERENCES principals(id),
-          FOREIGN KEY(rotated_from) REFERENCES credentials(id)
+          FOREIGN KEY(principal_id) REFERENCES principals(id) ON DELETE RESTRICT,
+          FOREIGN KEY(rotated_from) REFERENCES credentials(id) ON DELETE SET NULL
         )
         """)
         c.execute("CREATE INDEX IF NOT EXISTS ix_credentials_principal "
@@ -109,7 +110,7 @@ def init_schema() -> None:
           expires_at REAL NOT NULL,
           last_seen_at REAL,
           revoked_at REAL,
-          FOREIGN KEY(principal_id) REFERENCES principals(id)
+          FOREIGN KEY(principal_id) REFERENCES principals(id) ON DELETE RESTRICT
         )
         """)
         c.execute("""
@@ -123,7 +124,7 @@ def init_schema() -> None:
           expires_at REAL NOT NULL,
           consumed_at REAL,
           created_at REAL NOT NULL,
-          FOREIGN KEY(principal_id) REFERENCES principals(id)
+          FOREIGN KEY(principal_id) REFERENCES principals(id) ON DELETE RESTRICT
         )
         """)
 
@@ -324,8 +325,9 @@ def rotate_credential(credential_id: str, *, actor: str = "cli") -> dict[str, An
     return {"credential": _public(row), "secret": token}
 
 
-def admin_principals() -> list[dict[str, Any]]:
-    return [p for p in list_principals() if p.get("role") == "admin" and p.get("enabled")]
+def admin_principals(*, include_disabled: bool = False) -> list[dict[str, Any]]:
+    return [p for p in list_principals()
+            if p.get("role") == "admin" and (include_disabled or p.get("enabled"))]
 
 
 def _create_bootstrap_token(*, purpose: str, principal_id: str, ttl: int,
@@ -335,8 +337,10 @@ def _create_bootstrap_token(*, purpose: str, principal_id: str, ttl: int,
     now = time.time()
     with _tx() as c:
         principal = _principal(c, principal_id, lock=True)
-        if principal is None or not principal.get("enabled"):
-            raise IdentityError("principal_not_found", "principal 不存在或已禁用", 404)
+        if principal is None:
+            raise IdentityError("principal_not_found", "principal 不存在", 404)
+        if not principal.get("enabled") and purpose != "recovery":
+            raise IdentityError("principal_disabled", "principal 已禁用", 409)
         c.execute(
             "INSERT INTO bootstrap_tokens(id,lookup_prefix,token_hash,hash_algo,purpose,"
             "principal_id,expires_at,consumed_at,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -359,11 +363,29 @@ def bootstrap_admin(*, ttl: int = 900, actor: str = "cli") -> dict[str, Any]:
                                    ttl=ttl, actor=actor)
 
 
-def recover_admin(*, ttl: int = 900, actor: str = "cli") -> dict[str, Any]:
-    admins = admin_principals()
+def recover_admin(*, principal_id: str | None = None, ttl: int = 900,
+                  create_new: bool = False, actor: str = "cli") -> dict[str, Any]:
+    """Local recovery: default restore an existing admin, optionally create new.
+
+    Recovery token consumption re-enables the selected admin principal but does
+    not restore old credentials or sessions.
+    """
+    if create_new:
+        principal = create_principal(kind="human", display_name="recovered-admin",
+                                     role="admin", actor=actor,
+                                     metadata={"recovered": True})
+        return _create_bootstrap_token(purpose="recovery", principal_id=principal["id"],
+                                       ttl=ttl, actor=actor)
+    admins = admin_principals(include_disabled=True)
     if not admins:
-        raise IdentityError("admin_not_found", "没有启用的 admin principal", 404)
-    return _create_bootstrap_token(purpose="recovery", principal_id=admins[0]["id"],
+        raise IdentityError("admin_not_found", "没有可恢复的 admin principal", 404)
+    if principal_id:
+        admins = [p for p in admins if p.get("id") == principal_id]
+        if not admins:
+            raise IdentityError("admin_not_found", "指定 principal 不是 admin", 404)
+    enabled = [p for p in admins if p.get("enabled")]
+    target = (enabled or admins)[0]
+    return _create_bootstrap_token(purpose="recovery", principal_id=target["id"],
                                    ttl=ttl, actor=actor)
 
 
@@ -388,10 +410,14 @@ def consume_bootstrap_token(token: str, *, actor: str = "cli") -> dict[str, Any]
                         "WHERE id=? AND consumed_at IS NULL", (now, row["id"]))
         if cur.rowcount != 1:
             raise IdentityError("token_consumed", "token 已被消费", 409)
+        restored = False
+        if row["purpose"] == "recovery":
+            c.execute("UPDATE principals SET enabled=1 WHERE id=?", (row["principal_id"],))
+            restored = True
         principal = _principal(c, str(row["principal_id"]))
         _audit(c, actor=actor, action="identity.bootstrap.consume",
                detail={"purpose": row["purpose"], "principal_id": row["principal_id"],
-                       "token_id": row["id"]})
+                       "token_id": row["id"], "restored": restored})
     return {"principal": _public(principal), "purpose": row["purpose"]}
 
 

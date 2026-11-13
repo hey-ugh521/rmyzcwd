@@ -106,12 +106,89 @@ class IdentityTest(unittest.TestCase):
             identity.consume_bootstrap_token(recovery["token"])
         self.assertEqual(cm.exception.code, "token_expired")
 
+    def test_disabled_admin_recovery_restores_principal_only(self):
+        boot = identity.bootstrap_admin(ttl=300)
+        identity.consume_bootstrap_token(boot["token"])
+        admin_id = boot["principal_id"]
+        old_cred = identity.create_credential(principal_id=admin_id)
+        old_session = identity.create_admin_session(principal_id=admin_id)
+        identity.disable_principal(admin_id)
+        self.assertIsNone(identity.authenticate_credential(old_cred["secret"]))
+        self.assertIsNone(identity.authenticate_admin_session(old_session["session_token"]))
+        with self.assertRaises(identity.IdentityError):
+            identity.bootstrap_admin(ttl=300)
+        recovery = identity.recover_admin(principal_id=admin_id, ttl=300)
+        identity.consume_bootstrap_token(recovery["token"])
+        principal = [p for p in identity.list_principals() if p["id"] == admin_id][0]
+        self.assertEqual(principal["enabled"], 1)
+        # Old credentials/sessions stay revoked; recovery does not resurrect them.
+        self.assertIsNone(identity.authenticate_credential(old_cred["secret"]))
+        self.assertIsNone(identity.authenticate_admin_session(old_session["session_token"]))
+
+    def test_disable_admin_invalidates_unconsumed_recovery_token(self):
+        boot = identity.bootstrap_admin(ttl=300)
+        identity.consume_bootstrap_token(boot["token"])
+        recovery = identity.recover_admin(ttl=300)
+        identity.disable_principal(boot["principal_id"])
+        with self.assertRaises(identity.IdentityError) as cm:
+            identity.consume_bootstrap_token(recovery["token"])
+        self.assertEqual(cm.exception.code, "token_consumed")
+
     def test_bootstrap_rejects_when_admin_exists(self):
         identity.create_principal(kind="human", display_name="Admin",
                                   role="admin", principal_id="admin-1")
         with self.assertRaises(identity.IdentityError) as cm:
             identity.bootstrap_admin(ttl=300)
         self.assertEqual(cm.exception.code, "bootstrap_exists")
+
+    def test_recovery_token_concurrent_single_winner(self):
+        boot = identity.bootstrap_admin(ttl=300)
+        identity.consume_bootstrap_token(boot["token"])
+        recovery = identity.recover_admin(ttl=300)
+        results = []
+        barrier = threading.Barrier(2)
+
+        def worker():
+            barrier.wait()
+            try:
+                identity.consume_bootstrap_token(recovery["token"])
+                results.append("ok")
+            except identity.IdentityError as exc:
+                results.append(exc.code)
+
+        threads = [threading.Thread(target=worker), threading.Thread(target=worker)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(results.count("ok"), 1)
+        self.assertEqual(len(results), 2)
+
+    def test_schema_idempotent_and_no_auto_admin(self):
+        identity.init_schema()
+        with store.conn() as c:
+            count = c.execute("SELECT COUNT(*) AS n FROM principals WHERE role='admin'").fetchone()["n"]
+        self.assertEqual(count, 0)
+
+    def test_foreign_keys_restrict_principal_delete(self):
+        import sqlite3
+        made = identity.create_credential(principal_id="svc-qq")
+        with store.conn() as c:
+            c.execute("PRAGMA foreign_keys=ON")
+            with self.assertRaises(sqlite3.IntegrityError):
+                c.execute("DELETE FROM principals WHERE id='svc-qq'")
+        self.assertIsNotNone(identity.authenticate_credential(made["secret"]))
+
+    def test_rotated_from_set_null(self):
+        made = identity.create_credential(principal_id="svc-qq")
+        rotated = identity.rotate_credential(made["credential"]["id"])
+        with store.conn() as c:
+            c.execute("PRAGMA foreign_keys=ON")
+            c.execute("DELETE FROM credentials WHERE id=?", (made["credential"]["id"],))
+            c.commit()
+            row = c.execute("SELECT rotated_from FROM credentials WHERE id=?",
+                            (rotated["credential"]["id"],)).fetchone()
+        self.assertIsNone(row["rotated_from"])
 
     def test_admin_session_csrf_and_revoke(self):
         identity.create_principal(kind="human", display_name="Admin",
@@ -146,6 +223,24 @@ class IdentityTest(unittest.TestCase):
         with store.conn() as c:
             count = c.execute(
                 "SELECT COUNT(*) AS n FROM credentials WHERE principal_id='svc-qq'").fetchone()["n"]
+        self.assertEqual(count, 0)
+
+    def test_real_db_audit_failure_rolls_back(self):
+        with store.conn() as c:
+            c.execute(
+                "CREATE TRIGGER fail_identity_audit BEFORE INSERT ON audit "
+                "WHEN NEW.action LIKE 'identity.credential.%' "
+                "BEGIN SELECT RAISE(ABORT, 'audit blocked'); END")
+            c.commit()
+        try:
+            with self.assertRaises(Exception):
+                identity.create_credential(principal_id="svc-qq")
+        finally:
+            with store.conn() as c:
+                c.execute("DROP TRIGGER fail_identity_audit")
+                c.commit()
+        with store.conn() as c:
+            count = c.execute("SELECT COUNT(*) AS n FROM credentials WHERE principal_id='svc-qq'").fetchone()["n"]
         self.assertEqual(count, 0)
 
 

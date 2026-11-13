@@ -36,6 +36,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("recover-admin", help="为现有 admin 生成一次性 recovery token")
     p.add_argument("--ttl", type=int, default=900)
+    p.add_argument("--principal", default="")
+    p.add_argument("--create-new", action="store_true",
+                   help="没有可恢复 admin 时显式创建新 admin")
 
     sub.add_parser("list-principals")
 
@@ -61,8 +64,12 @@ def main(argv: list[str] | None = None) -> int:
             result = identity.bootstrap_admin(ttl=args.ttl, actor="identity-cli")
             result["warning"] = "token 只显示一次；请立即使用并妥善保管"
         elif args.command == "recover-admin":
-            result = identity.recover_admin(ttl=args.ttl, actor="identity-cli")
-            result["warning"] = "token 只显示一次；仅允许本机使用"
+            result = identity.recover_admin(
+                ttl=args.ttl, actor="identity-cli",
+                principal_id=(args.principal or None),
+                create_new=args.create_new,
+            )
+            result["warning"] = "token 只显示一次；仅允许本机使用；消费后会重新启用目标 admin"
         elif args.command == "list-principals":
             result = {"principals": identity.list_principals()}
         elif args.command == "create-credential":
