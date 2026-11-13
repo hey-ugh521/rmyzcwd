@@ -96,6 +96,7 @@ start http://127.0.0.1:8900/console
 - 4F-2A 将旧 API_KEY 映射为固定 `service-legacy` 机器主体，未知 key 不创建身份，旧 key 永远不会成为 admin。
 - 4F-2A 已冻结；4F-2B Identity Shadow 设计审查稿已提交，未开始实现。
 - 单元测试可移植入口：`python tests/run_unit.py`；CI workflow 已加入 `.github/workflows/unit-tests.yml`。
+- 已修复 SQLite `PRAGMA journal_mode=WAL` 并发初始化竞态；并发回归 5 轮双解释器通过。
 - M3 干净安装仍在收口；生产安装与开发仓库分开。
 
 ## 验证

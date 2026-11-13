@@ -22,6 +22,7 @@ Included suites:
 - registry lifecycle
 - registry API
 - registry index
+- store concurrency
 - QQ webhook
 
 ## Not covered by the unit runner
