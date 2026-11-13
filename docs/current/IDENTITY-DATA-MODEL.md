@@ -92,13 +92,40 @@ bootstrap_tokens
 
 - 一次性消费；并发消费只能一个成功。
 - Token 只显示一次，只存哈希。
-- bootstrap：首次创建 admin principal 并生成 token。
-- recovery：为现有启用的 admin 生成 token；不创建新 admin。
+- bootstrap：首次创建 admin principal 并生成 token；只要存在任何 admin（含禁用）就拒绝。
+- recovery：为现有 admin 生成 token；默认恢复原 Principal，CLI 可显式 `--create-new`。
+- recovery token 消费时重新启用目标 admin，但**不恢复旧 Credential/Session**。
+- Token 消费状态持久化；重启 Core 不会重置。
 - 恢复不要求无条件 Windows elevated；是否提权取决于安装目录/数据库权限。
 - 恢复操作必须审计；token 消费后失效。
 - 只能通过本机 CLI 生成，不允许网络 API 重置。
 
-## 5. 事务与审计契约
+## 5. 外键与删除策略
+
+| 关系 | 策略 |
+|---|---|
+| Credential → Principal | RESTRICT |
+| Admin Session → Principal | RESTRICT |
+| Bootstrap Token → Principal | RESTRICT |
+| Credential.rotated_from → Credential | SET NULL |
+| Audit → Principal | 无级联；审计归因保留 |
+
+理由：
+
+- Principal 禁用是“主体不可用”，不删除数据；认证时检查 `enabled`。
+- 删除 Principal 不应级联删除凭证、会话、Token 或审计。
+- 轮换历史只保留 ID 引用，不保留旧 Secret。
+
+## 6. 迁移约束
+
+- `init_schema()` 必须可重复执行。
+- 身份表是纯新增表，不自动生成 admin。
+- 不把旧 `api_key`、Studio cookie 或旧权限表映射成 Principal。
+- DDL 在同一事务中执行；失败不应留下半初始化状态。
+- 已有 4F-1 生产表如果由早期版本创建，4F-2 部署前需要用空表重建或显式迁移 FK；不允许静默保留错误级联策略。
+- 身份数据回滚不能依赖删除表；安全数据恢复应使用备份。
+
+## 7. 事务与审计契约
 
 - 身份数据变更与 audit 写入**同一个 DB 事务**。
 - audit 失败 → 整体回滚；不允许“修改成功但审计缺失”。
@@ -112,7 +139,7 @@ identity.bootstrap.create/consume
 identity.session.create/revoke/expire
 ```
 
-## 6. 角色矩阵状态
+## 8. 角色矩阵状态
 
 4F-1 只落数据，不启用路由授权。角色矩阵暂不冻结；待 4F-2/4F-3 实际测试后冻结。
 
@@ -124,7 +151,7 @@ identity.session.create/revoke/expire
 - `capability.invoke` 还要经过 Capability Policy Engine 二次判断
 - `studio-local` 不是 Principal，只是 Admin Session 的来源
 
-## 7. 4F-1 不包含
+## 9. 4F-1 不包含
 
 - HTTP 认证中间件改造
 - `/api/identity/me`
@@ -134,7 +161,7 @@ identity.session.create/revoke/expire
 - 审计 UI
 - Core 进程托管
 
-## 8. CLI
+## 10. CLI
 
 ```text
 python -m core.identity_cli bootstrap-admin
@@ -149,7 +176,7 @@ python -m core.identity_cli purge-sessions
 
 Secret/token 只在命令输出中出现一次；CLI 不写日志文件。
 
-## 9. 验收
+## 11. 验收
 
 - Secret 不落库；哈希算法/版本可识别
 - 撤销、过期、轮换生效

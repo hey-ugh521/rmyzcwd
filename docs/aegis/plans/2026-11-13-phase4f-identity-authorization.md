@@ -209,7 +209,10 @@ MobiusCLI identity bootstrap-admin
 
 丢失恢复：
 
-- 本机 elevated CLI 重新生成一次性 recovery token；
+- 本机 CLI 生成一次性 recovery token；
+- 默认恢复**原 admin Principal**并重新启用主体，不恢复旧 Credential/Session；
+- 可显式选择创建新 admin，并记录恢复关系；
+- Bootstrap 只要存在任何 admin（含禁用）就拒绝，避免重建后门；
 - 不提供默认 admin 密码；
 - 不通过网络重置；
 - 每次恢复写审计。

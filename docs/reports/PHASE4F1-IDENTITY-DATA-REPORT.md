@@ -86,7 +86,7 @@ Secret / token 只显示一次；CLI 不写日志。
 - bootstrap create/consume
 - session create/revoke/expire
 
-测试：
+测试覆盖：
 
 ```text
 mock _audit 抛错
@@ -94,11 +94,39 @@ mock _audit 抛错
 -> credentials 表没有残留行
 ```
 
+另外增加真实数据库回滚测试：SQLite trigger 阻断 audit 插入，
+`create_credential` 失败后 credentials 表无残留。
+
 同时把 4E 的 policy mutation 审计改为同事务：
 
 - `capability.permission.set/delete`
 - `capability.provider.set`
 - audit 写入失败会回滚权限修改
+
+## 4.1 Recovery 语义
+
+- `bootstrap_admin` 在任何 admin 存在时拒绝
+- `recover_admin` 默认选择现有 admin（含禁用）
+- 消费 recovery token 时重新启用目标 admin
+- 旧 Credential / Admin Session 保持失效，不恢复
+- 可选 `--create-new` 显式创建新 admin
+- Recovery token 与 bootstrap token 共用原子消费逻辑
+
+## 4.2 外键与迁移
+
+新建表使用：
+
+```text
+Credential/Session/Token -> Principal: RESTRICT
+Credential.rotated_from -> Credential: SET NULL
+Audit -> Principal: 无级联
+```
+
+测试：
+
+- 删除有 Credential 的 Principal 被 FK 拒绝
+- 轮换后删除旧 Credential，新凭证 rotated_from 变为 NULL
+- `init_schema()` 可重复执行，不自动创建 admin
 
 ## 5. 验收结果
 
@@ -117,7 +145,10 @@ mock _audit 抛错
 | Token 只显示一次 | CLI 输出一次 |
 | Token 哈希落库 | 通过 |
 | 过期 token 无法消费 | 通过 |
-| 并发消费单赢家 | 通过（两线程） |
+| 并发消费单赢家 | Bootstrap 与 Recovery 均通过（两线程） |
+| 禁用 admin 恢复 | Recovery token 消费后重新启用原 Principal，旧凭证/会话仍失效 |
+| 真实 DB 审计回滚 | SQLite trigger 阻断 audit 后凭证写入回滚 |
+| FK 删除策略 | Principal RESTRICT，rotated_from SET NULL 通过 |
 | 重启后消费状态不丢 | DB 状态；重新连接可验证 |
 | 现有 API 路由行为不变 | 认证/路由测试通过 |
 | 旧 API_KEY 未接入新表 | 未映射；不会成为 admin |
@@ -127,7 +158,7 @@ mock _audit 抛错
 
 | 项目 | 结果 |
 |---|---|
-| `test_identity.py` | 9/9 |
+| `test_identity.py` | 16/16 |
 | `test_capabilities.py` | 16/16 |
 | `test_registry_core_auth.py` | 8/8 |
 | `test_registry_migration.py` | 6/6 |
@@ -153,6 +184,9 @@ python -m core.identity_cli list-principals
 ```
 
 - 身份表已创建
+- 早期空表已重建为显式 FK schema：
+  - Credential/Session/Token → Principal `ON DELETE RESTRICT`
+  - `rotated_from` → Credential `ON DELETE SET NULL`
 - 没有创建 admin principal / bootstrap token
 - 现有 API、Studio、能力调用未切换认证路径
 
@@ -163,7 +197,8 @@ python -m core.identity_cli list-principals
 - 尚无路由授权
 - 角色矩阵仍未冻结
 - 默认拒绝迁移未开始
-- `bootstrap_admin` 在存在任何 admin（含禁用）时拒绝；禁用 admin 的恢复路径仍需 4F-2 明确
+- `bootstrap_admin` 在存在任何 admin（含禁用）时拒绝；`recover_admin` 默认恢复原 admin 并重新启用主体，不恢复旧凭证
+- 生产身份表已用空表重建，显式 FK 已验证
 - 审计记录仍无 UI；4G 提供筛选页
 
 ## 9. 停止点
