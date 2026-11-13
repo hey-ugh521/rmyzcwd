@@ -50,6 +50,9 @@
 - [ ] C. 只接受 4F-3 admin session；则 4F-2C 不能验证 legacy key
 - [ ] D. 其他，必须写明
 
+设计稿当前选择 **A**，待审查：
+[`/api/identity/me` 设计](2026-11-14-phase4f2c-identity-me-design.md)。
+
 同时必须写清：
 
 - [ ] 未认证/未知 key/revoked/disabled 的返回语义
