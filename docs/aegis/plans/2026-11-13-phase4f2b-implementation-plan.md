@@ -129,7 +129,7 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 - 报告：[PHASE4F2B2-SHADOW-EVALUATOR-REPORT.md](../reports/PHASE4F2B2-SHADOW-EVALUATOR-REPORT.md)
 - 2B-3 前置检查：[2026-11-13-phase4f2b3-preflight.md](2026-11-13-phase4f2b3-preflight.md)
 
-### 2B-3 中间件 Shadow 接线
+### 2B-3 中间件 Shadow 接线（已完成）
 
 - **Shadow 外层**；Legacy Authentication 内层
 - Legacy auth 仅写只读 `request.state.legacy_auth`
@@ -147,6 +147,7 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
   - 响应的 body/headers/cookies/外部副作用与 baseline 一致
     （Shadow 自身事件表除外）
 - 不修改任何 401/403/status/headers/body
+- 报告：[PHASE4F2B3-SHADOW-MIDDLEWARE-REPORT.md](../reports/PHASE4F2B3-SHADOW-MIDDLEWARE-REPORT.md)
 
 ### 2B-4 证据与冻结
 
