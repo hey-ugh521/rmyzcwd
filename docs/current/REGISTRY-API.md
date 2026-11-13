@@ -264,6 +264,7 @@ POST /api/capabilities/permissions
 DELETE /api/capabilities/permissions/{id}
 GET /api/capabilities/providers
 POST /api/capabilities/providers
+GET /api/capabilities/provider-health
 GET /api/capabilities/retention
 POST /api/capabilities/maintenance/prune
 ```
@@ -277,6 +278,9 @@ Agent media tools enter through `CapabilityService`:
 
 Permission defaults to allow (`capabilities.default_allow=true`). Retention defaults
 to 30 days / 10,000 rows and is pruned at Core startup plus a maintenance endpoint.
+Provider selection probes Core Supervisor service state with a short cache; an
+unavailable provider is skipped, and a requested provider falls back to the next
+healthy policy row.
 
 Gateway remains the execution adapter; direct Gateway `/api/*` is an operator
 surface, not the Agent capability path.
