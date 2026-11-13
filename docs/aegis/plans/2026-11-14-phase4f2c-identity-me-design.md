@@ -4,7 +4,7 @@
 - 状态：**设计修订版；未实施，未授权编码**
 - 输入：
   - [4F 设计计划 §8](2026-11-13-phase4f-identity-authorization.md)
-  - [Identity Data Model](../current/IDENTITY-DATA-MODEL.md)
+  - [Identity Data Model](../../current/IDENTITY-DATA-MODEL.md)
   - [4F-2C 前置检查清单](2026-11-14-phase4f2c-preflight.md)
   - [2B 后续问题清单](2026-11-14-phase2b-followups.md)
 
@@ -33,11 +33,11 @@ Authorization: Bearer <legacy_api_key>
 
 ## 3. D1 补充：`inspect_legacy_api_key()` 契约
 
-实现依据：[core/identity.py:616](../../core/identity.py#L616)
+实现依据：[core/identity.py:616](../../../core/identity.py#L616)
 
 | 检查 | 实际行为 | 返回状态 |
 |---|---|---|
-| 配置 key 存在 | `configured_legacy_key()` 为空 → unmapped | `unmapped` |
+| 配置 key 存在 | `configured_legacy_key()` 为空 → 函数返回 unmapped | `unmapped` |
 | Bearer 是否等于 configured key | `hmac.compare_digest` 常量时间比较 | 不匹配 → `unmapped` |
 | Credential 是否存在 | 按 `sha256(configured)[:16]` 查 `lookup_prefix` | 无 → `mapping_missing` |
 | 完整 key 是否匹配 | `_verify_secret` 校验 salted hash | 不匹配 → `conflict` |
@@ -56,12 +56,58 @@ Authorization: Bearer <legacy_api_key>
 - 数据库异常会向上传播；endpoint 必须映射为 500，而不是 401。
 - 原始 key 不写入日志；错误日志只记录异常类型和请求 ID。
 
+### 3.1 服务端配置缺失与凭据无效
+
+`inspect_legacy_api_key()` 当前把“配置缺失”返回为 `unmapped`。为避免把
+部署故障伪装成客户端认证失败，endpoint 适配层必须先做一次**只读配置门禁**：
+
+```text
+parse Bearer -> 401 if missing/malformed
+configured = identity.configured_legacy_key()
+if not configured -> 500 configuration_unavailable
+call identity.inspect_legacy_api_key(request_key)
+```
+
+- 该检查只读 `store.CFG`，不修改 4F-2A mapping 或 frozen 代码
+- 配置缺失时**不调用** inspect
+- 内部状态 `configuration_unavailable`；对外 500 `identity_unavailable`
+- 配置在进程内一次性加载，endpoint 一次请求使用同一配置快照
+- 不引入配置 reload；不要求修改 4F-2A/2B
+
+响应判定：
+
+| 情况 | 内部状态 | 对外 |
+|---|---|---|
+| 请求无/错 Bearer | `unauthenticated` | 401 |
+| 服务端未配置 Legacy Key | `configuration_unavailable` | 500 |
+| 数据库不可用 | `database_unavailable` | 500 |
+| 凭据不匹配/撤销/过期/禁用/mapping 缺失 | 对应 inspect 状态 | 401 |
+
 ## 4. Endpoint 契约
 
 ```text
 GET /api/identity/me
 Authorization: Bearer <legacy_api_key>
 ```
+
+### 4.1 Bearer Header 解析
+
+- Authorization 缺失 → 401
+- Scheme 大小写不敏感，但只接受 `Bearer`
+- Scheme 与凭据之间必须有且仅有一个合法分隔
+- 空凭据、格式错误、多个 Authorization 值 → 401
+- 不接受 Query、Cookie、Body 回退读取
+- 不 trim/大小写转换/截断凭据内容
+- 不对原始 key 做日志输出
+
+请求 ID：
+
+- `X-Request-Id` 只用于日志，不是身份凭据
+- 可接受字符集和长度受限（建议 `[A-Za-z0-9._:-]`，最多 128）
+- 非法/过长 header 不用作日志关联，由服务端生成替代 ID
+- 不将未净化的 header 写入日志或响应
+
+### 4.2 成功
 
 成功：
 
@@ -100,7 +146,9 @@ HTTP 细节：
 ```
 
 - 500 不在响应中返回异常详情或 key
-- 成功/失败均 `Cache-Control: no-store`
+- 500 不带 `WWW-Authenticate`
+- 成功/失败/500 均 `Cache-Control: no-store`
+- 401 才带 `WWW-Authenticate: Bearer`
 - 不设置 Cookie
 - 不创建 Session
 - 不修改 `request.state.legacy_auth`
@@ -118,6 +166,8 @@ HTTP 细节：
 | principal disabled | 401 |
 | mapping 缺失 | 401 |
 | conflict | 401 |
+| 服务端未配置 Legacy Key | 500 `identity_unavailable` |
+| 数据库/内部异常 | 500 `identity_unavailable` |
 | resolved | 200 |
 
 内部可以区分状态用于日志/测试，但不进入响应，避免凭据枚举。
@@ -125,7 +175,8 @@ HTTP 细节：
 数据库/内部异常：
 
 - 返回 500 `identity_unavailable`
-- 不返回 401
+- 不返回 401，不带 `WWW-Authenticate`
+- `Cache-Control: no-store`
 - 记录异常类型、请求 ID；不记录 key/token
 
 ## 6. D3：字段最小化
@@ -256,10 +307,14 @@ headers/cookies 没有基线，不能回填为已验证。
 
 - 有效 key + resolved mapping → 200，字段精确
 - 无 Bearer / 格式错误 → 401
+- Scheme 大小写、空凭据、多 Authorization → 401
+- 不从 Query/Cookie/Body 回退取 Key
 - 未知/错误 key → 401
 - revoked / expired / disabled → 统一 401
 - mapping 缺失 / conflict → 401
-- 500 内部异常不伪装成 401
+- 服务端 Legacy Key 未配置 → 500 `identity_unavailable`
+- 数据库/内部异常 → 500，不伪装成 401
+- 无效/过长 `X-Request-Id` 不进入日志，使用服务端替代 ID
 
 只读：
 
@@ -279,7 +334,8 @@ HTTP 语义：
 
 - 401 `WWW-Authenticate: Bearer`
 - 401 无 `invalid_token`
-- 成功/失败 `Cache-Control: no-store`
+- 成功/401/500 均 `Cache-Control: no-store`
+- 500 无 `WWW-Authenticate`
 - 500 无异常详情/无 key
 
 脱敏：
