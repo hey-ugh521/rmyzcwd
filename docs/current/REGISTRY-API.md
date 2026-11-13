@@ -195,7 +195,21 @@ POST /api/registry/manage/characters/import   {"card": {...}, "id": "optional"}
 POST /api/registry/manage/workflows/validate  {"payload": {...}, "live_check": true}
 POST /api/registry/manage/workflows/import    {"payload": {...}, "id": "optional", "name": "optional"}
 GET  /api/registry/manage/comfyui/nodes
+POST /api/registry/manage/workflows/{id}/test
+GET  /api/registry/manage/voice-assets
+POST /api/registry/manage/voice-assets          multipart: file, kind, source, consent, reuse_policy
+GET  /api/registry/manage/voice-assets/{id}
+DELETE /api/registry/manage/voice-assets/{id}
 ```
+
+`workflows/{id}/test` runs the current revision once through Media Gateway
+(`POST /api/workflows/test`). It creates no TaskStore record and does not
+publish or change the resource. The Gateway retains its normal `/api` auth.
+
+`voice-assets` stores bytes under `data/voice_assets` (or
+`registry.voice_assets_dir`), enforces allowed extensions and a 25MB limit,
+records checksum/provenance/reuse policy, and soft-deletes metadata. It does not
+delete the stored file.
 
 `live_check` fetches ComfyUI `/object_info`; if ComfyUI is down the validation
 returns `dependencies.status = "unchecked"` instead of pretending nodes exist.
