@@ -1,7 +1,7 @@
 # Phase 4F-1 实施报告：身份数据模型与凭证生命周期
 
 - 日期：2026-11-13
-- 状态：4F-1 完成；未改变 HTTP 认证/路由授权行为
+- 状态：4F-1 完成并已把身份数据层部署到生产；未改变 HTTP 认证/路由授权行为
 - 设计审查：[Phase 4F 设计稿](../aegis/plans/2026-11-13-phase4f-identity-authorization.md)
 - 数据契约：[Identity Data Model Contract](../current/IDENTITY-DATA-MODEL.md)
 - 代码提交：`dbdd784`
@@ -42,7 +42,7 @@
 
 ### credentials
 
-- 只存 `secret_hash`（scrypt）
+- 只存 `secret_hash`（salted sha256；高熵 token）
 - `lookup_prefix` 唯一
 - 支持 `expires_at`、`revoked_at`
 - `rotated_from` 只引用旧 Credential ID
@@ -112,7 +112,7 @@ mock _audit 抛错
 | 数据库不存明文 Secret | 通过 |
 | 撤销/过期/轮换 | 通过 |
 | 旧 Credential 轮换后失效 | 通过 |
-| 哈希算法/版本可识别 | `scrypt-v1` |
+| 哈希算法/版本可识别 | `sha256-v1` |
 | Bootstrap 一次性 token | 通过 |
 | Token 只显示一次 | CLI 输出一次 |
 | Token 哈希落库 | 通过 |
@@ -134,18 +134,39 @@ mock _audit 抛错
 | `test_registry_runtime.py` | 5/5 |
 | `test_voice_assets.py` | 4/4 |
 
-## 7. 当前限制
+## 7. 生产部署
+
+4F-1 已热更新：
+
+- `core/identity.py`
+- `core/identity_cli.py`
+- `core/server.py`（启动时创建身份表）
+- `core/capabilities.py`（策略变更与审计同事务）
+
+生产验证：
+
+```text
+python -m core.identity_cli list-principals
+{
+  "principals": []
+}
+```
+
+- 身份表已创建
+- 没有创建 admin principal / bootstrap token
+- 现有 API、Studio、能力调用未切换认证路径
+
+## 8. 当前限制
 
 - `python -m core.identity_cli` 是当前 CLI 入口；尚未编译进 `MobiusCLI.exe`
 - 尚无 HTTP 登录/消费 token 接口（4F-2/4F-3）
 - 尚无路由授权
 - 角色矩阵仍未冻结
 - 默认拒绝迁移未开始
-- 4F-1 尚未部署到生产；避免无必要地重启 live Core
-- `bootstrap_admin` 在已存在任何 admin（含禁用）时拒绝，避免 bootstrap 成为重建管理员后门；禁用 admin 的恢复路径仍需 4F-2 明确
+- `bootstrap_admin` 在存在任何 admin（含禁用）时拒绝；禁用 admin 的恢复路径仍需 4F-2 明确
 - 审计记录仍无 UI；4G 提供筛选页
 
-## 8. 停止点
+## 9. 停止点
 
 4F-1 到此停止。
 

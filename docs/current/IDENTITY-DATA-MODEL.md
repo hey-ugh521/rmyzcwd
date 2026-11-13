@@ -35,8 +35,8 @@ credentials
   principal_id
   kind           api_key | service_token | admin_bootstrap | recovery
   lookup_prefix  8 hex，用于查找
-  secret_hash    scrypt
-  hash_algo      scrypt-v1
+  secret_hash    salted sha256（高熵随机 token；人类密码另行 scrypt/argon2）
+  hash_algo      sha256-v1
   expires_at
   revoked_at
   last_used_at
