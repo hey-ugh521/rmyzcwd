@@ -252,7 +252,7 @@ export interface RegistryIndexWorkflow {
   source: string;
   source_kind: string;
   status: string;
-  format: "api_prompt" | "ui_workflow" | "unknown";
+  format: "api_prompt" | "comfy_workflow" | "ui_workflow" | "unknown";
   node_count: number;
   class_types: string[];
   checksum?: string;

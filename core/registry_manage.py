@@ -177,10 +177,17 @@ def validate_workflow(payload: Any, *, object_info: dict[str, Any] | None = None
                 "dependencies": dependencies, "node_count": 0}
     if isinstance(payload.get("nodes"), list):
         return {"format": "ui_workflow", "status": "invalid",
-                "errors": ["Phase 2 只支持 ComfyUI API Prompt JSON（{node_id: {class_type, inputs}}）；请导出 API format"],
+                "errors": ["Phase 2 只支持 ComfyUI API Prompt JSON 或 nodes-dict workflow；请导出 API format 或 nodes JSON"],
                 "warnings": [], "parameters": [], "requirements": requirements,
                 "dependencies": dependencies, "node_count": len(payload["nodes"])}
-    nodes = {str(k): v for k, v in payload.items() if isinstance(v, dict) and v.get("class_type")}
+    if isinstance(payload.get("nodes"), dict):
+        nodes = {str(k): v for k, v in payload["nodes"].items()
+                 if isinstance(v, dict) and v.get("class_type")}
+        workflow_format = "comfy_workflow"
+    else:
+        nodes = {str(k): v for k, v in payload.items()
+                 if isinstance(v, dict) and v.get("class_type")}
+        workflow_format = "api_prompt"
     if not nodes:
         return {"format": "unknown", "status": "invalid", "errors": ["未找到带 class_type 的节点"],
                 "warnings": [], "parameters": [], "requirements": requirements,
@@ -248,7 +255,7 @@ def validate_workflow(payload: Any, *, object_info: dict[str, Any] | None = None
     requirements["node_classes"] = sorted(classes)
     status = "invalid" if errors else "valid"
     return {
-        "format": "api_prompt",
+        "format": workflow_format,
         "status": status,
         "errors": errors,
         "warnings": warnings,

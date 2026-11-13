@@ -37,10 +37,13 @@ class RegistryManageTest(unittest.TestCase):
             "style_prompt": "silver hair", "media_policy": {"allow_image": True, "allow_voice": True},
         }, ensure_ascii=False), encoding="utf-8")
         (workflows / "portrait.json").write_text(json.dumps({
-            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "x"}},
-            "2": {"class_type": "KSampler", "inputs": {"steps": 20, "cfg": 5.0}},
-            "3": {"class_type": "EmptyLatentImage", "inputs": {"width": 832, "height": 1216, "batch_size": 1}},
-            "4": {"class_type": "SaveImage", "inputs": {"filename_prefix": "x"}},
+            "last_node_id": 4,
+            "nodes": {
+                "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "x"}},
+                "2": {"class_type": "KSampler", "inputs": {"steps": 20, "cfg": 5.0}},
+                "3": {"class_type": "EmptyLatentImage", "inputs": {"width": 832, "height": 1216, "batch_size": 1}},
+                "4": {"class_type": "SaveImage", "inputs": {"filename_prefix": "x"}},
+            },
         }), encoding="utf-8")
         (workflows / "ui.json").write_text(json.dumps({"nodes": [{"type": "KSampler"}], "links": []}), encoding="utf-8")
         (workflows / "models.json").write_text(json.dumps({"models": [{"id": "anime", "name": "Anime", "workflow": "portrait"}]}), encoding="utf-8")
@@ -84,6 +87,15 @@ class RegistryManageTest(unittest.TestCase):
         ui = registry_manage.validate_workflow({"nodes": [], "links": []})
         self.assertEqual(ui["format"], "ui_workflow")
         self.assertEqual(ui["status"], "invalid")
+        wrapper = registry_manage.validate_workflow({
+            "last_node_id": 2,
+            "nodes": {
+                "1": {"class_type": "KSampler", "inputs": {"steps": 20}},
+                "2": {"class_type": "SaveImage", "inputs": {}},
+            },
+        })
+        self.assertEqual(wrapper["format"], "comfy_workflow")
+        self.assertEqual(wrapper["status"], "valid", wrapper)
 
     def test_dependency_validation(self):
         payload = {

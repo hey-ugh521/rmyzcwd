@@ -110,6 +110,11 @@ def workflow_source_dir() -> Path | None:
 def _workflow_node_stats(data: Any) -> dict[str, Any]:
     if not isinstance(data, dict):
         return {"format": "unknown", "node_count": 0, "class_types": []}
+    if isinstance(data.get("nodes"), dict):
+        values = [v for v in data["nodes"].values() if isinstance(v, dict) and v.get("class_type")]
+        if values:
+            return {"format": "comfy_workflow", "node_count": len(values),
+                    "class_types": sorted({str(v.get("class_type")) for v in values})}
     if isinstance(data.get("nodes"), list):
         classes = [str(n.get("type") or "") for n in data["nodes"] if isinstance(n, dict)]
         return {"format": "ui_workflow", "node_count": len(data["nodes"]),
