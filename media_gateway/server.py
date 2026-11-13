@@ -705,7 +705,11 @@ def inject_loras(
 
 
 def build_nodes(cfg: Settings, spec: dict[str, Any]) -> dict[str, dict]:
-    nodes = load_workflow_nodes(cfg, spec["workflow"])
+    graph = spec.get("workflow_graph")
+    if isinstance(graph, dict) and graph:
+        nodes = copy.deepcopy(graph.get("nodes") if isinstance(graph.get("nodes"), dict) else graph)
+    else:
+        nodes = load_workflow_nodes(cfg, spec["workflow"])
     nodes = apply_overrides(
         nodes,
         prompt=spec["prompt"],
@@ -713,7 +717,7 @@ def build_nodes(cfg: Settings, spec: dict[str, Any]) -> dict[str, dict]:
         seed=spec["seed"],
         width=spec["width"],
         height=spec["height"],
-        filename_prefix=f"mobius_{spec['workflow']}",
+        filename_prefix=("mobius_registry" if spec.get("workflow_graph") else f"mobius_{spec['workflow']}"),
         checkpoint=spec["checkpoint"],
     )
     nodes = apply_model_params(nodes, spec.get("params") or {})
@@ -842,35 +846,41 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
         workflow = str(character["workflow"])
     else:
         workflow = "portrait"
-    resolve_workflow_path(cfg, workflow)  # 尽早校验，避免入队后才失败
-    if workflow in UNSUPPORTED_WORKFLOWS:
-        raise ApiError(
-            "workflow_unsupported",
-            f"工作流 {workflow} 需要多张参考图 + FaceID/ControlNet，MVP 范围外（契约 §10）",
-        )
-    if workflow in MODEL_WORKFLOWS:
-        # 新架构底模没有 CheckpointLoaderSimple，角色档案的 checkpoint/LoRA 都注入不了，
-        # 与其静默丢弃，不如直接说清楚。
-        if character:
+    graph_override = body.get("workflow_graph")
+    if graph_override is not None:
+        if not isinstance(graph_override, dict) or not graph_override:
+            raise ApiError("invalid_workflow_graph", "workflow_graph 必须是非空 object", 422)
+        workflow = str(body.get("workflow") or "registry")
+    else:
+        resolve_workflow_path(cfg, workflow)  # 尽早校验，避免入队后才失败
+        if workflow in UNSUPPORTED_WORKFLOWS:
             raise ApiError(
-                "workflow_no_character",
-                f"底模 {workflow}（UNETLoader/GGUF 架构）不支持角色档案：{character.get('name') or character.get('id')} 的 "
-                "LoRA 与 checkpoint 是 SDXL 专用的。请去掉 character，直接用 prompt 描述角色；"
-                "要角色一致性请用 workflow=portrait（Illustrious）",
-                400,
+                "workflow_unsupported",
+                f"工作流 {workflow} 需要多张参考图 + FaceID/ControlNet，MVP 范围外（契约 §10）",
             )
-        if body.get("loras"):
-            raise ApiError(
-                "workflow_no_lora",
-                f"底模 {workflow}（UNETLoader/GGUF 架构）不支持 LoRA 注入（现有角色 LoRA 均为 SDXL 训练）",
-                400,
-            )
-        if body.get("checkpoint"):
-            raise ApiError(
-                "workflow_no_checkpoint_param",
-                f"底模 {workflow} 用 UNETLoader/GGUF 加载模型，不接受 checkpoint 参数",
-                400,
-            )
+        if workflow in MODEL_WORKFLOWS:
+            # 新架构底模没有 CheckpointLoaderSimple，角色档案的 checkpoint/LoRA 都注入不了，
+            # 与其静默丢弃，不如直接说清楚。
+            if character:
+                raise ApiError(
+                    "workflow_no_character",
+                    f"底模 {workflow}（UNETLoader/GGUF 架构）不支持角色档案：{character.get('name') or character.get('id')} 的 "
+                    "LoRA 与 checkpoint 是 SDXL 专用的。请去掉 character，直接用 prompt 描述角色；"
+                    "要角色一致性请用 workflow=portrait（Illustrious）",
+                    400,
+                )
+            if body.get("loras"):
+                raise ApiError(
+                    "workflow_no_lora",
+                    f"底模 {workflow}（UNETLoader/GGUF 架构）不支持 LoRA 注入（现有角色 LoRA 均为 SDXL 训练）",
+                    400,
+                )
+            if body.get("checkpoint"):
+                raise ApiError(
+                    "workflow_no_checkpoint_param",
+                    f"底模 {workflow} 用 UNETLoader/GGUF 加载模型，不接受 checkpoint 参数",
+                    400,
+                )
 
     # checkpoint
     checkpoint = str(body.get("checkpoint") or "").strip() or None
@@ -957,6 +967,7 @@ def resolve_spec(cfg: Settings, body: dict[str, Any], kind: str = "image") -> di
         "character": (character or {}).get("id") if character else None,
         "character_name": (character or {}).get("name") if character else None,
         "workflow": workflow,
+        "workflow_graph": graph_override,
         "checkpoint": checkpoint,
         "loras": loras,
         "lora_source": lora_source,

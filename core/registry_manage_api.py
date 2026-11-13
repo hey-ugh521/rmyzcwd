@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, Request, UploadFile
 
-from . import registry_manage, voice_assets
+from . import registry_manage, registry_runtime, voice_assets
 from .registry import RegistryError, RegistryService
 from .services import GatewayClient
 
@@ -27,6 +27,11 @@ def _workflow_payload(body: dict[str, Any]) -> Any:
     if "json" in body:
         return body["json"]
     return body
+
+
+@router.get("/runtime/status")
+async def runtime_status():
+    return {"ok": True, **registry_runtime.status()}
 
 
 @router.post("/import/legacy")

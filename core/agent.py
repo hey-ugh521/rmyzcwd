@@ -10,6 +10,7 @@ from typing import Any, AsyncIterator
 import httpx
 
 from . import store
+from . import registry_runtime
 from .services import GatewayClient, MediaDisabled, ServiceError, Supervisor
 
 def _legacy_task_owner() -> bool:
@@ -153,7 +154,7 @@ class Agent:
         return "\n".join(lines)
 
     def _system_prompt(self, user_id: str | None, character: str | None) -> str:
-        ch = store.get_character(character)
+        ch = registry_runtime.character(character)
         char_id = (ch or {}).get("id") or store.CFG.get("default_character")
         parts = [store.constitution_text(char_id)]
         mode = self.sup.get_mode()
@@ -206,7 +207,7 @@ class Agent:
         if ctx.get("image_done"):
             return {"ok": False, "error": "本轮已生成过一张图，请直接使用"}
         char_key = str(args.get("character") or "").strip()
-        ch = store.get_character(char_key) if char_key else None
+        ch = registry_runtime.character(char_key) if char_key else None
         char_id = (ch or {}).get("id")
         policy = (ch or {}).get("media_policy") or {}
         if policy.get("allow_image") is False:
@@ -231,6 +232,14 @@ class Agent:
             ctx["task_ids"].append(legacy_task["id"])
             ctx["pending_events"].append(legacy_task)
         ctx["image_done"] = True
+        registry_workflow = None
+        if registry_runtime.mode() == "enforce":
+            registry_workflow = registry_runtime.workflow((ch or {}).get("workflow"))
+        extra = {}
+        if registry_workflow:
+            extra["workflow"] = f"registry:{registry_workflow['id']}"
+            extra["workflow_graph"] = registry_workflow["graph"]
+            extra["registry_revision"] = registry_workflow["revision"]
         try:
             resp = await self.gw.generate(
                 character=char_id, prompt=prompt,
@@ -238,7 +247,7 @@ class Agent:
                 # 每次工具调用是一个新的逻辑请求；不能复用 session 派生 key，
                 # 否则同会话下一张图会命中上一张图的 idempotency 并 409。
                 idempotency_key=f"core-image-{uuid.uuid4().hex}",
-                **{"async": True},
+                **{"async": True}, **extra,
             )
             task_id = resp.get("task_id") or resp.get("id")
             if not task_id:
@@ -310,7 +319,7 @@ class Agent:
         text = str(args.get("text") or "").strip()
         if not text:
             return {"ok": False, "error": "text 为空"}
-        ch = store.get_character(ctx.get("character") or store.CFG.get("default_character")) or {}
+        ch = registry_runtime.character(ctx.get("character") or store.CFG.get("default_character")) or {}
         voice_cfg = ch.get("voice") or {}
         voice = args.get("voice") or voice_cfg.get("voice") or ""
         engine = voice_cfg.get("engine") or "kokoro"

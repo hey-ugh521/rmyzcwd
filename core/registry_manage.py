@@ -111,6 +111,7 @@ def normalize_character_card(card: dict[str, Any], fallback_id: str = "") -> dic
             "visualAnchor": data.get("visual_anchor") or "",
         },
         "voice_profile_id": None,
+        "voice": data.get("voice") if isinstance(data.get("voice"), dict) else {},
         "image_defaults": {
             "workflow": data.get("workflow") or "",
             "checkpoint": data.get("checkpoint") or "",
