@@ -20,7 +20,7 @@ from core import identity, store  # noqa: E402
 
 class IdentityTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.tmp = tempfile.TemporaryDirectory()
         self.old_backend = store.DB_BACKEND
         self.old_path = store.DB_PATH
         self.old_core = store.CFG.get("core")

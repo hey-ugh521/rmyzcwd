@@ -108,14 +108,32 @@ class _PgConnection:
         return False
 
 
+class _ClosingConnection(sqlite3.Connection):
+    """sqlite3's default context manager commits but does not close.
+
+    Closing here prevents WAL/file locks leaking across tests and Core requests.
+    """
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        try:
+            if exc_type is None:
+                self.commit()
+            else:
+                self.rollback()
+        finally:
+            self.close()
+        return False
+
+
 def conn():
     if DB_BACKEND == "pg":
         return _PgConnection()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    c = sqlite3.connect(DB_PATH, timeout=15)
+    c = sqlite3.connect(DB_PATH, timeout=30, factory=_ClosingConnection)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA foreign_keys=ON")
+    c.execute("PRAGMA busy_timeout=30000")
     c.execute("PRAGMA synchronous=NORMAL")
     return c
 

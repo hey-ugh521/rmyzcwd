@@ -104,7 +104,16 @@ class RegistryCoreAuthTest(unittest.TestCase):
         self.assertNotIn("test-api-key", text)
 
     def test_route_is_not_mounted_outside_api_middleware(self):
-        paths = {getattr(route, "path", "") for route in self.coreserver.app.routes}
+        def collect(routes):
+            paths = set()
+            for route in routes:
+                paths.add(getattr(route, "path", ""))
+                inner = getattr(route, "original_router", None)
+                if inner is not None:
+                    paths.update(collect(getattr(inner, "routes", [])))
+            return paths
+
+        paths = collect(self.coreserver.app.routes)
         self.assertIn("/api/registry/{resource_type}", paths)
         self.assertNotIn("/registry/{resource_type}", paths)
 
