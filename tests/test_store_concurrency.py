@@ -11,8 +11,10 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -70,6 +72,43 @@ class StoreConcurrencyTest(unittest.TestCase):
         with store.conn() as c:
             mode = c.execute("PRAGMA journal_mode").fetchone()[0]
         self.assertEqual(str(mode).lower(), "wal")
+
+    def test_connection_creation_is_serialized(self):
+        real_connect = store.sqlite3.connect
+        active = 0
+        peak = 0
+        guard = threading.Lock()
+        barrier = threading.Barrier(8)
+        errors: list[str] = []
+
+        def slow_connect(*args, **kwargs):
+            nonlocal active, peak
+            with guard:
+                active += 1
+                peak = max(peak, active)
+            time.sleep(0.03)
+            conn_obj = real_connect(*args, **kwargs)
+            with guard:
+                active -= 1
+            return conn_obj
+
+        def worker() -> None:
+            barrier.wait()
+            try:
+                c = store.conn()
+                c.close()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{type(exc).__name__}: {exc}")
+
+        with mock.patch.object(store.sqlite3, "connect", side_effect=slow_connect):
+            threads = [threading.Thread(target=worker) for _ in range(8)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+        self.assertEqual(errors, [])
+        self.assertEqual(peak, 1)
 
 
 if __name__ == "__main__":

@@ -50,6 +50,11 @@ DATA_DIR = DB_PATH.parent
 LOG_DIR = BASE / "logs"
 
 _lock = threading.RLock()
+# Serialize SQLite connection creation. Concurrent first opens after the last
+# WAL connection closes race on -shm recreation and one connection can be
+# classified read-only before BEGIN IMMEDIATE. Lock order is _lock -> _conn_lock;
+# no path takes _conn_lock then _lock.
+_conn_lock = threading.Lock()
 
 
 def now() -> float:
@@ -129,16 +134,17 @@ def conn():
     if DB_BACKEND == "pg":
         return _PgConnection()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    c = sqlite3.connect(DB_PATH, timeout=30, factory=_ClosingConnection)
-    c.row_factory = sqlite3.Row
-    # Do not switch journal_mode per connection. WAL is a persistent database
-    # property and concurrent PRAGMA journal_mode=WAL calls can race, leaving a
-    # connection in a read-only view before BEGIN IMMEDIATE. init_db() sets WAL
-    # once under _lock.
-    c.execute("PRAGMA foreign_keys=ON")
-    c.execute("PRAGMA busy_timeout=30000")
-    c.execute("PRAGMA synchronous=NORMAL")
-    return c
+    with _conn_lock:
+        c = sqlite3.connect(DB_PATH, timeout=30, factory=_ClosingConnection)
+        c.row_factory = sqlite3.Row
+        # Do not switch journal_mode per connection. WAL is a persistent database
+        # property and concurrent PRAGMA journal_mode=WAL calls can race, leaving a
+        # connection in a read-only view before BEGIN IMMEDIATE. init_db() sets WAL
+        # once under _lock.
+        c.execute("PRAGMA foreign_keys=ON")
+        c.execute("PRAGMA busy_timeout=30000")
+        c.execute("PRAGMA synchronous=NORMAL")
+        return c
 
 
 SCHEMA = """
