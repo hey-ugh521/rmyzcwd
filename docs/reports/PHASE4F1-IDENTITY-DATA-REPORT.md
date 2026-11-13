@@ -4,7 +4,7 @@
 - 状态：4F-1 完成并已把身份数据层部署到生产；未改变 HTTP 认证/路由授权行为
 - 设计审查：[Phase 4F 设计稿](../aegis/plans/2026-11-13-phase4f-identity-authorization.md)
 - 数据契约：[Identity Data Model Contract](../current/IDENTITY-DATA-MODEL.md)
-- 代码提交：`dbdd784`、`a94bc55`（条件验收加固）
+- 代码提交：`dbdd784`、`a94bc55`、`659bed9`（原子初始化与外键加固）
 
 ## 1. 范围
 
@@ -233,3 +233,4 @@ python -m core.identity_cli list-principals
 4F-1 到此停止。
 
 等待 4F-2（认证映射 + shadow）测试结果，再进入 4F-3 路由授权。
+
