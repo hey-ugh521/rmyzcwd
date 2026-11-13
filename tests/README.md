@@ -33,6 +33,14 @@ configuration, or a disposable PostgreSQL database:
 - M1/M3/E2E/console/gateway install and recovery suites
 - any test that starts real services or depends on local config
 
+## Important: run serially
+
+The suites still share a process-global `store.DB_PATH` while test classes swap
+temporary databases. Do **not** run them with `pytest-xdist`/parallel test
+classes in one process. `tests/run_unit.py` executes them serially; parallel
+test runners can make a worker see another test's temp DB path or a stale
+read-only database handle.
+
 ## Why the runner exists
 
 Previously test execution depended on the local shell and installed interpreter.

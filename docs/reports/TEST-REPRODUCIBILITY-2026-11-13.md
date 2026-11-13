@@ -70,6 +70,7 @@ test_qq_webhook.py: 5/5 通过
 ## 4. 仍未解决
 
 - 用户环境中的只读数据库错误未在本机复现；需要完整 traceback、Python 版本、`TEMP` 路径和测试运行方式。
+- **最可能的环境差异之一**：并行测试 runner。测试类仍共享进程级 `store.DB_PATH`；`pytest-xdist` 或并行测试方法会让一个 worker 看到另一测试的临时 DB 路径/已清理文件。`tests/run_unit.py` 是串行入口，不应并行运行。
 - CI workflow 已提交，但尚未在 GitHub Actions 实际跑绿。
 - E2E、PG contract、安装/故障注入仍未进入 CI。
 - G-10 仍保持 P1，不能宣称关闭。
