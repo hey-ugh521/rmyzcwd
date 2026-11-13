@@ -4,6 +4,7 @@
 - 状态：Phase 1 只读索引完成，等待审查；未进入 Phase 2
 - 基础：[Registry 架构契约 v2](../aegis/plans/2026-11-13-capability-registry-contract.md)
 - 上一阶段：[Phase 0.1 报告](PHASE0.1-REGISTRY-HARDENING-REPORT.md)
+- 代码提交：`41ee0f0`
 
 ## 1. 范围
 
