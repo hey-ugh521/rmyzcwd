@@ -336,6 +336,54 @@ export interface VoiceAsset {
   deleted?: number;
 }
 
+export interface CapabilityPermission {
+  id: string;
+  subject_type: "source" | "actor" | "user" | "*";
+  subject: string;
+  capability: string;
+  effect: "allow" | "deny";
+  scope_json?: string;
+  priority: number;
+  enabled: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CapabilityProvider {
+  capability: string;
+  provider: string;
+  priority: number;
+  enabled: number;
+  constraints_json?: string;
+  updated_at: number;
+}
+
+export interface CapabilityProviderHealth {
+  provider: string;
+  service?: string;
+  state: string;
+  available: boolean;
+  checked_at: number;
+  error?: string;
+}
+
+export interface CapabilityInvocation {
+  id: string;
+  capability: string;
+  actor?: string;
+  user_id?: string;
+  source?: string;
+  character_id?: string;
+  character_revision?: number | null;
+  workflow_id?: string;
+  workflow_revision?: number | null;
+  provider?: string;
+  task_id?: string;
+  status: string;
+  error?: string;
+  created_at: number;
+}
+
 export interface ChatSession {
   session_id: string;
   title?: string;

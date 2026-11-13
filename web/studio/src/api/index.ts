@@ -3,6 +3,7 @@ import type {
   ProviderInfo, ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, Character,
   ConstitutionResponse, RegistryIndex, RegistryResourceSummary, RegistryResourceDetail,
   RegistryRevisionList, RegistryResourceType, VoiceAsset,
+  CapabilityPermission, CapabilityProvider, CapabilityProviderHealth, CapabilityInvocation,
   Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
   ChatSession, ChatMessage, ChatRequest, ChatEvent,
 } from "./types";
@@ -51,6 +52,14 @@ export interface Api {
   listVoiceAssets(): Promise<{ items: VoiceAsset[] }>;
   uploadVoiceAsset(file: File, opts: { kind?: string; source?: string; consent?: string; reusePolicy?: string }): Promise<{ ok: boolean; item: VoiceAsset }>;
   deleteVoiceAsset(id: string): Promise<{ ok: boolean; item: VoiceAsset }>;
+  getCapabilityPermissions(): Promise<{ items: CapabilityPermission[]; default_allow: boolean }>;
+  saveCapabilityPermission(body: Record<string, unknown>): Promise<{ ok: boolean; item: CapabilityPermission }>;
+  deleteCapabilityPermission(id: string): Promise<{ ok: boolean }>;
+  getCapabilityProviders(): Promise<{ items: CapabilityProvider[] }>;
+  saveCapabilityProvider(body: Record<string, unknown>): Promise<{ ok: boolean; item: CapabilityProvider }>;
+  getCapabilityProviderHealth(): Promise<{ items: CapabilityProviderHealth[] }>;
+  getCapabilityInvocations(limit?: number): Promise<{ items: CapabilityInvocation[] }>;
+  getCapabilityRetention(): Promise<{ retention_days: number; max_records: number }>;
   getTasks(params?: { limit?: number; status?: string; source?: string }): Promise<{ tasks: Task[] }>;
   getTask(id: string): Promise<Task>;
   cancelTask(id: string): Promise<{ ok: boolean; task?: Task; note?: string }>;

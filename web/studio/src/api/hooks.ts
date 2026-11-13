@@ -10,6 +10,7 @@ import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
   ModelProfile, LoraInfo, VoiceInfo, WorkflowInfo, ProviderInfo, Character, ConstitutionResponse,
   RegistryIndex, RegistryResourceType, RegistryResourceSummary, RegistryResourceDetail, VoiceAsset,
+  CapabilityPermission, CapabilityProvider, CapabilityProviderHealth, CapabilityInvocation,
   ChatSession, ChatMessage, GenerateRequest, TtsRequest,
 } from "./types";
 import type { LogsResponse, HistoryItem } from "./index";
@@ -44,6 +45,11 @@ export const qk = {
   registryResources: (m: string, type: string) => [...root(m), "registry-resources", type],
   registryResource: (m: string, type: string, id: string) => [...root(m), "registry-resource", type, id],
   voiceAssets: (m: string) => [...root(m), "voice-assets"],
+  capabilityPermissions: (m: string) => [...root(m), "capability-permissions"],
+  capabilityProviders: (m: string) => [...root(m), "capability-providers"],
+  capabilityProviderHealth: (m: string) => [...root(m), "capability-provider-health"],
+  capabilityInvocations: (m: string) => [...root(m), "capability-invocations"],
+  capabilityRetention: (m: string) => [...root(m), "capability-retention"],
   tasks: (m: string) => [...root(m), "tasks"],
   task: (m: string, id: string) => [...root(m), "task", id],
   sessions: (m: string) => [...root(m), "sessions"],
@@ -298,6 +304,90 @@ export function useDeleteVoiceAsset() {
       toast.success("VoiceAsset 已软删除");
     },
     onError: (e) => toast.error("删除失败", errText(e)),
+  });
+}
+
+export function useCapabilityPermissions() {
+  const mode = useApiMode();
+  return useQuery<{ items: CapabilityPermission[]; default_allow: boolean }>({
+    queryKey: qk.capabilityPermissions(mode),
+    queryFn: () => getApi().getCapabilityPermissions(),
+    staleTime: 5000,
+  });
+}
+
+export function useSaveCapabilityPermission() {
+  const qc = useQueryClient();
+  const mode = useApiMode();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) => getApi().saveCapabilityPermission(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.capabilityPermissions(mode) });
+      toast.success("权限已保存");
+    },
+    onError: (e) => toast.error("权限保存失败", errText(e)),
+  });
+}
+
+export function useDeleteCapabilityPermission() {
+  const qc = useQueryClient();
+  const mode = useApiMode();
+  return useMutation({
+    mutationFn: (id: string) => getApi().deleteCapabilityPermission(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.capabilityPermissions(mode) });
+      toast.success("权限已删除");
+    },
+    onError: (e) => toast.error("权限删除失败", errText(e)),
+  });
+}
+
+export function useCapabilityProviders() {
+  const mode = useApiMode();
+  return useQuery<{ items: CapabilityProvider[] }>({
+    queryKey: qk.capabilityProviders(mode),
+    queryFn: () => getApi().getCapabilityProviders(),
+    staleTime: 5000,
+  });
+}
+
+export function useSaveCapabilityProvider() {
+  const qc = useQueryClient();
+  const mode = useApiMode();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) => getApi().saveCapabilityProvider(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.capabilityProviders(mode) });
+      toast.success("Provider 策略已保存");
+    },
+    onError: (e) => toast.error("Provider 保存失败", errText(e)),
+  });
+}
+
+export function useCapabilityProviderHealth() {
+  const mode = useApiMode();
+  return useQuery<{ items: CapabilityProviderHealth[] }>({
+    queryKey: qk.capabilityProviderHealth(mode),
+    queryFn: () => getApi().getCapabilityProviderHealth(),
+    staleTime: 5000,
+  });
+}
+
+export function useCapabilityInvocations(limit = 50) {
+  const mode = useApiMode();
+  return useQuery<{ items: CapabilityInvocation[] }>({
+    queryKey: qk.capabilityInvocations(mode),
+    queryFn: () => getApi().getCapabilityInvocations(limit),
+    staleTime: 5000,
+  });
+}
+
+export function useCapabilityRetention() {
+  const mode = useApiMode();
+  return useQuery<{ retention_days: number; max_records: number }>({
+    queryKey: qk.capabilityRetention(mode),
+    queryFn: () => getApi().getCapabilityRetention(),
+    staleTime: 30000,
   });
 }
 

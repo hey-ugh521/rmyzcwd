@@ -4,7 +4,7 @@ import type {
   SystemStatus, ServicesResponse, MediaConfig, MediaResources, Task,
   GenerateRequest, GenerateResponse, TtsRequest, TtsResponse, Character, ConstitutionResponse,
   RegistryIndex, RegistryResourceType, RegistryResourceDetail, RegistryRevisionList,
-  VoiceAsset,
+  VoiceAsset, CapabilityPermission, CapabilityProvider, CapabilityProviderHealth, CapabilityInvocation,
   ChatSession, ChatMessage, ChatRequest, ChatEvent,
 } from "./types";
 import { uid } from "../lib/utils";
@@ -123,6 +123,30 @@ export class LiveBackend implements Api {
     return coreFetch(`/api/registry/manage/voice-assets/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }) as Promise<{ ok: boolean; item: VoiceAsset }>;
+  }
+  async getCapabilityPermissions() {
+    return coreFetch("/api/capabilities/permissions") as Promise<{ items: CapabilityPermission[]; default_allow: boolean }>;
+  }
+  async saveCapabilityPermission(body: Record<string, unknown>) {
+    return coreFetch("/api/capabilities/permissions", { method: "POST", body: JSON.stringify(body) }) as Promise<{ ok: boolean; item: CapabilityPermission }>;
+  }
+  async deleteCapabilityPermission(id: string) {
+    return coreFetch(`/api/capabilities/permissions/${encodeURIComponent(id)}`, { method: "DELETE" }) as Promise<{ ok: boolean }>;
+  }
+  async getCapabilityProviders() {
+    return coreFetch("/api/capabilities/providers") as Promise<{ items: CapabilityProvider[] }>;
+  }
+  async saveCapabilityProvider(body: Record<string, unknown>) {
+    return coreFetch("/api/capabilities/providers", { method: "POST", body: JSON.stringify(body) }) as Promise<{ ok: boolean; item: CapabilityProvider }>;
+  }
+  async getCapabilityProviderHealth() {
+    return coreFetch("/api/capabilities/provider-health") as Promise<{ items: CapabilityProviderHealth[] }>;
+  }
+  async getCapabilityInvocations(limit = 50) {
+    return coreFetch(`/api/capabilities/invocations?limit=${limit}`) as Promise<{ items: CapabilityInvocation[] }>;
+  }
+  async getCapabilityRetention() {
+    return coreFetch("/api/capabilities/retention") as Promise<{ retention_days: number; max_records: number }>;
   }
   async getTasks(params?: { limit?: number; status?: string; source?: string }) {
     const qs = new URLSearchParams();

@@ -7,6 +7,7 @@ import { GalleryPage } from "../features/gallery/GalleryPage";
 import { CharactersPage } from "../features/characters/CharactersPage";
 import { RegistryPage } from "../features/registry/RegistryPage";
 import { RegistryManagePage } from "../features/registry/RegistryManagePage";
+import { PolicyPage } from "../features/policy/PolicyPage";
 import { ChatPage } from "../features/chat/ChatPage";
 import { SystemPage } from "../features/system/SystemPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
@@ -22,6 +23,7 @@ export function AppRoutes() {
         <Route path="characters" element={<CharactersPage />} />
         <Route path="registry" element={<RegistryPage />} />
         <Route path="registry/manage" element={<RegistryManagePage />} />
+        <Route path="policy" element={<PolicyPage />} />
         <Route path="chat" element={<ChatPage />} />
         <Route path="chat/:sessionId" element={<ChatPage />} />
         <Route path="system" element={<SystemPage />} />

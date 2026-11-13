@@ -161,8 +161,30 @@ def delete_permission(permission_id: str) -> None:
 _SUBJECT_WEIGHT = {"*": 0, "source": 1, "actor": 2, "user": 3}
 
 
+def _scope_ok(scope: dict[str, Any] | None, *, character_id: str | None,
+              source: str, user_id: str | None) -> bool:
+    if not isinstance(scope, dict) or not scope:
+        return True
+    values = {
+        "characters": character_id or "",
+        "sources": source,
+        "users": user_id or "",
+    }
+    for key, value in values.items():
+        allowed = scope.get(key)
+        if not allowed:
+            continue
+        if not isinstance(allowed, (list, tuple)):
+            return False
+        if "*" not in allowed and value not in {str(x) for x in allowed}:
+            return False
+    return True
+
+
 def decide_permission(*, capability: str, actor: str, source: str,
-                      user_id: str | None = None) -> dict[str, Any]:
+                      user_id: str | None = None,
+                      character_id: str | None = None) -> dict[str, Any]:
+    import json
     values = {"source": source, "actor": actor, "user": user_id or "", "*": "*"}
     best: tuple[int, dict[str, Any]] | None = None
     for row in permission_rows():
@@ -174,6 +196,12 @@ def decide_permission(*, capability: str, actor: str, source: str,
         if st not in _SUBJECT_WEIGHT:
             continue
         if row.get("subject") not in ("*", values.get(st, "")):
+            continue
+        try:
+            scope = json.loads(row.get("scope_json") or "{}")
+        except Exception:  # noqa: BLE001
+            scope = {}
+        if not _scope_ok(scope, character_id=character_id, source=source, user_id=user_id):
             continue
         score = _SUBJECT_WEIGHT[st] * 100
         if row.get("capability") == capability:
@@ -372,9 +400,10 @@ class CapabilityService:
                                   f"来源 {source!r} 不允许调用能力", 403)
 
     def _check_permission(self, capability: str, *, actor: str, source: str,
-                          user_id: str | None) -> None:
+                          user_id: str | None, character_id: str | None = None) -> None:
         decision = decide_permission(capability=capability, actor=actor,
-                                     source=source, user_id=user_id)
+                                     source=source, user_id=user_id,
+                                     character_id=character_id)
         if not decision["allow"]:
             store.audit(actor, "capability.denied", {
                 "capability": capability, "source": source, "user_id": user_id,
@@ -412,9 +441,10 @@ class CapabilityService:
                     idempotency_key: str = "", model: str | None = None,
                     **extra: Any) -> dict:
         self._check_source(source)
-        self._check_permission("image.generate", actor=actor, source=source, user_id=user_id)
         provider = await self.choose_healthy_provider("image.generate")
         ch = self._character(character_key, character)
+        self._check_permission("image.generate", actor=actor, source=source,
+                               user_id=user_id, character_id=ch.get("id"))
         if (ch.get("media_policy") or {}).get("allow_image") is False:
             raise CapabilityError("media_policy_denied", "角色未开放生图", 403)
         wf = self._workflow(ch, workflow_graph)
@@ -458,12 +488,13 @@ class CapabilityService:
                     user_id: str | None = None, session_id: str | None = None,
                     source: str = "core", actor: str = "agent", **extra: Any) -> dict:
         self._check_source(source)
-        self._check_permission("voice.synthesize", actor=actor, source=source, user_id=user_id)
         chosen = await self.choose_healthy_provider("voice.synthesize", requested=engine)
         provider = str(chosen.get("provider"))
         if provider in self._ENGINE_BY_PROVIDER:
             engine = self._ENGINE_BY_PROVIDER[provider]
         ch = self._character(character_key, character)
+        self._check_permission("voice.synthesize", actor=actor, source=source,
+                               user_id=user_id, character_id=ch.get("id"))
         if (ch.get("media_policy") or {}).get("allow_voice") is False:
             raise CapabilityError("media_policy_denied", "角色未开放语音", 403)
         iid = _record(capability="voice.synthesize", actor=actor, user_id=user_id,

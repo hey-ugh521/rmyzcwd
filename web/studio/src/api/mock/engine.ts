@@ -4,6 +4,7 @@ import type {
   Task, GenerateRequest, GenerateResponse, TtsRequest, TtsResponse,
   ChatSession, ChatMessage, ChatRequest, ChatEvent, Character, ConstitutionResponse, RegistryIndex,
   RegistryResourceType, RegistryResourceDetail, RegistryRevisionList,
+  CapabilityPermission, CapabilityProvider, CapabilityProviderHealth, CapabilityInvocation,
 } from "../types";
 import { ApiError } from "../client";
 import { normalizeStatus } from "../normalize";
@@ -230,6 +231,30 @@ export class MockBackend implements Api {
   async listVoiceAssets() { return { items: [] }; }
   async uploadVoiceAsset(_file: File, _opts: any) { return { ok: false, item: {} as any }; }
   async deleteVoiceAsset(_id: string) { return { ok: false, item: {} as any }; }
+  async getCapabilityPermissions(): Promise<{ items: CapabilityPermission[]; default_allow: boolean }> {
+    return { items: [], default_allow: true };
+  }
+  async saveCapabilityPermission(_body: Record<string, unknown>) { return { ok: false, item: {} as CapabilityPermission }; }
+  async deleteCapabilityPermission(_id: string) { return { ok: false }; }
+  async getCapabilityProviders(): Promise<{ items: CapabilityProvider[] }> {
+    return { items: [
+      { capability: "image.generate", provider: "comfyui", priority: 10, enabled: 1, updated_at: 0 },
+      { capability: "voice.synthesize", provider: "kokoro", priority: 20, enabled: 1, updated_at: 0 },
+      { capability: "voice.synthesize", provider: "gpt-sovits", priority: 30, enabled: 1, updated_at: 0 },
+    ] };
+  }
+  async saveCapabilityProvider(_body: Record<string, unknown>) { return { ok: false, item: {} as CapabilityProvider }; }
+  async getCapabilityProviderHealth(): Promise<{ items: CapabilityProviderHealth[] }> {
+    return { items: [
+      { provider: "comfyui", service: "comfyui", state: "ready", available: true, checked_at: Date.now() / 1000 },
+      { provider: "kokoro", service: "kokoro", state: "ready", available: true, checked_at: Date.now() / 1000 },
+      { provider: "gpt-sovits", service: "gsv", state: "ready", available: true, checked_at: Date.now() / 1000 },
+    ] };
+  }
+  async getCapabilityInvocations(_limit = 50): Promise<{ items: CapabilityInvocation[] }> {
+    return { items: [] };
+  }
+  async getCapabilityRetention() { return { retention_days: 30, max_records: 10000 }; }
   async getRegistryIndex(): Promise<RegistryIndex> {
     const chars = this.characters.map((c) => ({
       id: c.id, name: c.name || c.id, aliases: c.aliases ?? [],

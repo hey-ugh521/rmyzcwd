@@ -130,6 +130,19 @@ class CapabilityTest(unittest.TestCase):
             asyncio.run(svc.image(prompt="x", character_key="bronya", source="blocked"))
         self.assertEqual(cm.exception.code, "capability_permission_denied")
 
+    def test_permission_scope_characters(self):
+        capabilities.set_permission(subject_type="source", subject="scope-test",
+                                    capability="image.generate", effect="deny",
+                                    scope={"characters": ["bronya"]})
+        denied = capabilities.decide_permission(
+            capability="image.generate", actor="scope-test", source="scope-test",
+            character_id="bronya")
+        allowed = capabilities.decide_permission(
+            capability="image.generate", actor="scope-test", source="scope-test",
+            character_id="vita")
+        self.assertFalse(denied["allow"])
+        self.assertTrue(allowed["allow"])
+
     def test_provider_policy_routes_voice(self):
         capabilities.set_provider(capability="voice.synthesize", provider="kokoro",
                                   priority=20, enabled=False)
