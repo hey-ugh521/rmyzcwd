@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -51,6 +52,27 @@ class ShadowEvaluatorTest(unittest.TestCase):
         self.assertFalse(shadow.resolve_route("GET", "/v1/chat").covered)
         self.assertEqual(shadow.resolve_route("GET", "/api/registry/character").resource_type,
                          "character")
+
+    def test_action_follows_http_method_not_path_prefix(self):
+        maintenance_get = shadow.resolve_route("GET", "/api/capabilities/maintenance")
+        maintenance_post = shadow.resolve_route("POST", "/api/capabilities/maintenance")
+        health_post = shadow.resolve_route("POST", "/api/capabilities/provider-health")
+        self.assertEqual(maintenance_get.action, "read")
+        self.assertEqual(maintenance_post.action, "write")
+        self.assertEqual(health_post.action, "write")
+        self.assertEqual(shadow.route_decision("operator", maintenance_get.action), "allow")
+        self.assertEqual(shadow.route_decision("operator", health_post.action), "deny")
+
+    def test_capability_prefixes_are_segment_bounded(self):
+        for path in (
+            "/api/capabilities/permissions-evil",
+            "/api/capabilities/permissionsXYZ",
+            "/api/capabilities/provider-healthz",
+            "/api/capabilities/maintenancefoo",
+        ):
+            self.assertFalse(shadow.resolve_route("GET", path).covered, path)
+        self.assertFalse(shadow.resolve_route(
+            "POST", "/api/capabilities/invocations-evil").covered)
 
     def test_route_policy_role_matrix(self):
         self.assertEqual(shadow.route_decision("admin", "read"), "allow")
@@ -124,6 +146,30 @@ class ShadowEvaluatorTest(unittest.TestCase):
             effect="allow", actor="test",
         )
         self.assertNotEqual(first, shadow.policy_version())
+
+    def test_policy_db_failure_is_explicit_error_not_ready(self):
+        capabilities.set_permission(
+            subject_type="*", subject="*", capability="image.generate",
+            effect="allow", actor="test",
+        )
+        with mock.patch.object(shadow.store, "conn", side_effect=RuntimeError("db down")):
+            event = shadow.evaluate_shadow(
+                method="GET", path="/api/registry/character/x",
+                bearer_token="shadow-legacy-key", legacy_auth=self.legacy,
+            )
+        self.assertEqual(event["evaluation_state"], "error")
+        self.assertEqual(event["policy_result"], "error")
+        self.assertEqual(event["policy_state"], "unavailable")
+        self.assertIsNone(event["policy_version"])
+        self.assertEqual(event["reason"], "policy_snapshot_unavailable")
+
+    def test_normal_evaluation_marks_policy_ready(self):
+        event = shadow.evaluate_shadow(
+            method="GET", path="/api/registry/character/x",
+            bearer_token="shadow-legacy-key", legacy_auth=self.legacy,
+        )
+        self.assertEqual(event["policy_state"], "ready")
+        self.assertEqual(len(event["policy_version"]), 16)
 
     def test_management_route_without_legacy_observation_is_insufficient(self):
         event = shadow.evaluate_shadow(

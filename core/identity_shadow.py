@@ -14,7 +14,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Iterator
 
-from . import capabilities, identity, store
+from . import identity, store
+
+SUBJECT_WEIGHTS = {"*": 0, "source": 1, "actor": 2, "user": 3}
 
 SHADOW_EVENT_FIELDS = {
     "ts",
@@ -36,6 +38,7 @@ SHADOW_EVENT_FIELDS = {
     "action",
     "policy_result",
     "policy_version",
+    "policy_state",
     "reason",
     "error_class",
     "latency_ms",
@@ -63,6 +66,7 @@ CREATE TABLE IF NOT EXISTS identity_shadow_events(
   action TEXT,
   policy_result TEXT,
   policy_version TEXT,
+  policy_state TEXT,
   reason TEXT,
   error_class TEXT,
   latency_ms REAL
@@ -135,6 +139,7 @@ def record_shadow_event(**fields: Any) -> dict[str, Any]:
         "action": None,
         "policy_result": None,
         "policy_version": None,
+        "policy_state": None,
         "reason": None,
         "error_class": None,
         "latency_ms": None,
@@ -147,16 +152,16 @@ def record_shadow_event(**fields: Any) -> dict[str, Any]:
             "INSERT INTO identity_shadow_events(id,ts,request_id,method,path,"
             "route_id,route_action,resource_type,resource_id,legacy_authenticated,"
             "legacy_actor,identity_state,evaluation_state,policy_domain,principal_id,"
-            "credential_id,role,action,policy_result,policy_version,reason,error_class,"
-            "latency_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "credential_id,role,action,policy_result,policy_version,policy_state,reason,error_class,"
+            "latency_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (event_id, ts, values["request_id"], values["method"], values["path"],
              values["route_id"], values["route_action"], values["resource_type"],
              values["resource_id"], values["legacy_authenticated"],
              values["legacy_actor"], values["identity_state"], values["evaluation_state"],
              values["policy_domain"], values["principal_id"], values["credential_id"],
              values["role"], values["action"], values["policy_result"],
-             values["policy_version"], values["reason"], values["error_class"],
-             values["latency_ms"]),
+             values["policy_version"], values["policy_state"], values["reason"],
+             values["error_class"], values["latency_ms"]),
         )
         row = c.execute("SELECT * FROM identity_shadow_events WHERE id=?", (event_id,)).fetchone()
     return _row(row) or {}
@@ -252,6 +257,10 @@ def _method_action(method: str) -> str | None:
     return None
 
 
+def _under(path: str, base: str) -> bool:
+    return path == base or path.startswith(base + "/")
+
+
 def resolve_route(method: str, path: str) -> RouteContext:
     action = _method_action(method)
     p = (path or "/").split("?", 1)[0].rstrip("/") or "/"
@@ -265,19 +274,19 @@ def resolve_route(method: str, path: str) -> RouteContext:
         return RouteContext(True, route_id=f"registry.{action}", action=action,
                             resource_type=resource_type, resource_id=resource_id)
     if p.startswith("/api/capabilities"):
-        if p.startswith("/api/capabilities/invocations"):
+        if _under(p, "/api/capabilities/invocations"):
             return RouteContext(False, reason="capability_invocation_not_in_scope")
-        if p.startswith("/api/capabilities/permissions"):
+        if _under(p, "/api/capabilities/permissions"):
             return RouteContext(True, route_id=f"policy.permissions.{action}",
                                 action=action, resource_type="permission")
-        if p.startswith("/api/capabilities/provider-health"):
-            return RouteContext(True, route_id="provider.read", action="read",
+        if _under(p, "/api/capabilities/provider-health"):
+            return RouteContext(True, route_id=f"provider-health.{action}", action=action,
                                 resource_type="provider")
-        if p.startswith("/api/capabilities/providers"):
+        if _under(p, "/api/capabilities/providers"):
             return RouteContext(True, route_id=f"provider.{action}", action=action,
                                 resource_type="provider")
-        if p.startswith("/api/capabilities/maintenance"):
-            return RouteContext(True, route_id="policy.maintenance.write", action="write",
+        if _under(p, "/api/capabilities/maintenance"):
+            return RouteContext(True, route_id=f"policy.maintenance.{action}", action=action,
                                 resource_type="policy")
         return RouteContext(False, reason="capability_route_not_in_scope")
     if p == "/api/policy" or p.startswith("/api/policy/"):
@@ -287,10 +296,9 @@ def resolve_route(method: str, path: str) -> RouteContext:
 
 
 def _canonical_policy_snapshot() -> dict[str, Any]:
-    try:
-        rows = capabilities.permission_rows()
-    except Exception:  # noqa: BLE001 - schema may not exist yet
-        rows = []
+    with store.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT * FROM capability_permissions").fetchall()]
     # Stable array ordering by permission id; all fields are explicit.
     permissions = sorted(
         [{k: row.get(k) for k in sorted(row.keys())} for row in rows],
@@ -302,11 +310,7 @@ def _canonical_policy_snapshot() -> dict[str, Any]:
         "capability_policy": {
             "permissions": permissions,
             "default_allow": bool(cap_cfg.get("default_allow", True)),
-            "subject_weights": dict(sorted(
-                getattr(capabilities, "_SUBJECT_WEIGHT", {
-                    "source": 1, "actor": 2, "user": 3, "*": 0,
-                }).items()
-            )),
+            "subject_weights": dict(sorted(SUBJECT_WEIGHTS.items())),
             "scope_rule_version": "scope-v1",
         },
         "policy_schema_version": POLICY_SCHEMA_VERSION,
@@ -350,15 +354,27 @@ def evaluate_shadow(*, method: str, path: str, request_id: str | None = None,
         "route_action": route.action,
         "resource_type": route.resource_type,
         "resource_id": route.resource_id,
-        "policy_version": policy_version(),
         "policy_domain": "none",
+        "policy_version": None,
+        "policy_state": None,
         "legacy_authenticated": bool(legacy_auth and legacy_auth.authenticated),
         "legacy_actor": legacy_auth.actor if legacy_auth else None,
     }
     if not route.covered:
         event.update(identity_state=None, evaluation_state="not_evaluated",
-                     policy_result="not_evaluated", reason=route.reason)
+                     policy_result="not_evaluated", policy_state="not_required",
+                     reason=route.reason)
         return event
+    try:
+        pver = policy_version()
+    except Exception as exc:  # noqa: BLE001 - fail closed for observation
+        event.update(identity_state=None, evaluation_state="error",
+                     policy_result="error", policy_state="unavailable",
+                     reason="policy_snapshot_unavailable",
+                     error_class=type(exc).__name__)
+        return event
+    event["policy_version"] = pver
+    event["policy_state"] = "ready"
     if legacy_auth is None:
         event.update(identity_state=None, evaluation_state="insufficient_context",
                      policy_result="insufficient_context", reason="legacy_observation_missing")

@@ -35,8 +35,9 @@ python tests/check_probe_negative.py
 ```
 
 It sets `MOBIUS_PROBE_FAIL_CHILD=0` and requires
-`probe_store_multiprocess.py` to exit non-zero. This proves the regression can
-go red; it is not a success-only smoke test.
+`probe_store_multiprocess.py` to exit non-zero. It also enforces the fail-fast
+window: default `12s`, override with `MOBIUS_NEGATIVE_MAX_SECONDS`. A slow/hung
+failure is a failure, not a pass.
 
 Manual failure injection:
 
