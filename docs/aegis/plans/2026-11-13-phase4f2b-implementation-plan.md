@@ -1,7 +1,7 @@
 # Phase 4F 下一阶段计划（Draft）
 
 - 日期：2026-11-13
-- 状态：**规划中；4F-2B 未批准实现**
+- 状态：**Gate 0 条件通过；契约已修订，待确认后编码**
 - 前置：
   - [4F-2B Shadow 设计稿](2026-11-13-phase4f2b-shadow-design.md)
   - [4F-2A 报告](../reports/PHASE4F2A-LEGACY-MAPPING-REPORT.md)
@@ -35,31 +35,25 @@ Legacy Authentication（唯一放行依据）
 | CI | Windows/Ubuntu 矩阵和负向 probe step 已加，待实跑确认 |
 | G-10 | 保持打开 |
 
-## 需要先确认的 6 个决策
+## Gate 0 决策（已确认）
 
-建议默认值如下；确认后写入设计稿，不再边实现边改。
-
-1. **覆盖范围**
-   - 建议：先覆盖管理/策略/Registry 路由和能力调用入口。
-   - 其他 `/api/*` 可记录 `not_evaluated`，后续扩展。
-2. **Legacy 拒绝请求**
-   - 建议：记录 `legacy_denied`，但不做任何身份写入。
-3. **policy_version**
-   - 建议：permissions 表的 canonical hash + schema version，存 16 hex。
-4. **保留期**
-   - 建议：30 天或 10000 条，取先到；与 capability 记录策略一致。
-5. **观察范围**
-   - 建议：4F-2B 只观察 Bearer 旧 API Key；Studio cookie 留给 4F-3。
-6. **上下文不足**
-   - 建议：记录 `insufficient_context`，绝不记成 allow。
+1. **覆盖范围**：只覆盖管理、策略、Registry 路由；其他记 `not_evaluated`。
+2. **Legacy 拒绝**：记 `legacy_denied`，不创建、不映射身份。
+3. **policy_version**：覆盖全部策略输入 + schema + evaluator version。
+4. **保留期**：30 天或 10000 条，先到先清；批处理，失败隔离。
+5. **观察范围**：只观察 Bearer 旧 API Key；Studio cookie 留给 4F-3。
+6. **上下文不足**：记 `insufficient_context`，绝不推导为 allow。
+7. **权限域**：管理路由 `RoutePolicyEvaluator`；能力调用
+   `decide_permission()`；不把管理路由伪装成能力调用。
+8. **三态**：区分 `evaluated` / `not_evaluated` / `insufficient_context` / `error`。
 
 ## 架构边界
 
 新代码：
 
 ```text
-core/identity_shadow.py      观察器、action map、policy_version
-core/identity_shadow_api.py  可选：仅 4F-2C 使用，本阶段不做
+core/identity_shadow.py      观察器、Route Context Resolver、Shadow 记录
+core/route_authorization.py  RoutePolicyEvaluator、route action map
 core/server.py               中间件接线
 identity_shadow_events       新表，独立迁移
 ```
@@ -68,10 +62,12 @@ identity_shadow_events       新表，独立迁移
 
 - 不修改 Legacy Authentication 的 401/403、响应 body/header
 - 不调用任何创建身份的函数
-- 不复用第二套权限算法；直接调用 `capabilities.decide_permission()`
+- 管理路由使用 RoutePolicyEvaluator，不伪装成 capability
+- 能力调用使用 `capabilities.decide_permission()`
 - Shadow allow/deny 只写入记录
 - 记录中不出现 Key/Token/完整 hash
 - Shadow 异常不得传播到 Handler
+- `not_evaluated` 与 `insufficient_context` 分开存储
 
 ## Change Necessity
 
@@ -84,8 +80,10 @@ identity_shadow_events       新表，独立迁移
 
 - 共享核心：认证中间件、`capabilities.decide_permission()`、Registry 路由
 - 消费者：管理页面/API 响应
-- 风险：中间件顺序改变响应；Shadow 异常传播；事件表写放大；policy_version 漂移
-- 对策：Legacy auth 保持外层；Shadow 内层；响应基线对比；异常注入测试
+- 风险：中间件顺序改变响应；Shadow 异常传播；事件表写放大；
+  policy_version 漂移；管理路由与能力权限域混淆
+- 对策：Legacy auth 保持外层；Shadow 内层；响应基线对比；异常/超时注入；
+  route 与 capability 分别测试
 
 ## TDD Route
 
@@ -100,22 +98,26 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 ### 2B-1 Shadow 记录与保留
 
 - 新表 `identity_shadow_events` + 索引
-- retention 清理函数
-- 字段：request_id、method、path、legacy_authenticated、legacy_actor、
-  identity_state、principal_id、credential_id、role、action、policy_result、
-  policy_version、reason、error_class、latency_ms
-- 测试：schema 幂等、保留期、无敏感字段
+- 字段：request_id、method、path、route_id、route_action、resource_type、
+  resource_id、legacy_authenticated、legacy_actor、identity_state、
+  evaluation_state、policy_domain、principal_id、credential_id、role、action、
+  policy_result、policy_version、reason、error_class、latency_ms
+- retention 清理函数：30 天/10000 条，批次上限 500，失败隔离
+- 测试：schema 幂等、保留期、批处理、无敏感字段、事件表与审计表分离
 
-### 2B-2 观察器与权限复用
+### 2B-2 观察器与权限评估
 
-- `evaluate_shadow()`：Bearer → 4F-2A 已存在 mapping → 状态检查
-- action map：管理/策略/Registry → policy action
-- 复用 `decide_permission()`；上下文不足返回 `insufficient_context`
-- policy_version：canonical permissions hash
+- `RouteContextResolver`：route_id/action/resource/role
+- `RoutePolicyEvaluator`：角色矩阵 + route action + resource，默认拒绝
+- 能力调用才调用 `decide_permission()`；不伪装管理路由
+- Bearer → 4F-2A 已存在 mapping → 状态检查
+- policy_version：canonical policy snapshot + schema + evaluator version
+- 三态：`evaluated` / `not_evaluated` / `insufficient_context` / `error`
 - 测试：
   - unknown → `unmapped`，无身份写入
   - revoked/expired/disabled → 对应状态
-  - specificity/priority/deny-wins/scope 与 `decide_permission` 一致
+  - route policy 与 capability policy 分别验证
+  - specificity/priority/deny-wins/scope 只对 capability 路径
   - 记录无 secret
 
 ### 2B-3 中间件 Shadow 接线
@@ -123,9 +125,14 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 - Legacy auth 外层；Shadow 内层；异常全捕获
 - 增加 `identity.shadow.enabled` 开关，默认 **off**
 - 基线响应对比测试：
-  - Legacy allow + Shadow allow/deny → 响应完全一致
-  - Legacy deny + Shadow 记录 → 仍拒绝
-  - Shadow 注入异常 → 响应不变
+  - Legacy allow + Shadow allow/deny → 状态码/body/headers/cookies 完全一致
+  - Legacy deny + Shadow 记录 → 仍拒绝；不调用 Identity Mapping
+  - Shadow 写库失败 → Legacy 请求仍按原逻辑完成
+  - Shadow 超时 → Legacy 请求仍按原逻辑完成
+  - Shadow 内部异常 → 响应完全不变
+  - Shadow 关闭 → 不产生策略评估和 Shadow 写入
+  - Shadow deny 不阻断 Legacy 已放行请求
+  - 外部副作用与 baseline 一致（Shadow 自身事件表除外）
 - 不修改任何 401/403/status/headers/body
 
 ### 2B-4 证据与冻结
@@ -148,9 +155,11 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 
 - 既有 95+5 测试全绿
 - 新增 shadow 测试全绿
-- Legacy 认证响应基线完全不变
+- Legacy 认证响应状态/body/headers/cookies 基线完全不变
 - 未知 key/revoked 不写身份表
-- 每条 Shadow 记录可追溯到 policy_version
+- 管理路由走 RoutePolicyEvaluator，能力调用走 `decide_permission()`
+- `not_evaluated` 与 `insufficient_context` 分开
+- 每条 Shadow 记录可追溯到完整 policy_version
 - 无 secret 出现在表或日志
 - Windows + Ubuntu CI 实跑通过
 
@@ -163,6 +172,6 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 
 ## 执行路由
 
-- 当前：等待 6 个决策确认
+- Gate 0 契约已修订，等待用户确认
 - 确认后：inline 实现，按 2B-1 → 2B-2 → 2B-3 → 2B-4
 - 每个切片单独验证，不合并认证切换

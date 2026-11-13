@@ -1,6 +1,6 @@
 # Phase 4F-2B 设计审查稿：Identity Middleware Shadow
 
-- 状态：Draft for review；未动代码
+- 状态：**Gate 0 有条件通过；契约已按审查意见修订，待确认后编码**
 - 日期：2026-11-13
 - 前置：[4F-1 数据模型](2026-11-13-phase4f-identity-authorization.md)、[4F-2A Legacy Mapping](../reports/PHASE4F2A-LEGACY-MAPPING-REPORT.md)
 - 范围：只设计双轨认证的 Shadow 观察层；不切换认证，不改变放行结果
@@ -92,13 +92,62 @@ bearer token
 
 4F-2B 不应在请求路径中做身份写入。4F-2A 的映射必须由显式 CLI/部署步骤完成。
 
-## 5. 权限决策
+## 5. 权限域边界
 
-Shadow 复用现有权限决策，而不是重新实现：
+**Route Authorization 与 Capability Permission 不是同一个权限域。**
+
+- 管理路由：`/api/capabilities/permissions`、`/api/capabilities/providers`、
+  `/api/registry/*`、`/api/policy/*`
+- 能力调用：`/v1/...`、`/api/capabilities/invocations`
+
+主体、资源、动作和上下文不同。不能为了让管理路由复用
+`capabilities.decide_permission()`，把管理路由伪装成能力调用。
+
+```text
+Identity Shadow Observer
+  -> Route Context Resolver
+       -> Authorization Context
+            +-- Route Policy（管理路由）
+            |     -> RoutePolicyEvaluator
+            +-- Capability Policy（能力调用）
+                  -> capabilities.decide_permission()
+            -> Shadow Event
+```
+
+### 5.1 Route Context Resolver
+
+只生成上下文，不做授权：
+
+```text
+route_id
+route_action
+resource_type
+resource_id
+principal_id / role
+source
+user_id / character_id（可解析时）
+```
+
+解析不出来时返回 `insufficient_context`，不猜测。
+
+### 5.2 RoutePolicyEvaluator
+
+管理路由第一版使用**显式的 route policy**：
+
+- 角色矩阵：admin / operator / service
+- route action：read / write / manage
+- resource type：registry / policy / provider / capability
+- 默认拒绝未定义 route action
+
+它不复用 capability permission 表，也不把 route action 写成 capability 名。
+
+### 5.3 Capability Policy
+
+只有确认是能力调用路由时，才调用：
 
 ```text
 decide_permission(
-  capability=<route/action mapping>,
+  capability=<capability id>,
   actor=<legacy actor or principal id>,
   source=<request source>,
   user_id=<if available>,
@@ -106,37 +155,83 @@ decide_permission(
 )
 ```
 
-需要评估：
+保留其完整语义：specificity、exact capability、priority、deny-wins、scope。
 
-- specificity：user > actor > source > *
-- exact capability vs *
-- priority
-- deny-wins
-- scope：characters / sources / users
+### 5.4 语义适配条件
 
-### 上下文不足
+如果未来证明 `decide_permission()` 可以覆盖管理路由，必须先有：
 
-如果当前请求没有足够上下文（例如 body 中的 character 尚未解析）：
+1. 明确的 Route Action -> Capability 映射契约；
+2. semantic conformance 测试，证明同一输入决策一致；
+3. 设计稿更新，不得在实现里隐式替代 RoutePolicyEvaluator。
 
-- 记录 `insufficient_context`
-- **不把结果记为 allow**
-- 不猜测、不默认放行
+在此之前，管理路由只走 RoutePolicyEvaluator。
 
-### Action 映射
+## 5.5 三态语义
 
-4F-2B 先覆盖现有管理路由：
+必须区分：
+
+| 状态 | 含义 |
+|---|---|
+| `evaluated` | 覆盖范围内，上下文足够，已完成策略计算 |
+| `not_evaluated` | 路由不在 Shadow 覆盖范围 |
+| `insufficient_context` | 路由在覆盖范围，但缺少必要决策信息 |
+| `error` | 观察器/策略器内部异常 |
+
+`not_evaluated` 与 `insufficient_context` 不得合并；前者是覆盖缺口，后者是上下文缺口。
+
+## 5.6 Legacy 拒绝
 
 ```text
-GET  /api/capabilities/permissions     -> policy.read
-POST /api/capabilities/permissions     -> policy.write
-GET  /api/capabilities/providers       -> provider.read
-POST /api/capabilities/providers       -> provider.write
-GET  /api/capabilities/provider-health -> provider.read
-POST /api/capabilities/maintenance/*   -> policy.write
-/api/registry/*                         -> policy.read/write
+Legacy Authentication
+  +-- accepted -> Identity Mapping -> Shadow Evaluation
+  +-- denied   -> legacy_denied -> 不创建、不映射身份
 ```
 
-能力调用路由需要 body 上下文，4F-2B 可记录 `insufficient_context`，在 4F-2C 再完整评估。
+Legacy 拒绝时：
+
+- 不调用 4F-2A mapping
+- 不创建 Principal/Credential
+- 只记录 `legacy_denied`
+- Shadow 不能把未知 Key 注册成身份
+
+## 5.7 policy_version
+
+`policy_version` 必须覆盖所有影响决策的策略输入：
+
+```text
+policy_version = SHA256(
+  canonical_policy_snapshot
+  + policy_schema_version
+  + evaluator_version
+)[:16]
+```
+
+`canonical_policy_snapshot` 至少包含：
+
+- route policy 规则（角色矩阵、route action、默认拒绝）
+- capability permissions 全量规则
+- `default_allow`
+- subject weights / deny-wins / specificity 规则版本
+- scope 解释规则版本
+
+`evaluator_version`：
+
+- `route-policy-v1`
+- `capability-policy-v1`
+
+不包含：请求上下文、时间戳、随机值、用户输入。
+
+历史 Shadow 事件因此可解释：同一 policy_version 必须对应同一决策语义。
+
+## 5.8 保留与清理
+
+- 保留 30 天或 10000 条，以事件创建时间为准。
+- 清理按批次上限（建议 500 条/批），避免阻塞请求。
+- 清理失败不影响认证/请求处理。
+- 不删除其他审计表数据。
+- Shadow Event 与安全审计表分离。
+- 不保存 Authorization Header、原始 API Key、完整 Token 哈希。
 
 ## 6. Shadow 记录
 
@@ -149,9 +244,15 @@ identity_shadow_events
   request_id
   method
   path
+  route_id
+  route_action
+  resource_type
+  resource_id
   legacy_authenticated
   legacy_actor
   identity_state
+  evaluation_state
+  policy_domain          route | capability | none
   principal_id
   credential_id
   role
@@ -163,7 +264,7 @@ identity_shadow_events
   latency_ms
 ```
 
-`identity_state`：
+`identity_state`（身份解析结果）：
 
 ```text
 unmapped
@@ -175,6 +276,15 @@ resolved
 legacy_denied
 ```
 
+`evaluation_state`（是否完成策略计算）：
+
+```text
+evaluated
+not_evaluated
+insufficient_context
+error
+```
+
 `policy_result`：
 
 ```text
@@ -183,6 +293,7 @@ deny
 not_evaluated
 insufficient_context
 error
+
 ```
 
 `legacy_authenticated` 与 `policy_result` 必须分开存储，禁止合并成一个 `allowed`。
@@ -216,19 +327,23 @@ error
 
 ### 7.4 Shadow 是否复用完整权限决策算法？
 
-是。
+分权限域，不强行复用不匹配的抽象：
 
-- 直接调用 `capabilities.decide_permission()`
-- 不写第二套“简化判断”
+- 管理路由：`RoutePolicyEvaluator`，显式 route action / role / resource 规则
+- 能力调用：直接调用 `capabilities.decide_permission()`
+- 只有通过语义适配契约后，管理路由才允许复用 capability 决策
 - 若 scope/context 不足，记录 `insufficient_context`，不返回 allow
+- 不写第二套“简化判断”
 
 ### 7.5 是否记录 policy_version？
 
 是。
 
-- 建议 `policy_version = sha256(canonical(permissions rows))[:16]` 或
-  `max(permission.version)` + schema version
-- 同一条 Shadow 记录必须可解释当时使用的是哪一版权限表
+- 覆盖 route policy、capability permissions、default_allow、
+  subject weights、scope 规则、schema/evaluator version
+- 采用 `SHA256(canonical_policy_snapshot + policy_schema_version + evaluator_version)[:16]`
+- 不包含请求上下文、时间戳、随机值
+- 同一条 Shadow 记录必须可解释当时使用的是哪一版策略语义
 
 ### 7.6 Shadow 日志是否避免敏感凭证？
 
@@ -255,25 +370,33 @@ Shadow 失败分类：
 | 失败 | 行为 |
 |---|---|
 | DB 不可用 | 记录 `error`，不阻断请求 |
-| 权限表读取失败 | 记录 `error`，不阻断请求 |
+| 策略表读取失败 | 记录 `error`，不阻断请求 |
 | 身份映射缺失 | `mapping_missing`，不创建 |
+| 路由不在覆盖范围 | `not_evaluated`，不创建 |
+| 覆盖范围内上下文不足 | `insufficient_context`，不返回 allow |
 | 敏感字段异常 | 记录 error_class，不记录值 |
-| 日志写入失败 | 允许丢弃 Shadow 记录，不影响请求 |
+| Shadow 记录写入失败 | 允许丢弃记录，不影响请求 |
 
-Shadow 数据写入失败不能反向影响 Legacy。
+Shadow 数据写入失败、超时、内部异常都不能反向影响 Legacy。
 
 ## 9. 验收标准
 
-- Legacy 允许 + Shadow allow → 响应不变
-- Legacy 允许 + Shadow deny → 响应不变
-- Legacy 拒绝 + Shadow 记录 → 响应仍拒绝
+- Legacy 允许 + Shadow allow → 响应状态/body/headers/cookies 不变
+- Legacy 允许 + Shadow deny → **不阻断**，响应不变
+- Legacy 拒绝 + Shadow 记录 → 仍拒绝；不调用 Identity Mapping
+- Shadow 关闭 → 不产生策略评估和 Shadow 数据库写入
+- Shadow 写库失败 → Legacy 请求仍按原逻辑完成
+- Shadow 超时 → Legacy 请求仍按原逻辑完成
+- Shadow 内部异常 → 状态码、body、关键 Header、Cookie 不变
 - 未知 key → `unmapped`，身份表无新增
-- revoked credential → `revoked`，不复活
-- mapping 缺失 → `mapping_missing`，不创建
-- Shadow 注入异常 → 响应完全不变
-- specificity/priority/deny-wins/scope 结果与 `decide_permission` 一致
-- 每条记录有 `policy_version`
+- revoked/expired/disabled → 对应状态，不复活
+- 管理路由 → `RoutePolicyEvaluator`，不伪装成 capability
+- capability 路径 → `decide_permission()`
+- `not_evaluated` 与 `insufficient_context` 不混用
+- 每条记录有覆盖全部策略输入的 `policy_version`
 - 日志/记录无明文 Key、Token、完整哈希
+- Shadow deny 不影响 Legacy 已放行请求
+- 外部副作用与 baseline 一致（除 Shadow 自身事件表写入）
 
 ## 10. 不进入 4F-2B
 
@@ -284,13 +407,18 @@ Shadow 数据写入失败不能反向影响 Legacy。
 - 缓存/多进程撤销传播
 - Shadow 记录 UI
 
-## 11. 需要确认的决策
+## 11. Gate 0 决策状态
 
-1. Shadow 是否覆盖全部 `/api/*`，还是只覆盖管理路由？
-2. Legacy 拒绝的请求是否也记录 `legacy_denied`？
-3. `policy_version` 采用权限表 hash 还是最大 version？
-4. Shadow 事件保留期（建议 30 天 / 与 capability 记录一致）。
-5. 4F-2B 是否只观察 Bearer 旧 API Key，不观察 Studio cookie？
-6. 是否允许 Shadow 因 body 上下文不足而只记录 `insufficient_context`？
+已按审查意见确认：
 
-以上确认后进入 4F-2B 实现。
+1. Shadow 第一版只覆盖管理、策略、Registry 路由；其他记 `not_evaluated`。
+2. Legacy 拒绝记 `legacy_denied`，不创建、不映射身份。
+3. `policy_version` 覆盖全部策略输入 + schema + evaluator version。
+4. 保留 30 天或 10000 条，先到先清；批处理，失败隔离，不混审计表。
+5. 4F-2B 只观察 Bearer 旧 API Key，Studio cookie 留给 4F-3。
+6. 上下文不足记 `insufficient_context`，不能推导为 allow。
+7. 管理路由使用 RoutePolicyEvaluator；能力调用使用 `decide_permission()`；
+   不把管理路由伪装成能力调用。
+8. 区分 `evaluated` / `not_evaluated` / `insufficient_context` / `error`。
+
+以上契约确认后进入 4F-2B 实现。
