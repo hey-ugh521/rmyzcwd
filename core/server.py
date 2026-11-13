@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from . import store
 from .agent import Agent
 from .qq_adapter import QQAdapter
-from .capabilities import init_schema as init_capability_schema
+from .capabilities import init_schema as init_capability_schema, prune_invocations
 from .capabilities_api import router as capabilities_router
 from .registry import RegistryError, init_schema as init_registry_schema
 from .registry_api import registry_error_handler, router as registry_router
@@ -157,6 +157,10 @@ async def lifespan(_: FastAPI):
     store.audit("core", "core.start", {"port": CORE.get("port")})
     init_registry_schema()
     init_capability_schema()
+    try:
+        prune_invocations()
+    except Exception:  # noqa: BLE001 - retention must not block startup
+        pass
     task = asyncio.create_task(sup.idle_loop())
     converge = asyncio.create_task(_task_convergence_loop())
     # 网关是轻进程（不占显存）：无论什么媒体模式都随 Core 起来，

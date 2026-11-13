@@ -113,6 +113,41 @@ class CapabilityTest(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertEqual(capabilities.list_invocations()[0]["capability"], "voice.synthesize")
 
+    def test_permission_table_denies(self):
+        capabilities.set_permission(subject_type="source", subject="blocked",
+                                    capability="image.generate", effect="deny")
+        svc = capabilities.CapabilityService(self.gateway)
+        import asyncio
+        with self.assertRaises(capabilities.CapabilityError) as cm:
+            asyncio.run(svc.image(prompt="x", character_key="bronya", source="blocked"))
+        self.assertEqual(cm.exception.code, "capability_permission_denied")
+
+    def test_provider_policy_routes_voice(self):
+        capabilities.set_provider(capability="voice.synthesize", provider="kokoro",
+                                  priority=20, enabled=False)
+        ch = registry_runtime.character("bronya")
+        svc = capabilities.CapabilityService(self.gateway)
+        import asyncio
+        out = asyncio.run(svc.voice(text="hi", voice="zf_xiaobei", engine="kokoro",
+                                     character=ch, source="test", actor="test"))
+        self.assertTrue(out["ok"])
+        self.assertIn("gpt-sovits", self.gateway.tts.call_args.kwargs["engine"])
+
+    def test_retention_prune(self):
+        import time
+        with __import__("contextlib").closing(store.conn()) as c:
+            c.execute(
+                "INSERT INTO capability_invocations(id,capability,actor,user_id,session_id,source,"
+                "character_id,character_revision,workflow_id,workflow_revision,provider,task_id,"
+                "status,error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("old", "image.generate", "t", None, None, "t", "bronya", 1, None, None,
+                 "comfyui", None, "accepted", "", time.time() - 40 * 86400, time.time()),
+            )
+            c.commit()
+        result = capabilities.prune_invocations(retention_days=30, max_records=10)
+        self.assertGreaterEqual(result["deleted_by_age"], 1)
+        self.assertFalse(any(x["id"] == "old" for x in capabilities.list_invocations()))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
