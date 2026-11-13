@@ -254,6 +254,23 @@ Only API Prompt JSON is accepted. UI Workflow JSON is rejected with an explicit
 error. High-risk node classes are reported as warnings; execution is still not
 available in Phase 2A.
 
+## Capability execution (Phase 4A)
+
+```text
+GET /api/capabilities
+GET /api/capabilities/invocations?limit=50
+```
+
+Agent media tools enter through `CapabilityService`:
+
+- resolve published character/workflow
+- enforce `media_policy` and optional `capabilities.allowed_sources`
+- route to Gateway
+- record `capability_invocations` with character/workflow revision, provider, task id
+
+Gateway remains the execution adapter; direct Gateway `/api/*` is an operator
+surface, not the Agent capability path.
+
 ## Runtime read contract
 
 `RegistryService.resolve(type, id)` returns a `ResolvedResource` pointing at

@@ -30,6 +30,7 @@
 - `ADR-010` Registry 生命周期
 - `ADR-011` Control Plane / Execution Plane 边界
 - `ADR-012` Registry Runtime 迁移状态与旧读关闭
+- `ADR-013` 统一能力调用边界
 
 ## 计划与设计
 
@@ -37,7 +38,7 @@
 
 - `2026-11-12-core-qq-adapter.md`：QQ adapter B1
 - `2026-11-13-capability-registry-contract.md`：Registry 架构契约 v2
-- 阶段报告：[Phase 0](reports/PHASE0-REGISTRY-REPORT.md)、[Phase 0.1](reports/PHASE0.1-REGISTRY-HARDENING-REPORT.md)、[Phase 1](reports/PHASE1-REGISTRY-READONLY-REPORT.md)、[Phase 2A](reports/PHASE2A-REGISTRY-MANAGEMENT-REPORT.md)、[Phase 2C](reports/PHASE2C-WORKFLOW-VOICE-FORM-REPORT.md)、[Phase 3A](reports/PHASE3A-RUNTIME-RESOLVER-REPORT.md)、[Phase 3B](reports/PHASE3B-MIGRATION-LEGACY-CLOSE-REPORT.md)、[Live hot update](reports/REGISTRY-LIVE-HOTUPDATE-REPORT.md)
+- 阶段报告：[Phase 0](reports/PHASE0-REGISTRY-REPORT.md)、[Phase 0.1](reports/PHASE0.1-REGISTRY-HARDENING-REPORT.md)、[Phase 1](reports/PHASE1-REGISTRY-READONLY-REPORT.md)、[Phase 2A](reports/PHASE2A-REGISTRY-MANAGEMENT-REPORT.md)、[Phase 2C](reports/PHASE2C-WORKFLOW-VOICE-FORM-REPORT.md)、[Phase 3A](reports/PHASE3A-RUNTIME-RESOLVER-REPORT.md)、[Phase 3B](reports/PHASE3B-MIGRATION-LEGACY-CLOSE-REPORT.md)、[Phase 4A](reports/PHASE4A-CAPABILITY-INVOCATION-REPORT.md)、[Live hot update](reports/REGISTRY-LIVE-HOTUPDATE-REPORT.md)
 - 已取代的 v1 设计在 [`archive/aegis/`](archive/aegis/)
 
 ## 报告
