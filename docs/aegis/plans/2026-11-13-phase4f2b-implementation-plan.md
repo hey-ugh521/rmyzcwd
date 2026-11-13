@@ -110,7 +110,7 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
 - 测试：schema 幂等、保留期、批处理、无敏感字段、事件表与审计表分离
 - 报告：[PHASE4F2B1-SHADOW-EVENT-REPORT.md](../reports/PHASE4F2B1-SHADOW-EVENT-REPORT.md)
 
-### 2B-2 观察器与权限评估
+### 2B-2 观察器与权限评估（已完成）
 
 - `RouteContextResolver`：route_id/action/resource/role
 - `RoutePolicyEvaluator`：角色矩阵 + route action + resource，默认拒绝
@@ -126,6 +126,7 @@ Reason: 用户未要求 strict TDD；但安全/权限切片仍必须有回归测
   - 管理路由 route policy 与 capability 路径 `not_evaluated`
   - 不调用 `decide_permission()`（能力首版未接线）
   - 记录无 secret
+- 报告：[PHASE4F2B2-SHADOW-EVALUATOR-REPORT.md](../reports/PHASE4F2B2-SHADOW-EVALUATOR-REPORT.md)
 
 ### 2B-3 中间件 Shadow 接线
 

@@ -45,6 +45,7 @@
 - 设计审查：[Phase 4F-2B Identity Shadow](aegis/plans/2026-11-13-phase4f2b-shadow-design.md)
 - 下一阶段计划：[Phase 4F 下一阶段计划](aegis/plans/2026-11-13-phase4f2b-implementation-plan.md)
 - 2B-1 报告：[Shadow Event 数据模型](reports/PHASE4F2B1-SHADOW-EVENT-REPORT.md)
+- 2B-2 报告：[Shadow 观察器与 RoutePolicyEvaluator](reports/PHASE4F2B2-SHADOW-EVALUATOR-REPORT.md)
 - 测试可复现性：[3.13 复跑报告](reports/TEST-REPRODUCIBILITY-2026-11-13.md)- 阶段报告：[Phase 0](reports/PHASE0-REGISTRY-REPORT.md)、[Phase 0.1](reports/PHASE0.1-REGISTRY-HARDENING-REPORT.md)、[Phase 1](reports/PHASE1-REGISTRY-READONLY-REPORT.md)、[Phase 2A](reports/PHASE2A-REGISTRY-MANAGEMENT-REPORT.md)、[Phase 2C](reports/PHASE2C-WORKFLOW-VOICE-FORM-REPORT.md)、[Phase 3A](reports/PHASE3A-RUNTIME-RESOLVER-REPORT.md)、[Phase 3B](reports/PHASE3B-MIGRATION-LEGACY-CLOSE-REPORT.md)、[Phase 4A](reports/PHASE4A-CAPABILITY-INVOCATION-REPORT.md)、[Phase 4B](reports/PHASE4B-CAPABILITY-POLICY-REPORT.md)、[Phase 4C](reports/PHASE4C-PROVIDER-HEALTH-REPORT.md)、[Phase 4D](reports/PHASE4D-POLICY-STUDIO-SCOPE-REPORT.md)、[Phase 4E](reports/PHASE4E-POLICY-VALIDATION-REPORT.md)、[Phase 4F-1](reports/PHASE4F1-IDENTITY-DATA-REPORT.md)、[Phase 4F-2A](reports/PHASE4F2A-LEGACY-MAPPING-REPORT.md)、[Live hot update](reports/REGISTRY-LIVE-HOTUPDATE-REPORT.md)
 - 已取代的 v1 设计在 [`archive/aegis/`](archive/aegis/)
 
