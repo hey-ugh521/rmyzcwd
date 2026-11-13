@@ -75,3 +75,16 @@ backups/security/
 
 # 隐私画像（本地留存，仅移出仓库跟踪）
 config/account_profiles.json
+
+# 通用开发/测试缓存
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# 本机备份（含安全备份）
+backups/
+
+# Studio 构建产物（子目录也有规则，这里显式声明）
+web/studio/dist/
