@@ -195,6 +195,7 @@ POST /api/registry/manage/characters/import   {"card": {...}, "id": "optional"}
 POST /api/registry/manage/workflows/validate  {"payload": {...}, "live_check": true}
 POST /api/registry/manage/workflows/import    {"payload": {...}, "id": "optional", "name": "optional"}
 GET  /api/registry/manage/comfyui/nodes
+GET  /api/registry/manage/runtime/status
 POST /api/registry/manage/workflows/{id}/test
 GET  /api/registry/manage/voice-assets
 POST /api/registry/manage/voice-assets          multipart: file, kind, source, consent, reuse_policy
@@ -210,6 +211,10 @@ publish or change the resource. The Gateway retains its normal `/api` auth.
 `registry.voice_assets_dir`), enforces allowed extensions and a 25MB limit,
 records checksum/provenance/reuse policy, and soft-deletes metadata. It does not
 delete the stored file.
+
+`runtime/status` reports `off|shadow|enforce`; in `enforce` only resources with a
+published revision are used by Agent, and unpublished resources fall back to
+legacy files.
 
 `live_check` fetches ComfyUI `/object_info`; if ComfyUI is down the validation
 returns `dependencies.status = "unchecked"` instead of pretending nodes exist.

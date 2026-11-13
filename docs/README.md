@@ -36,7 +36,7 @@
 
 - `2026-11-12-core-qq-adapter.md`：QQ adapter B1
 - `2026-11-13-capability-registry-contract.md`：Registry 架构契约 v2
-- 阶段报告：[Phase 0](reports/PHASE0-REGISTRY-REPORT.md)、[Phase 0.1](reports/PHASE0.1-REGISTRY-HARDENING-REPORT.md)、[Phase 1](reports/PHASE1-REGISTRY-READONLY-REPORT.md)、[Phase 2A](reports/PHASE2A-REGISTRY-MANAGEMENT-REPORT.md)、[Phase 2C](reports/PHASE2C-WORKFLOW-VOICE-FORM-REPORT.md)、[Live hot update](reports/REGISTRY-LIVE-HOTUPDATE-REPORT.md)
+- 阶段报告：[Phase 0](reports/PHASE0-REGISTRY-REPORT.md)、[Phase 0.1](reports/PHASE0.1-REGISTRY-HARDENING-REPORT.md)、[Phase 1](reports/PHASE1-REGISTRY-READONLY-REPORT.md)、[Phase 2A](reports/PHASE2A-REGISTRY-MANAGEMENT-REPORT.md)、[Phase 2C](reports/PHASE2C-WORKFLOW-VOICE-FORM-REPORT.md)、[Phase 3A](reports/PHASE3A-RUNTIME-RESOLVER-REPORT.md)、[Live hot update](reports/REGISTRY-LIVE-HOTUPDATE-REPORT.md)
 - 已取代的 v1 设计在 [`archive/aegis/`](archive/aegis/)
 
 ## 报告
