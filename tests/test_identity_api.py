@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -13,9 +15,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("CORE_DB_BACKEND", "sqlite")
 
+import httpx  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from core import capabilities, identity, identity_shadow as shadow, store  # noqa: E402
+from core import capabilities, identity, identity_api, identity_shadow as shadow, store  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
 
 
 class IdentityMeTest(unittest.TestCase):
@@ -142,6 +146,97 @@ class IdentityMeTest(unittest.TestCase):
         r = self.get(headers={"Authorization": "Bearer identity-me-key"})
         self.assertEqual(r.status_code, 401)
         self.assertEqual(r.headers.get("www-authenticate"), "Bearer")
+
+    def test_trailing_newline_rejected(self):
+        for raw in (b"Bearer identity-me-key\n", b"Bearer identity-me-key\r\n"):
+            request = SimpleNamespace(scope={"headers": [(b"authorization", raw)]})
+            self.assertIsNone(identity_api._parse_bearer(request), raw)
+
+    def test_slow_db_does_not_block_event_loop(self):
+        original = identity.inspect_legacy_api_key
+
+        def slow(*args, **kwargs):
+            time.sleep(0.8)
+            return original(*args, **kwargs)
+
+        async def scenario():
+            transport = httpx.ASGITransport(app=self.coreserver.app)
+            async with httpx.AsyncClient(transport=transport,
+                                         base_url="http://testserver") as client:
+                slow_task = asyncio.create_task(client.get(
+                    "/api/identity/me",
+                    headers={"Authorization": "Bearer identity-me-key"},
+                ))
+                await asyncio.sleep(0.05)
+                started = time.monotonic()
+                fast = await client.get(
+                    "/api/capabilities/permissions",
+                    headers={"Authorization": "Bearer identity-me-key"},
+                )
+                elapsed = time.monotonic() - started
+                slow_response = await slow_task
+                return slow_response.status_code, fast.status_code, elapsed
+
+        with mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow):
+            slow_status, fast_status, elapsed = asyncio.run(scenario())
+        self.assertEqual(slow_status, 200)
+        self.assertEqual(fast_status, 200)
+        self.assertLess(elapsed, 0.4)
+
+    def test_timeout_returns_500(self):
+        original = identity.inspect_legacy_api_key
+
+        def slow(*args, **kwargs):
+            time.sleep(0.3)
+            return original(*args, **kwargs)
+
+        with mock.patch.object(identity_api, "IDENTITY_ME_TIMEOUT_SECONDS", 0.05), \
+                mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow):
+            r = self.get(headers={"Authorization": "Bearer identity-me-key"})
+            time.sleep(0.35)
+        self.assertEqual(r.status_code, 500)
+        self.assertNotIn("www-authenticate", r.headers)
+        self.assertEqual(r.headers.get("cache-control"), "no-store")
+
+    def test_expired_mapping_is_401(self):
+        with store.conn() as c:
+            c.execute("UPDATE credentials SET expires_at=0 WHERE id=?", (self.credential_id,))
+            c.commit()
+        self.assertEqual(
+            self.get(headers={"Authorization": "Bearer identity-me-key"}).status_code,
+            401,
+        )
+
+    def test_disabled_principal_is_401(self):
+        identity.disable_principal("service-legacy")
+        self.assertEqual(
+            self.get(headers={"Authorization": "Bearer identity-me-key"}).status_code,
+            401,
+        )
+
+    def test_missing_mapping_is_401(self):
+        with store.conn() as c:
+            c.execute("DELETE FROM credentials WHERE id=?", (self.credential_id,))
+            c.commit()
+        self.assertEqual(
+            self.get(headers={"Authorization": "Bearer identity-me-key"}).status_code,
+            401,
+        )
+
+    def test_invalid_request_id_generates_server_id(self):
+        request = SimpleNamespace(scope={"headers": [(b"x-request-id", b"bad id")]})
+        self.assertRegex(identity_api._request_id(request), r"^[0-9a-f]{32}$")
+
+    def test_shadow_enabled_does_not_change_endpoint(self):
+        store.CFG["identity"] = {"shadow": {"enabled": True}}
+        try:
+            r = self.get(headers={"Authorization": "Bearer identity-me-key"})
+            self.assertEqual(r.status_code, 200)
+            time.sleep(0.1)
+            events = shadow.list_shadow_events()
+            self.assertTrue(all(e["path"] == "/api/identity/me" for e in events))
+        finally:
+            store.CFG.pop("identity", None)
 
     def test_read_only_snapshot(self):
         before = None

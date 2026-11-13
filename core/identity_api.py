@@ -6,6 +6,7 @@ currently configured legacy Bearer key to an existing Principal only.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import re
@@ -13,14 +14,21 @@ import uuid
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from . import identity
 
 router = APIRouter()
 log = logging.getLogger("mobius.identity_api")
 
-_SCHEME_RE = re.compile(r"^([!#$%&'*+\-.^_`|~0-9A-Za-z]+) +(.*)$")
+IDENTITY_ME_TIMEOUT_SECONDS = 5.0
+_SCHEME_RE = re.compile(r"([!#$%&'*+\-.^_`|~0-9A-Za-z]+) +(\S+)")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+
+
+class _Unavailable(Exception):
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
 
 
 def _raw_header_values(request: Request, name: bytes) -> list[bytes]:
@@ -40,13 +48,11 @@ def _parse_bearer(request: Request) -> str | None:
         raw = values[0].decode("latin-1")
     except Exception:  # noqa: BLE001
         return None
-    m = _SCHEME_RE.match(raw)
+    m = _SCHEME_RE.fullmatch(raw)
     if not m:
         return None
     scheme, token = m.group(1), m.group(2)
     if scheme.lower() != "bearer" or not token:
-        return None
-    if any(c.isspace() for c in token):
         return None
     return token
 
@@ -78,6 +84,19 @@ def _unavailable() -> JSONResponse:
     return _response(500, {"ok": False, "error": "identity_unavailable"})
 
 
+def _resolve_identity(token: str) -> dict:
+    """Synchronous read-only resolution; runs in the Starlette threadpool."""
+    configured = identity.configured_legacy_key()
+    if not configured:
+        raise _Unavailable("configuration_unavailable")
+    if not hmac.compare_digest(token.encode("utf-8"), configured.encode("utf-8")):
+        return {"state": "unauthenticated"}
+    state = identity.inspect_legacy_api_key(token)
+    if identity.configured_legacy_key() != configured:
+        raise _Unavailable("configuration_changed")
+    return state
+
+
 @router.get("/api/identity/me")
 async def identity_me(request: Request) -> JSONResponse:
     request_id = _request_id(request)
@@ -85,37 +104,35 @@ async def identity_me(request: Request) -> JSONResponse:
     if not token:
         return _unauthorized()
     try:
-        configured = identity.configured_legacy_key()
-        if not configured:
-            log.warning("identity.me configuration_unavailable request_id=%s", request_id)
-            return _unavailable()
-        if not hmac.compare_digest(token.encode("utf-8"), configured.encode("utf-8")):
-            return _unauthorized()
-
-        state = identity.inspect_legacy_api_key(token)
-
-        if identity.configured_legacy_key() != configured:
-            log.warning("identity.me configuration_changed request_id=%s", request_id)
-            return _unavailable()
-
-        status = str(state.get("state") or "")
-        if status == "resolved":
-            principal = state.get("principal") or {}
-            return _response(200, {
-                "ok": True,
-                "identity_mode": "legacy",
-                "principal": {
-                    "id": principal.get("id"),
-                    "kind": principal.get("kind"),
-                    "role": principal.get("role"),
-                },
-            })
-        if status in {"unmapped", "mapping_missing", "conflict", "revoked",
-                      "expired", "principal_disabled"}:
-            return _unauthorized()
-        log.warning("identity.me unknown_state request_id=%s", request_id)
+        state = await asyncio.wait_for(
+            run_in_threadpool(_resolve_identity, token),
+            timeout=IDENTITY_ME_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        log.warning("identity.me timeout request_id=%s", request_id)
+        return _unavailable()
+    except _Unavailable as exc:
+        log.warning("identity.me %s request_id=%s", exc.reason, request_id)
         return _unavailable()
     except Exception as exc:  # noqa: BLE001 - never expose exception text
         log.warning("identity.me unavailable error_class=%s request_id=%s",
                     type(exc).__name__, request_id)
         return _unavailable()
+
+    status = str(state.get("state") or "")
+    if status == "resolved":
+        principal = state.get("principal") or {}
+        return _response(200, {
+            "ok": True,
+            "identity_mode": "legacy",
+            "principal": {
+                "id": principal.get("id"),
+                "kind": principal.get("kind"),
+                "role": principal.get("role"),
+            },
+        })
+    if status in {"unauthenticated", "unmapped", "mapping_missing", "conflict",
+                  "revoked", "expired", "principal_disabled"}:
+        return _unauthorized()
+    log.warning("identity.me unknown_state request_id=%s", request_id)
+    return _unavailable()
