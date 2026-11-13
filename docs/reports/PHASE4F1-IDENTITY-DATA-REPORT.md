@@ -128,6 +128,27 @@ Audit -> Principal: 无级联
 - 轮换后删除旧 Credential，新凭证 rotated_from 变为 NULL
 - `init_schema()` 可重复执行，不自动创建 admin
 
+## 4.3 Bootstrap 初始化原子性
+
+- Bootstrap 的 admin 检查、Principal 创建、Token 创建、审计写入合并为单一事务。
+- SQLite 使用 `BEGIN IMMEDIATE`。
+- PostgreSQL 使用 `pg_advisory_xact_lock`，避免空查询无法锁行的问题。
+- 审计在 token 创建阶段失败时，Principal 和 Token 一起回滚。
+- `recover_admin(create_new=True)` 使用同样的原子创建原则。
+- 测试：
+  - 两个线程同时 `bootstrap_admin()` → 1 admin / 1 token
+  - SQLite trigger 阻断 `identity.bootstrap.create` → 0 admin / 0 token
+
+## 4.4 全局 SQLite 外键与 kind-role
+
+- `store.conn()` 现在统一执行 `PRAGMA foreign_keys=ON`，不再依赖测试或 Identity 模块手动开启。
+- Credential kind 收紧为 `api_key | service_token`；Bootstrap/Recovery 只属于 `bootstrap_tokens.purpose`。
+- kind-role 合法组合：
+  - human: admin/operator
+  - machine: service
+  - local: admin/operator
+- Admin Session 认证和 CSRF 校验都会重新检查 `role=admin`。
+
 ## 5. 验收结果
 
 | 验收 | 结果 |
@@ -146,6 +167,12 @@ Audit -> Principal: 无级联
 | Token 哈希落库 | 通过 |
 | 过期 token 无法消费 | 通过 |
 | 并发消费单赢家 | Bootstrap 与 Recovery 均通过（两线程） |
+| Bootstrap 初始化并发 | 两个线程只有一个成功，最终 1 admin / 1 token |
+| Bootstrap 审计失败回滚 | trigger 阻断后 0 admin / 0 token |
+| 全局 SQLite FK | `store.conn()` 自动开启，无需手动 PRAGMA |
+| Credential kind / token purpose 分离 | `api_key/service_token` vs `bootstrap/recovery` |
+| kind-role 组合 | machine admin 被拒绝 |
+| Admin Session role 复查 | 角色改为 operator 后 session/CSRF 均失败 |
 | 禁用 admin 恢复 | Recovery token 消费后重新启用原 Principal，旧凭证/会话仍失效 |
 | 真实 DB 审计回滚 | SQLite trigger 阻断 audit 后凭证写入回滚 |
 | FK 删除策略 | Principal RESTRICT，rotated_from SET NULL 通过 |
@@ -158,7 +185,7 @@ Audit -> Principal: 无级联
 
 | 项目 | 结果 |
 |---|---|
-| `test_identity.py` | 16/16 |
+| `test_identity.py` | 21/21 |
 | `test_capabilities.py` | 16/16 |
 | `test_registry_core_auth.py` | 8/8 |
 | `test_registry_migration.py` | 6/6 |

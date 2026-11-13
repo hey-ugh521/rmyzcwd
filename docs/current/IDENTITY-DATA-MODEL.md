@@ -21,6 +21,16 @@ principals
 约束：
 
 - v1 一个 Principal 只有一个静态 Role。
+- kind-role 组合受约束：
+
+| kind | 允许 role |
+|---|---|
+| human | admin / operator |
+| machine | service |
+| local | admin / operator |
+
+机器身份默认不能成为 admin；如未来需要，必须作为显式设计新增 kind 或策略，而不是两个字段独立校验的副作用。
+
 - Principal 禁用后：
   - 所有 Credential 立即不可认证；
   - 所有 Admin Session 立即不可认证；
@@ -33,8 +43,8 @@ principals
 credentials
   id
   principal_id
-  kind           api_key | service_token | admin_bootstrap | recovery
-  lookup_prefix  8 hex，用于查找
+  kind           api_key | service_token
+  lookup_prefix  16 hex（64 bit），用于查找
   secret_hash    salted sha256（高熵随机 token；人类密码另行 scrypt/argon2）
   hash_algo      sha256-v1
   expires_at
@@ -71,6 +81,7 @@ admin_sessions
 - Session token 只存哈希。
 - CSRF 采用服务端同步器：DB 存 `csrf_hash`，登录时 CSRF 明文只下发一次，客户端用于提交。
 - 只有启用的 admin Principal 可以创建管理会话。
+- 认证管理会话时必须重新检查 Principal 的 `enabled` 和 `role=admin`；CSRF 校验同样要求 session 仍对应有效 admin。
 - 过期/撤销/Principal 禁用后失效。
 
 ## 4. Bootstrap / Recovery Token
@@ -93,6 +104,11 @@ bootstrap_tokens
 - 一次性消费；并发消费只能一个成功。
 - Token 只显示一次，只存哈希。
 - bootstrap：首次创建 admin principal 并生成 token；只要存在任何 admin（含禁用）就拒绝。
+- bootstrap 的“检查 admin、创建 Principal、创建 Token、写审计”必须在**同一个事务**中：
+  - SQLite 使用 `BEGIN IMMEDIATE`
+  - PostgreSQL 使用事务级 advisory lock
+  - 并发初始化只能有一个成功
+  - token 创建阶段审计失败必须回滚 Principal 和 Token
 - recovery：为现有 admin 生成 token；默认恢复原 Principal，CLI 可显式 `--create-new`。
 - recovery token 消费时重新启用目标 admin，但**不恢复旧 Credential/Session**。
 - Token 消费状态持久化；重启 Core 不会重置。
@@ -108,7 +124,7 @@ bootstrap_tokens
 | Admin Session → Principal | RESTRICT |
 | Bootstrap Token → Principal | RESTRICT |
 | Credential.rotated_from → Credential | SET NULL |
-| Audit → Principal | 无级联；审计归因保留 |
+| Audit → Principal | 逻辑归因；4F-1 不建立物理外键，不级联删除 |
 
 理由：
 
