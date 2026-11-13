@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -72,6 +73,7 @@ class RegistryManageTest(unittest.TestCase):
         }
         report = registry_manage.validate_workflow(valid)
         self.assertEqual(report["status"], "valid", report)
+        self.assertEqual(report["dependencies"]["status"], "unchecked")
         bad = {
             "1": {"class_type": "KSampler", "inputs": {"steps": 999}},
             "2": {"class_type": "SaveImage", "inputs": {}},
@@ -82,6 +84,20 @@ class RegistryManageTest(unittest.TestCase):
         ui = registry_manage.validate_workflow({"nodes": [], "links": []})
         self.assertEqual(ui["format"], "ui_workflow")
         self.assertEqual(ui["status"], "invalid")
+
+    def test_dependency_validation(self):
+        payload = {
+            "1": {"class_type": "KSampler", "inputs": {"steps": 20}},
+            "2": {"class_type": "SaveImage", "inputs": {}},
+        }
+        ok = registry_manage.validate_workflow(
+            payload, object_info={"KSampler": {}, "SaveImage": {}})
+        self.assertEqual(ok["status"], "valid")
+        self.assertEqual(ok["dependencies"]["status"], "ok")
+        missing = registry_manage.validate_workflow(
+            payload, object_info={"SaveImage": {}})
+        self.assertEqual(missing["status"], "invalid")
+        self.assertEqual(missing["dependencies"]["missing_nodes"], ["KSampler"])
 
     def test_legacy_import_is_draft_and_idempotent(self):
         result = registry_manage.import_legacy(self.svc)
@@ -132,6 +148,14 @@ class RegistryManageTest(unittest.TestCase):
                    json={"payload": {"1": {"class_type": "SaveImage", "inputs": {}}}})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["validation"]["status"], "valid")
+        with mock.patch.object(registry_manage, "object_info",
+                               return_value={"SaveImage": {}}):
+            r = c.post("/api/registry/manage/workflows/validate",
+                       json={"payload": {"1": {"class_type": "KSampler", "inputs": {}},
+                                         "2": {"class_type": "SaveImage", "inputs": {}}},
+                             "live_check": True})
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertEqual(r.json()["validation"]["dependencies"]["missing_nodes"], ["KSampler"])
 
 
 if __name__ == "__main__":

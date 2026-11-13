@@ -45,7 +45,7 @@ export interface Api {
   publishRegistryResource(type: RegistryResourceType, id: string, revision: number, expectedCurrent: number, expectedPublished: number | null): Promise<RegistryResourceDetail>;
   importLegacyRegistry(): Promise<Record<string, unknown>>;
   importRegistryCharacter(card: Record<string, unknown>, id?: string): Promise<Record<string, unknown>>;
-  validateRegistryWorkflow(payload: Record<string, unknown>): Promise<Record<string, unknown>>;
+  validateRegistryWorkflow(payload: Record<string, unknown>, liveCheck?: boolean): Promise<Record<string, unknown>>;
   importRegistryWorkflow(payload: Record<string, unknown>, id?: string, name?: string): Promise<Record<string, unknown>>;
   getTasks(params?: { limit?: number; status?: string; source?: string }): Promise<{ tasks: Task[] }>;
   getTask(id: string): Promise<Task>;

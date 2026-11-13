@@ -89,9 +89,9 @@ export class LiveBackend implements Api {
       method: "POST", body: JSON.stringify({ card, id }),
     }) as Promise<Record<string, unknown>>;
   }
-  async validateRegistryWorkflow(payload: Record<string, unknown>) {
+  async validateRegistryWorkflow(payload: Record<string, unknown>, liveCheck = false) {
     return coreFetch("/api/registry/manage/workflows/validate", {
-      method: "POST", body: JSON.stringify({ payload }),
+      method: "POST", body: JSON.stringify({ payload, live_check: liveCheck }),
     }) as Promise<Record<string, unknown>>;
   }
   async importRegistryWorkflow(payload: Record<string, unknown>, id?: string, name?: string) {

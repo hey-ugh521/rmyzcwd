@@ -46,7 +46,21 @@ async def import_character(request: Request, body: dict[str, Any] = Body(...)):
 @router.post("/workflows/validate")
 async def validate_workflow(body: dict[str, Any] = Body(...)):
     payload = _workflow_payload(body)
-    return {"ok": True, "validation": registry_manage.validate_workflow(payload)}
+    info = registry_manage.object_info() if body.get("live_check") else None
+    validation = registry_manage.validate_workflow(payload, object_info=info)
+    validation["live_checked"] = info is not None
+    validation["comfyui_url"] = registry_manage.comfyui_url()
+    return {"ok": True, "validation": validation}
+
+
+@router.get("/comfyui/nodes")
+async def comfyui_nodes():
+    info = registry_manage.object_info()
+    return {
+        "ok": info is not None,
+        "url": registry_manage.comfyui_url(),
+        "node_count": len(info) if info else 0,
+    }
 
 
 @router.post("/workflows/import")

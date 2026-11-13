@@ -192,9 +192,14 @@ not publish and do not switch Runtime.
 ```text
 POST /api/registry/manage/import/legacy
 POST /api/registry/manage/characters/import   {"card": {...}, "id": "optional"}
-POST /api/registry/manage/workflows/validate  {"payload": {...}}
+POST /api/registry/manage/workflows/validate  {"payload": {...}, "live_check": true}
 POST /api/registry/manage/workflows/import    {"payload": {...}, "id": "optional", "name": "optional"}
+GET  /api/registry/manage/comfyui/nodes
 ```
+
+`live_check` fetches ComfyUI `/object_info`; if ComfyUI is down the validation
+returns `dependencies.status = "unchecked"` instead of pretending nodes exist.
+If a node class is missing, validation becomes `invalid`.
 
 `workflows/validate` returns:
 

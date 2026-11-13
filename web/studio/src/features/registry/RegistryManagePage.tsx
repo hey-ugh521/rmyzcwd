@@ -70,7 +70,7 @@ export function RegistryManagePage() {
     setBusy(true);
     try {
       const payload = JSON.parse(await file.text());
-      const report = await getApi().validateRegistryWorkflow(payload) as any;
+      const report = await getApi().validateRegistryWorkflow(payload, true) as any;
       const validation = report?.validation ?? report;
       if (validation?.status !== "valid") {
         const errors = validation?.errors?.join("；") || "验证失败";

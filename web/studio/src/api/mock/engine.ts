@@ -222,7 +222,7 @@ export class MockBackend implements Api {
   }
   async importLegacyRegistry() { return { ok: true, mocked: true }; }
   async importRegistryCharacter() { return { ok: true, mocked: true }; }
-  async validateRegistryWorkflow(_payload: Record<string, unknown>) {
+  async validateRegistryWorkflow(_payload: Record<string, unknown>, _liveCheck = false) {
     return { ok: true, validation: { status: "invalid", errors: ["演示模式不执行工作流验证"] } };
   }
   async importRegistryWorkflow() { return { ok: true, mocked: true }; }

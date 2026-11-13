@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from typing import Any
+
+import httpx
 
 from . import registry_index
 from .registry import RegistryError, RegistryService
@@ -29,6 +32,23 @@ HIGH_RISK_NODES = re.compile(
     re.IGNORECASE,
 )
 OUTPUT_NODES = {"SaveImage", "PreviewImage", "SaveAnimatedWEBP", "SaveAnimatedPNG"}
+COMFYUI_DEFAULT_URL = "http://127.0.0.1:8188"
+
+
+def comfyui_url() -> str:
+    return os.environ.get("MOBIUS_COMFYUI_URL", COMFYUI_DEFAULT_URL).rstrip("/")
+
+
+def object_info(timeout: float = 5.0) -> dict[str, Any] | None:
+    """Fetch ComfyUI /object_info; None means ComfyUI is unavailable."""
+    try:
+        r = httpx.get(f"{comfyui_url()}/object_info", timeout=timeout)
+        if r.status_code >= 400:
+            return None
+        data = r.json()
+        return data if isinstance(data, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _slug(text: str) -> str:
@@ -142,23 +162,29 @@ def _workflow_payload(item: dict[str, Any], validation: dict[str, Any]) -> dict[
     }
 
 
-def validate_workflow(payload: Any) -> dict[str, Any]:
+def validate_workflow(payload: Any, *, object_info: dict[str, Any] | None = None) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
     parameters: list[dict[str, Any]] = []
     requirements: dict[str, Any] = {"node_classes": [], "high_risk_nodes": []}
+    dependencies: dict[str, Any] = {
+        "status": "unchecked", "missing_nodes": [], "available_node_count": None,
+        "source": "comfyui_object_info" if object_info is not None else "not_checked",
+    }
     if not isinstance(payload, dict):
         return {"format": "unknown", "status": "invalid", "errors": ["payload 必须是 JSON object"],
-                "warnings": [], "parameters": [], "requirements": requirements, "node_count": 0}
+                "warnings": [], "parameters": [], "requirements": requirements,
+                "dependencies": dependencies, "node_count": 0}
     if isinstance(payload.get("nodes"), list):
         return {"format": "ui_workflow", "status": "invalid",
                 "errors": ["Phase 2 只支持 ComfyUI API Prompt JSON（{node_id: {class_type, inputs}}）；请导出 API format"],
                 "warnings": [], "parameters": [], "requirements": requirements,
-                "node_count": len(payload["nodes"])}
+                "dependencies": dependencies, "node_count": len(payload["nodes"])}
     nodes = {str(k): v for k, v in payload.items() if isinstance(v, dict) and v.get("class_type")}
     if not nodes:
         return {"format": "unknown", "status": "invalid", "errors": ["未找到带 class_type 的节点"],
-                "warnings": [], "parameters": [], "requirements": requirements, "node_count": 0}
+                "warnings": [], "parameters": [], "requirements": requirements,
+                "dependencies": dependencies, "node_count": 0}
 
     classes: set[str] = set()
     outputs: set[str] = set()
@@ -209,6 +235,16 @@ def validate_workflow(payload: Any) -> dict[str, Any]:
 
     if not outputs:
         errors.append("未找到输出节点（SaveImage / PreviewImage）")
+    if object_info is not None:
+        available = set(object_info.keys())
+        missing = sorted(classes - available)
+        dependencies.update({
+            "status": "missing" if missing else "ok",
+            "missing_nodes": missing,
+            "available_node_count": len(available),
+        })
+        if missing:
+            errors.append("ComfyUI 缺少节点: " + ", ".join(missing))
     requirements["node_classes"] = sorted(classes)
     status = "invalid" if errors else "valid"
     return {
@@ -216,6 +252,7 @@ def validate_workflow(payload: Any) -> dict[str, Any]:
         "status": status,
         "errors": errors,
         "warnings": warnings,
+        "dependencies": dependencies,
         "parameters": parameters,
         "requirements": requirements,
         "node_count": len(nodes),
