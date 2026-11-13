@@ -333,6 +333,12 @@ def policy_version() -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
+def shadow_enabled() -> bool:
+    identity_cfg = store.CFG.get("identity") or {}
+    shadow_cfg = identity_cfg.get("shadow") or {}
+    return bool(shadow_cfg.get("enabled", False))
+
+
 def route_decision(role: str, action: str) -> str:
     return "allow" if action in ROUTE_POLICY.get(role, ()) else "deny"
 

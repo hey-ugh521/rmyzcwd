@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -31,6 +32,7 @@ from .agent import Agent
 from .qq_adapter import QQAdapter
 from .capabilities import init_schema as init_capability_schema, prune_invocations
 from .identity import init_schema as init_identity_schema
+from . import identity_shadow as shadow
 from .identity_shadow import init_schema as init_shadow_schema, prune_shadow_events
 from .capabilities_api import router as capabilities_router
 from .registry import RegistryError, init_schema as init_registry_schema
@@ -89,6 +91,22 @@ def _local_cookie_ok(request: Request) -> bool:
     )
 
 
+def _bearer_value(request: Request) -> str | None:
+    auth = request.headers.get("authorization", "")
+    scheme, _, credential = auth.partition(" ")
+    return credential if scheme.lower() == "bearer" and credential else None
+
+
+def _set_legacy_auth(request: Request, authenticated: bool, actor: str | None,
+                     reason: str) -> None:
+    # Read-only observation for Shadow; never used by auth_mw to decide.
+    request.state.legacy_auth = {
+        "authenticated": bool(authenticated),
+        "actor": actor,
+        "reason": reason,
+    }
+
+
 @app.middleware("http")
 async def auth_mw(request: Request, call_next):
     """M3a 本机边界：
@@ -100,23 +118,33 @@ async def auth_mw(request: Request, call_next):
     host = request.client.host if request.client else ""
     if path.rstrip("/") in ("/console", "/studio") and host not in LOOPBACK:
         # 不允许网络客户端打开本机控制面（否则同源 cookie 会泄露 API key）
+        _set_legacy_auth(request, False, None, "denied")
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     if path.startswith("/v1") or path.startswith("/api"):
         if host in LOOPBACK:
             if API_KEY and request.method.upper() in MUTATING_METHODS:
                 if not (_bearer_ok(request) or _local_cookie_ok(request)):
+                    _set_legacy_auth(request, False, None, "denied")
                     return JSONResponse({"error": "unauthorized",
                                          "hint": "本机变更接口需要 Authorization: Bearer <api_key> 或 /studio 同源会话"},
                                         status_code=401)
             if API_KEY and request.method.upper() in MUTATING_METHODS:
                 actor = "api-key" if _bearer_ok(request) else "local-session"
+                authenticated = True
             else:
                 actor = "local-read"
+                authenticated = False
         else:
             if not _bearer_ok(request):
+                _set_legacy_auth(request, False, None, "denied")
                 return JSONResponse({"error": "unauthorized"}, status_code=401)
             actor = "remote-api"
+            authenticated = True
+        _set_legacy_auth(request, authenticated, actor,
+                         "accepted" if authenticated else "anonymous")
         request.state.actor = actor
+    else:
+        _set_legacy_auth(request, False, None, "not_applicable")
     response = await call_next(request)
     # Console/Studio 首屏下发 HttpOnly + SameSite=Strict cookie，供同源 fetch 自动携带；
     # 跨站页面无法读取该 cookie，普通跨站表单也不会在 SameSite=Strict 下携带。
@@ -124,6 +152,84 @@ async def auth_mw(request: Request, call_next):
         response.set_cookie(
             LOCAL_TOKEN_COOKIE, API_KEY, httponly=True, samesite="strict", path="/"
         )
+    return response
+
+
+SHADOW_TIMEOUT_SECONDS = 0.25
+
+
+def _shadow_observe(method: str, path: str, bearer: str | None,
+                    legacy: dict[str, Any] | None, request_id: str | None) -> None:
+    observation = None
+    if legacy:
+        observation = shadow.LegacyAuthObservation(
+            authenticated=bool(legacy.get("authenticated")),
+            actor=legacy.get("actor"),
+            reason=str(legacy.get("reason") or "not_applicable"),
+        )
+    event = shadow.evaluate_shadow(
+        method=method, path=path, bearer_token=bearer,
+        legacy_auth=observation, request_id=request_id,
+    )
+    shadow.record_shadow_event(**event)
+
+
+async def _run_shadow_observe(method: str, path: str, bearer: str | None,
+                              legacy: dict[str, Any] | None,
+                              request_id: str | None) -> None:
+    """Run the synchronous observation on a daemon thread with a hard deadline.
+
+    asyncio.to_thread cannot cancel a running thread; wait_for would wait for
+    the executor future's cancellation. A daemon thread plus a future lets the
+    response return immediately even if the shadow DB call is stuck.
+    """
+    loop = asyncio.get_running_loop()
+    done = loop.create_future()
+
+    def worker() -> None:
+        try:
+            _shadow_observe(method, path, bearer, legacy, request_id)
+        except Exception:  # noqa: BLE001 - observation only
+            pass
+        finally:
+            try:
+                loop.call_soon_threadsafe(
+                    lambda: done.done() or done.set_result(None)
+                )
+            except RuntimeError:
+                pass
+
+    threading.Thread(target=worker, name="shadow-observer", daemon=True).start()
+    try:
+        await asyncio.wait_for(done, timeout=SHADOW_TIMEOUT_SECONDS)
+    except Exception:  # noqa: BLE001 - timeout/error must not affect response
+        pass
+
+
+@app.middleware("http")
+async def shadow_mw(request: Request, call_next):
+    """Outer observer: Legacy auth remains the only authority.
+
+    This middleware runs after the inner auth_mw (outer in the stack because it
+    is registered later) and only reads its result. It must never short-circuit,
+    mutate, or replace the response.
+    """
+    response = await call_next(request)
+    try:
+        if not shadow.shadow_enabled():
+            return response
+        path = request.url.path
+        if not (path.startswith("/api") or path.startswith("/v1")):
+            return response
+        legacy = getattr(request.state, "legacy_auth", None)
+        request_id = request.headers.get("x-request-id")
+        await _run_shadow_observe(
+            request.method, path, _bearer_value(request),
+            dict(legacy) if legacy else None,
+            str(request_id)[:128] if request_id else None,
+        )
+    except Exception:  # noqa: BLE001 - observation must not affect the request
+        pass
     return response
 
 

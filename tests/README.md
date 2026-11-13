@@ -24,6 +24,7 @@ Included suites:
 - registry index
 - store concurrency (including connection-creation serialization)
 - store multiprocess startup
+- identity shadow middleware
 - QQ webhook
 
 ## Negative-path check

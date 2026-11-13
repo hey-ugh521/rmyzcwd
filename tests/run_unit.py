@@ -27,6 +27,7 @@ UNIT_SUITES = [
     "tests.test_identity",
     "tests.test_identity_shadow",
     "tests.test_identity_shadow_eval",
+    "tests.test_identity_shadow_middleware",
     "tests.test_capabilities",
     "tests.test_registry_core_auth",
     "tests.test_registry_migration",
