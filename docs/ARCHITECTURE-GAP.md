@@ -34,7 +34,7 @@
 | G-07 | **legacy Docker/boot/watchdog 仍在仓库与安装包**：与原生 Supervisor 双保活；Docker 口径冲突 | P0 | AS-IS §6；D2 | legacy 文件删除、iss 不再打包、计划任务清理；Core Supervisor 唯一监管 |
 | G-08 | **热补丁/上游变更不可复现**：LangBot 原生补丁、容器内补丁、升级后丢失 | P1 | `ops/patches/`、STATUS §8；ADR-006 引用 watchdog | 补丁可版本化/自动检测/重放/失败回滚；或改用正式接口 |
 | G-09 | **文档口径冲突**：README 写 Docker/on_demand/SQLite；STATUS/ACCEPTANCE 记录 prewarm/PG/QQ 断开；用户无法判断现状 | P0 | README L59/L69；STATUS L100/L164/L170；AS-IS §8 | README 只写"用户当前可用"；STATUS 只写现状/已知问题；ARCHITECTURE 只写冻结契约；三者交叉引用并 CI 检查关键默认值 |
-| G-10 | **测试分层不足**：E2E 依赖真实环境；缺契约/故障注入/安装测试；`public_url` 依赖本机 config | P1 | 2026-11-09 审查；tests/ 现状 | 单元/契约/集成/E2E/故障注入/安装测试分层；CI 可跑单元+契约；干净环境跑 E2E |
+| G-10 | **测试分层不足**：E2E 依赖真实环境；缺契约/故障注入/安装测试；`public_url` 依赖本机 config | P1 | 2026-11-09 审查；tests/ 现状；2026-11-13 可移植 unit runner/CI workflow 已加，E2E/契约/安装仍手跑 | 单元/契约/集成/E2E/故障注入/安装测试分层；CI 可跑单元+契约；干净环境跑 E2E |
 | G-11 | **安全残余**：回环免鉴权 + body 自报 user_id；`/mcp` 开放（ADR-006）；密钥仍有明文副本；卸载不清敏感文件 | P1 | AS-IS §7；ADR-006；SECURITY-INCIDENT | 管理/任务接口分级或本机 token；明文副本收口；卸载策略明确；安全验收清单实测 |
 | G-12 | **版本/兼容矩阵缺失**：Möbius、第三方组件、工作流、模型版本未分开记录 | P1 | PRODUCT-BOUNDARY §7 | Release 附版本矩阵；安装器/Integration Manager 记录并校验 |
 | G-13 | **任务恢复语义不完整**：取消即终态、迟到产物/unknown 恢复、bootstrap/outbox 重试边界未闭环 | P1 | 2026-11-09 审查；STATUS §8/§15 | 任务状态机 + 恢复/取消/重复回调测试通过 |
