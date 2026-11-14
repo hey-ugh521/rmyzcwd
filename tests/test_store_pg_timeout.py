@@ -69,9 +69,13 @@ class PgTimeoutTest(unittest.TestCase):
     def test_cfg_int_zero_and_invalid(self):
         with mock.patch.dict(os.environ, {"TEST_TIMEOUT": "0"}):
             self.assertEqual(store._cfg_int("TEST_TIMEOUT", "x", 5), 0)
-        with mock.patch.dict(os.environ, {"TEST_TIMEOUT": "2.7"}):
+        with mock.patch.dict(os.environ, {"TEST_TIMEOUT": "2"}):
             self.assertEqual(store._cfg_int("TEST_TIMEOUT", "x", 5), 2)
-        with mock.patch.dict(os.environ, {"TEST_TIMEOUT": "abc"}):
+        for bad in ("2.7", "-1", "inf", "abc", ""):
+            with mock.patch.dict(os.environ, {"TEST_TIMEOUT": bad}):
+                self.assertEqual(
+                    store._cfg_int("TEST_TIMEOUT", "x", 5), 5, bad)
+        with mock.patch.dict(os.environ, {"TEST_TIMEOUT": "True"}):
             self.assertEqual(store._cfg_int("TEST_TIMEOUT", "x", 5), 5)
 
 

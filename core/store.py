@@ -53,12 +53,20 @@ def _cfg_int(env_name: str, cfg_key: str, default: int) -> int:
     raw = os.environ.get(env_name)
     if raw is None:
         raw = CFG.get(cfg_key)
-    if raw is None:
+    if raw is None or isinstance(raw, bool):
         return default
-    try:
-        return int(float(raw))
-    except (TypeError, ValueError):
+    if isinstance(raw, int):
+        value = raw
+    elif isinstance(raw, str):
+        try:
+            value = int(raw.strip(), 10)
+        except (TypeError, ValueError, OverflowError):
+            return default
+    else:
         return default
+    if value < 0:
+        return default
+    return value
 
 
 # Bound TCP/auth wait for new PG connections; 0 disables (DSN value still applies).
