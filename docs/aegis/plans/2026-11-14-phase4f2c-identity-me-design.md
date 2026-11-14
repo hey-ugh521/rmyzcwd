@@ -260,13 +260,14 @@ HTTP 细节：
 
 - endpoint 的 Bearer 解析和配置快速检查在事件循环内完成
 - 同步 DB 调用通过 AnyIO `to_thread.run_sync` 执行，不能直接在 `async def` 中阻塞事件循环
-- 每请求事件循环使用 `CapacityLimiter(4)` 限制**等待中的 identity 解析并发**
-- 默认 5s 超时；超时返回 500 `identity_unavailable`
-- 超时后 `CapacityLimiter` token 会释放，后台 worker 仍继续运行；
-  limiter **不限制 OS 线程数量**，不能据此声称线程池风险已关闭
-- 线程池容量、超时后 worker 回收、PG `connect_timeout`/`statement_timeout`
-  与监控见 [4F-2C 后续问题](2026-11-14-phase4f2c-followups.md)；
-  PG timeout 仍是部署前置条件
+- 每个事件循环使用 `asyncio.Semaphore(4)` 槽位；槽位由 worker **完成后释放**，
+  请求超时不会释放槽位
+- 默认 5s 总超时；超时返回 500 `identity_unavailable`
+- 超时后已启动 worker 可继续运行，但最多 N 个；等待槽位的请求在超时后直接
+  500，不创建新 worker
+- PG 新连接默认 `connect_timeout=5`（`CORE_DB_CONNECT_TIMEOUT` 可覆盖）
+- `statement_timeout`、worker 回收、监控与长稳仍见
+  [4F-2C 后续问题](2026-11-14-phase4f2c-followups.md)；部署前必须确认
 - 回归测试必须验证慢 DB 不拖慢同一事件循环上的其他请求
 
 ## 8. D4：与 Legacy 隔离
