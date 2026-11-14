@@ -1,7 +1,7 @@
 # 4F-2C 后续问题：线程池与超时资源语义
 
 - 日期：2026-11-14
-- 状态：**本地采用有界槽位 + PG connect/identity statement timeout；未部署；worker 回收/监控/长稳仍待处理**
+- 状态：**本地已有有界槽位 + statement timeout + 进程内指标/回收测试；未部署；外部指标/长稳仍待处理**
 - 来源：4F-2C 独立复审
 - 部署门禁：[4F-2C 前置清单 §E](2026-11-14-phase4f2c-preflight.md)
 - 原则：不在 4F-2C 实现中顺手修改冻结行为；需单独审批
@@ -42,12 +42,15 @@
   - 槽位由 worker 完成后释放，请求超时**不释放**
 - [x] endpoint 并发/等待上限
   - 最多 4 个 DB worker；其余请求等待槽位并受总超时约束
-- [ ] 超时 worker 主动回收/背压
-  - 当前靠“不释放槽位”阻止新 worker 累积；没有主动 kill/回收
+- [x] 超时 worker 的槽位回收
+  - worker finally 释放槽位；statement_timeout 确保 DB 调用退出
   - 超时后 worker 异常现在会记录 error_class
-- [ ] 指标/告警
-  - 当前只有 timeout/异常结构化日志，无指标导出
-- [ ] 长稳/故障注入测试
+  - [ ] 强制 kill/主动背压：Python 线程不可安全 kill，仍无强制回收
+- [x] 进程内指标/结构化日志
+  - `stats_snapshot()` 统计请求/成功/超时/后台异常/active/max_active
+  - [ ] 外部指标导出与告警仍缺
+- [x] 本地槽位恢复/后台异常回归测试
+  - [ ] 生产长稳/故障注入仍缺
 
 ## 3.1 本地已实现
 
@@ -59,7 +62,10 @@
 - `asyncio.shield(task)` 避免响应超时取消 worker
 - 总超时 5s；超时返回 500
 - `slot_timeout` / `db_timeout` 分别记录
-- 超时后 worker 异常记录 `error_class`，不再静默
+- 超时后 worker 异常记录 `error_class`
+- `stats_snapshot()` 进程内指标：请求、成功、401、500、两类超时、
+  后台异常、active/max_active worker
+- 超时后的槽位恢复与后台异常已有回归测试
 
 `core/store.py`：
 
@@ -76,7 +82,7 @@
 
 ```text
 limit=1
-6 个并发超时请求
+6 个错开时序超时请求（每 10ms 一个）
 DB sleep 0.4s > timeout 0.05s
 结果：全部 500，started=1
 ```
@@ -87,9 +93,9 @@ DB sleep 0.4s > timeout 0.05s
 
 ## 3.3 仍未解决
 
-- 超时 worker 主动回收/背压（当前只是限制新 worker）
-- 指标/告警
-- 长稳与故障注入
+- 强制 kill/主动背压（线程不可安全 kill；只能限制新 worker）
+- 外部指标导出与告警
+- 生产长稳与故障注入
 - 生产部署验证
 - 当前版本不得视为资源风险已完全关闭
 

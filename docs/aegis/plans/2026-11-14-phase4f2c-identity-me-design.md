@@ -267,7 +267,8 @@ HTTP 细节：
   500，不创建新 worker
 - PG 新连接默认 `connect_timeout=5`（`CORE_DB_CONNECT_TIMEOUT` 可覆盖）
 - identity worker 默认 `statement_timeout=5000ms`；全局默认 0
-- `statement_timeout` worker 回收、监控与长稳仍见
+- 进程内 `stats_snapshot()` 记录请求/成功/超时/后台异常/active/max_active
+- `statement_timeout` worker 回收、外部指标与长稳仍见
   [4F-2C 后续问题](2026-11-14-phase4f2c-followups.md)；部署前必须确认
 - 回归测试必须验证慢 DB 不拖慢同一事件循环上的其他请求
 
