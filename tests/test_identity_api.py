@@ -242,11 +242,14 @@ class IdentityMeTest(unittest.TestCase):
             transport = httpx.ASGITransport(app=self.coreserver.app)
             async with httpx.AsyncClient(transport=transport,
                                          base_url="http://testserver") as client:
-                responses = await asyncio.gather(*[
-                    client.get("/api/identity/me",
-                               headers={"Authorization": "Bearer identity-me-key"})
-                    for _ in range(6)
-                ])
+                tasks = []
+                for _ in range(6):
+                    tasks.append(asyncio.create_task(client.get(
+                        "/api/identity/me",
+                        headers={"Authorization": "Bearer identity-me-key"},
+                    )))
+                    await asyncio.sleep(0.01)
+                responses = await asyncio.gather(*tasks)
                 return [r.status_code for r in responses]
 
         with mock.patch.object(identity_api, "IDENTITY_ME_MAX_CONCURRENCY", 1), \

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import types
 import unittest
@@ -10,6 +11,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+os.environ.setdefault("CORE_DB_BACKEND", "sqlite")
 
 from core import store  # noqa: E402
 
