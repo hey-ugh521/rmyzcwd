@@ -47,9 +47,25 @@ DB_PATH = (BASE / CFG.get("db", "data/mobius.db")).resolve()
 # 阶段 3：存储后端可切换（sqlite 默认；pg 走 PostgreSQL）
 DB_BACKEND = str(os.environ.get("CORE_DB_BACKEND") or CFG.get("db_backend") or "sqlite").lower()
 PG_DSN = str(os.environ.get("CORE_DB_DSN") or CFG.get("db_dsn") or "")
+
+
+def _cfg_int(env_name: str, cfg_key: str, default: int) -> int:
+    raw = os.environ.get(env_name)
+    if raw is None:
+        raw = CFG.get(cfg_key)
+    if raw is None:
+        return default
+    try:
+        return int(float(raw))
+    except (TypeError, ValueError):
+        return default
+
+
 # Bound TCP/auth wait for new PG connections; 0 disables (DSN value still applies).
-PG_CONNECT_TIMEOUT = int(float(os.environ.get("CORE_DB_CONNECT_TIMEOUT")
-                               or CFG.get("db_connect_timeout") or 5))
+PG_CONNECT_TIMEOUT = _cfg_int("CORE_DB_CONNECT_TIMEOUT", "db_connect_timeout", 5)
+# Global statement timeout; 0 disables. Identity path overrides this per query.
+PG_STATEMENT_TIMEOUT_MS = _cfg_int(
+    "CORE_DB_STATEMENT_TIMEOUT_MS", "db_statement_timeout_ms", 0)
 CHARS_DIR = (BASE / CFG.get("characters_dir", "data/characters")).resolve()
 DATA_DIR = DB_PATH.parent
 LOG_DIR = BASE / "logs"
@@ -64,6 +80,31 @@ _conn_lock = threading.Lock()
 # another thread/process cannot delete shared memory between concurrent opens.
 _anchor: sqlite3.Connection | None = None
 _anchor_key: tuple[str, str] | None = None
+
+_pg_tls = threading.local()
+
+
+@contextmanager
+def pg_timeouts(*, connect_timeout: int | None = None,
+                statement_timeout_ms: int | None = None):
+    """Per-thread PG timeout override; used by identity query workers."""
+    old = {}
+    for key, value in (("connect_timeout", connect_timeout),
+                       ("statement_timeout_ms", statement_timeout_ms)):
+        old[key] = getattr(_pg_tls, key, None)
+        if value is not None:
+            setattr(_pg_tls, key, int(value))
+    try:
+        yield
+    finally:
+        for key, value in old.items():
+            if value is None:
+                try:
+                    delattr(_pg_tls, key)
+                except AttributeError:
+                    pass
+            else:
+                setattr(_pg_tls, key, value)
 
 
 def now() -> float:
@@ -84,8 +125,13 @@ class _PgConnection:
         if not PG_DSN:
             raise RuntimeError("CORE_DB_BACKEND=pg 但缺少 CORE_DB_DSN/db_dsn")
         kwargs = {"row_factory": dict_row, "autocommit": False}
-        if PG_CONNECT_TIMEOUT > 0:
-            kwargs["connect_timeout"] = PG_CONNECT_TIMEOUT
+        connect_timeout = getattr(_pg_tls, "connect_timeout", PG_CONNECT_TIMEOUT)
+        statement_ms = getattr(_pg_tls, "statement_timeout_ms",
+                               PG_STATEMENT_TIMEOUT_MS)
+        if connect_timeout and int(connect_timeout) > 0:
+            kwargs["connect_timeout"] = int(connect_timeout)
+        if statement_ms and int(statement_ms) > 0:
+            kwargs["options"] = f"-c statement_timeout={int(statement_ms)}"
         self._c = psycopg.connect(PG_DSN, **kwargs)
 
     @staticmethod

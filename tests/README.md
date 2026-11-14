@@ -24,6 +24,7 @@ Included suites:
 - registry index
 - store concurrency (including connection-creation serialization)
 - store multiprocess startup
+- store PG connection/statement timeout contract
 - identity shadow middleware
 - identity API `/api/identity/me`
 - QQ webhook

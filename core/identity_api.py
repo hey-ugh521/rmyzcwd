@@ -17,13 +17,14 @@ from anyio.to_thread import run_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from . import identity
+from . import identity, store
 
 router = APIRouter()
 log = logging.getLogger("mobius.identity_api")
 
 IDENTITY_ME_TIMEOUT_SECONDS = 5.0
 IDENTITY_ME_MAX_CONCURRENCY = 4
+IDENTITY_DB_STATEMENT_TIMEOUT_MS = 5000
 _IDENTITY_SEMAPHORES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _SCHEME_RE = re.compile(r"([!#$%&'*+\-.^_`|~0-9A-Za-z]+) +(\S+)")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
@@ -55,7 +56,9 @@ def _resolve_with_slot(token: str, loop: asyncio.AbstractEventLoop,
     """Run one DB resolution while holding a slot until it truly completes."""
     state["started"] = True
     try:
-        return _resolve_identity(token)
+        with store.pg_timeouts(
+                statement_timeout_ms=IDENTITY_DB_STATEMENT_TIMEOUT_MS):
+            return _resolve_identity(token)
     finally:
         _release_slot(loop, sem)
 
@@ -64,8 +67,12 @@ def _consume_task(task: asyncio.Task, loop: asyncio.AbstractEventLoop,
                   sem: asyncio.Semaphore, state: dict) -> None:
     if not state.get("started"):
         _release_slot(loop, sem)
-    if not task.cancelled():
-        task.exception()
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if state.get("timed_out") and exc is not None:
+        log.warning("identity.me background_error error_class=%s",
+                    type(exc).__name__)
 
 
 async def _run_identity(token: str) -> dict:
@@ -89,6 +96,7 @@ async def _run_identity(token: str) -> dict:
             timeout=max(0.001, deadline - loop.time()),
         )
     except asyncio.TimeoutError as exc:
+        state["timed_out"] = True
         raise _IdentityTimeout("db_timeout") from exc
 
 
