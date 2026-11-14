@@ -89,7 +89,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 
 ## 6. 测试
 
-`tests/test_identity_api.py`：23/23
+`tests/test_identity_api.py`：25/25
 
 覆盖：
 
@@ -109,11 +109,14 @@ endpoint 契约，也不要求修改 `auth_mw`。
 - endpoint 200/401/500 后 Legacy 回归
 - Shadow 关闭无事件
 - Shadow 开启时允许全局 not_evaluated，endpoint 响应不变
+- Shadow 写库失败不影响 endpoint 200
+- Shadow 求值失败不影响 endpoint 200
+- Shadow 失败不影响 endpoint 401/500
 
 完整入口：
 
 ```text
-Ran 145 tests ... OK
+Ran 147 tests ... OK
 webhook 5/5
 ```
 
