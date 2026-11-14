@@ -18,7 +18,8 @@
 
 ## 2. 理由
 
-生产 `store.py` 与仓库 HEAD 差异约 240 行，包含：
+生产旧 `store.py` 与仓库 HEAD 的差异当时约 240 行（当前 patched 版与
+仓库 HEAD 为约 `+171/-19`；两个数不能混用），包含：
 
 - SQLite WAL 竞态修复
 - 进程 anchor / `_ClosingConnection`

@@ -129,8 +129,14 @@ webhook 5/5
 
 Python 3.12 / 3.13 本地通过。
 
-CI 矩阵已加入 Windows/Ubuntu × 3.12/3.13；本次尚无该矩阵运行结果，
-3.12 仍无 CI 通过证据，报告不把本地手跑当作 CI 通过。
+CI 证据（公开仓库 run）：
+
+- `ad166db` run `43573074888`：Windows/Ubuntu × 3.12/3.13 四个 job 全 success
+- `a1f67e9` run `43573657319`：四个 job 全 success
+- `cd4f385` run `43573232641`：Windows 3.12 job 失败，原因是
+  `test_permission_version_conflict_and_audit` 同时间戳排序 flaky
+  （`['admin-b','admin-a','admin-c']`），与 4F-2C 无关；同一代码后续 run 全绿
+- 因此 3.12 已有 CI 通过证据，不再使用“无 CI 证据”表述；flaky 登记到 G-10
 
 ## 7. 生产部署
 
@@ -148,7 +154,7 @@ CI 矩阵已加入 Windows/Ubuntu × 3.12/3.13；本次尚无该矩阵运行结�
 - Core 重启：2026-11-14 14:16:52（PID 25988）
 - 第二次部署（最小 store 补丁 + 新 identity_api）：2026-11-14 15:55:44
 - 第二次 Core 重启：2026-11-14 15:56:07（PID 29784）
-- 生产 Python：3.12.14；CI 矩阵已加 3.12/3.13，尚无运行证据
+- 生产 Python：3.12.14；CI 3.12/3.13 四 job 已全绿（见 §6）
 
 部署文件（当前生产）：
 
@@ -168,7 +174,8 @@ CI 矩阵已加入 Windows/Ubuntu × 3.12/3.13；本次尚无该矩阵运行结�
 > 部署硬依赖：`identity_api._resolve_with_slot` 调用
 > `store.pg_timeouts(...)`。生产旧 `store.py` 没有该符号，两个文件必须
 > 一起替换；只换 `identity_api.py` 会抛 `AttributeError` 并被兜底成 500。
-> 生产与仓库 `store.py` 差约 214 行，需单独验收。
+> 生产 patched `store.py` 与仓库 HEAD 当前差异约 `+171/-19`；历史 214 行是
+> 部署前旧版对比值，不能与当前值混用。
 >
 > 超时叠加：`connect_timeout=5s` + `statement_timeout=5s` 串行，worker
 > 最坏约 10s 退出，而 endpoint 5s 已返回 500；槽位占用上界按 10s 计算。
@@ -233,6 +240,8 @@ Cache-Control: no-store
 - 未做生产 Shadow 重新验证
 - 未修复 2B 后续问题（独立立项）
 - 4F-2C 已部署有界槽位 + statement timeout + 进程内指标；
+  周期 stats 日志用 INFO，但 Core/uvicorn 的 root 仍为 WARNING，
+  生产未出现 `identity.me stats`，`stats_snapshot()` 无生产取证路径；
   强制回收/外部指标/生产长稳仍未关闭
   （见 [4F-2C 后续问题](../aegis/plans/2026-11-14-phase4f2c-followups.md)）
 - 未启用 Admin Login / 路由授权 / Default Deny
