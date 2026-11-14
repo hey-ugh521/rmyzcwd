@@ -89,7 +89,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 
 ## 6. 测试
 
-`tests/test_identity_api.py`：25/25
+`tests/test_identity_api.py`：26/26
 
 覆盖：
 
@@ -105,6 +105,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 - revoked / expired / disabled / mapping missing → 401
 - 只读快照：行数与关键字段不变
 - 慢 DB 不阻塞同一事件循环的其他请求
+- 并发 DB 解析峰值不超过 CapacityLimiter 上限
 - DB 超时 → 500
 - endpoint 200/401/500 后 Legacy 回归
 - Shadow 关闭无事件
@@ -116,7 +117,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 完整入口：
 
 ```text
-Ran 147 tests ... OK
+Ran 148 tests ... OK
 webhook 5/5
 ```
 
@@ -147,6 +148,9 @@ CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告�
 |---|---|
 | `identity_api.py` | `E3FD63AD51398F9F` |
 | `server.py` | `7F77BB2B77BEBA4F` |
+
+注意：上述生产 `identity_api.py` 是部署时版本，**不包含后续本地
+CapacityLimiter(4)**；limiter 版本尚未部署。生产 endpoint 仍是旧实现。
 
 备份：
 
@@ -197,8 +201,8 @@ Cache-Control: no-store
 - 未开启 Shadow
 - 未做生产 Shadow 重新验证
 - 未修复 2B 后续问题（独立立项）
-- 4F-2C 线程池/超时资源语义未做容量治理（见
-  [4F-2C 后续问题](../aegis/plans/2026-11-14-phase4f2c-followups.md)）
+- 4F-2C 本地已加 CapacityLimiter(4)，但该版本未部署；PG timeout/监控仍未关闭
+  （见 [4F-2C 后续问题](../aegis/plans/2026-11-14-phase4f2c-followups.md)）
 - 未启用 Admin Login / 路由授权 / Default Deny
 - 未修改 4F-1/2A/2B 冻结内容
 

@@ -259,10 +259,10 @@ HTTP 细节：
 ### 7.1 事件循环隔离
 
 - endpoint 的 Bearer 解析和配置快速检查在事件循环内完成
-- 同步 DB 调用通过 `run_in_threadpool` 执行，不能直接在 `async def` 中阻塞事件循环
+- 同步 DB 调用通过 AnyIO `to_thread.run_sync` 执行，不能直接在 `async def` 中阻塞事件循环
+- 每请求事件循环使用 `CapacityLimiter(4)` 限制 identity DB 并发
 - 默认 5s 超时；超时返回 500 `identity_unavailable`
-- 超时后后台线程可能继续运行，但不得写身份表；该风险与 2B worker 生命周期
-  分开记录
+- 超时后后台线程可能继续运行，但并发上限限制其数量，且不得写身份表
 - 线程池容量、超时后 worker 回收、PG timeout 与监控见
   [4F-2C 后续问题](2026-11-14-phase4f2c-followups.md)；部署前必须确认
 - 回归测试必须验证慢 DB 不拖慢同一事件循环上的其他请求

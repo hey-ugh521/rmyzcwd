@@ -1,7 +1,7 @@
 # 4F-2C 后续问题：线程池与超时资源语义
 
 - 日期：2026-11-14
-- 状态：**部署前必须确认；未实现**
+- 状态：**部分推进；本地已加并发上限，未部署；PG timeout/监控仍待处理**
 - 来源：4F-2C 独立复审
 - 部署门禁：[4F-2C 前置清单 §E](2026-11-14-phase4f2c-preflight.md)
 - 原则：不在 4F-2C 实现中顺手修改；需单独审批
@@ -32,11 +32,32 @@
 ## 3. 部署前必须决定
 
 - [ ] PG `connect_timeout` / `statement_timeout` 是否设置
-- [ ] 是否为 identity 查询使用独立 `CapacityLimiter`/专用有界线程池
-- [ ] 是否限制 endpoint 并发数
+- [x] 是否为 identity 查询使用独立 `CapacityLimiter`/专用有界线程池
+  - 本地已用 AnyIO `CapacityLimiter(4)` 限制并发
+  - 仍需生产验证
+- [x] 是否限制 endpoint 并发数
+  - 上限 4（`IDENTITY_ME_MAX_CONCURRENCY`）
 - [ ] 超时后 worker 的回收/背压策略
+  - 当前只有上限，没有主动回收
 - [ ] 线程池占用、超时、排队长度的监控与告警
+  - 当前只有 timeout 结构化日志
 - [ ] 长稳/故障注入测试
+
+## 3.1 本地已实现
+
+- `core/identity_api.py`：per-loop AnyIO `CapacityLimiter(4)`
+- `abandon_on_cancel=True`，响应超时不等待 worker
+- 并发上限测试：6 个慢请求，峰值不超过 2（测试中临时上限）
+- 超时仍返回 500，超时日志包含 sanitized request_id
+- 未部署生产；生产仍是旧 endpoint 版本
+
+## 3.2 仍未解决
+
+- PG 连接/语句超时
+- 超时 worker 主动回收
+- 指标/告警
+- 长稳与故障注入
+- 生产部署验证
 
 ## 4. 不进入 4F-2C 实现
 
