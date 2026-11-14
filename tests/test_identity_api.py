@@ -6,6 +6,7 @@ import asyncio
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -311,6 +312,42 @@ class IdentityMeTest(unittest.TestCase):
             self.assertEqual(unavailable.status_code, 500)
         finally:
             self.restore_identity()
+
+    def test_identity_concurrency_is_bounded(self):
+        original = identity.inspect_legacy_api_key
+        lock = threading.Lock()
+        active = 0
+        peak = 0
+
+        def slow(*args, **kwargs):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                time.sleep(0.15)
+                return original(*args, **kwargs)
+            finally:
+                with lock:
+                    active -= 1
+
+        async def scenario():
+            transport = httpx.ASGITransport(app=self.coreserver.app)
+            async with httpx.AsyncClient(transport=transport,
+                                         base_url="http://testserver") as client:
+                responses = await asyncio.gather(*[
+                    client.get("/api/identity/me",
+                               headers={"Authorization": "Bearer identity-me-key"})
+                    for _ in range(6)
+                ])
+                return [r.status_code for r in responses]
+
+        with mock.patch.object(identity_api, "IDENTITY_ME_MAX_CONCURRENCY", 2), \
+                mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow):
+            statuses = asyncio.run(scenario())
+        self.assertTrue(all(code == 200 for code in statuses))
+        self.assertLessEqual(peak, 2)
+        self.assertGreaterEqual(peak, 1)
 
     def test_read_only_snapshot(self):
         before = None

@@ -11,10 +11,12 @@ import hmac
 import logging
 import re
 import uuid
+import weakref
 
+from anyio import CapacityLimiter
+from anyio.to_thread import run_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from starlette.concurrency import run_in_threadpool
 
 from . import identity
 
@@ -22,8 +24,20 @@ router = APIRouter()
 log = logging.getLogger("mobius.identity_api")
 
 IDENTITY_ME_TIMEOUT_SECONDS = 5.0
+IDENTITY_ME_MAX_CONCURRENCY = 4
+_IDENTITY_LIMITERS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _SCHEME_RE = re.compile(r"([!#$%&'*+\-.^_`|~0-9A-Za-z]+) +(\S+)")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+
+
+def _identity_limiter() -> CapacityLimiter:
+    loop = asyncio.get_running_loop()
+    limiter = _IDENTITY_LIMITERS.get(loop)
+    if limiter is None:
+        limiter = CapacityLimiter(IDENTITY_ME_MAX_CONCURRENCY)
+        _IDENTITY_LIMITERS[loop] = limiter
+    return limiter
+
 
 
 class _Unavailable(Exception):
@@ -105,7 +119,8 @@ async def identity_me(request: Request) -> JSONResponse:
         return _unauthorized()
     try:
         state = await asyncio.wait_for(
-            run_in_threadpool(_resolve_identity, token),
+            run_sync(_resolve_identity, token, limiter=_identity_limiter(),
+                     abandon_on_cancel=True),
             timeout=IDENTITY_ME_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
