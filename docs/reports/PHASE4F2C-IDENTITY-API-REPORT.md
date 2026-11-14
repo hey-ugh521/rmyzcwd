@@ -1,7 +1,7 @@
 # Phase 4F-2C 实施报告：`/api/identity/me`
 
 - 日期：2026-11-14
-- 状态：**本地实现完成；未部署生产**
+- 状态：**已部署生产；Shadow 关闭；未开启真实流量切换**
 - 设计：[2026-11-14-phase4f2c-identity-me-design.md](../aegis/plans/2026-11-14-phase4f2c-identity-me-design.md)
 - 前置：[4F-2C 前置检查清单](../aegis/plans/2026-11-14-phase4f2c-preflight.md)
 
@@ -125,19 +125,58 @@ Python 3.12 / 3.13 本地通过。
 CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告不把本地
 3.12 手跑当作 CI 通过。
 
-## 7. 未做
+## 7. 生产部署
 
-- 未部署生产
-- 未在 PG 生产运行 endpoint
+授权范围：**仅 4F-2C endpoint 部署**；不开启 Shadow，不修改 4F-1/2A/2B 行为。
+
+部署文件：
+
+| 文件 | 生产 SHA256 前缀 |
+|---|---|
+| `identity_api.py` | `E3FD63AD51398F9F` |
+| `server.py` | `7F77BB2B77BEBA4F` |
+
+备份：
+
+```text
+D:\AI\Mobius\core\server.py.bak-20261114-141306
+```
+
+生产验证：
+
+```text
+GET /api/identity/me + valid key
+200 {"ok":true,"identity_mode":"legacy","principal":{"id":"service-legacy","kind":"machine","role":"service"}}
+
+GET /api/identity/me + wrong/missing key
+401 {"ok":false,"error":"unauthenticated"}
+WWW-Authenticate: Bearer
+Cache-Control: no-store
+```
+
+- `/api/capabilities/permissions` 仍为 200，body hash 与部署前一致
+  `acf335ffe0e6e796`
+- Shadow `enabled=False`
+- `identity_shadow_events` 仍为 8，没有新增
+- `principals` 仍只有 `service-legacy`
+- 服务恢复：gateway/comfyui/kokoro/napcat/postgres ready，langbot down
+
+部署过程中发现 portable PostgreSQL 未运行，Core 启动阻塞；已用配置中的
+`pg_ctl` 启动 `pgsql-portable`，恢复后 Core 启动成功。该操作属于服务恢复，
+不改变 DSN 或数据库内容。
+
+## 8. 未做
+
 - 未开启 Shadow
+- 未做生产 Shadow 重新验证
 - 未修复 2B 后续问题（独立立项）
 - 4F-2C 线程池/超时资源语义未做容量治理（见
   [4F-2C 后续问题](../aegis/plans/2026-11-14-phase4f2c-followups.md)）
 - 未启用 Admin Login / 路由授权 / Default Deny
 - 未修改 4F-1/2A/2B 冻结内容
 
-## 8. 停止点
+## 9. 停止点
 
-4F-2C 本地实现完成，等待代码审查。
+4F-2C endpoint 已部署并通过生产只读验证；Shadow 仍关闭。
 
-部署前需要单独批准；生产验证仍按冻结边界执行。
+部署后的生产行为变更仅限新增 `GET /api/identity/me`，没有改变 Legacy 放行。
