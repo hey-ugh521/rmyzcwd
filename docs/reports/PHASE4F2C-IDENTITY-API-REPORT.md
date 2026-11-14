@@ -128,6 +128,18 @@ CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告�
 ## 7. 生产部署
 
 授权范围：**仅 4F-2C endpoint 部署**；不开启 Shadow，不修改 4F-1/2A/2B 行为。
+授权与门禁裁决记录：
+[PHASE4F2C-DEPLOY-AUTHORIZATION.md](PHASE4F2C-DEPLOY-AUTHORIZATION.md)。
+
+注意：部署前 §E 门禁未全部闭合（B2/B3/B4/C、followups §3 未勾）；本次是
+用户明确授权下的例外部署，不构成门禁通过或后续先例。
+
+执行时间：
+
+- 备份：2026-11-14 14:13:06
+- portable PostgreSQL 启动：2026-11-14 14:14:43
+- Core 重启：2026-11-14 14:16:52（PID 25988）
+- 生产 Python：3.12.14；CI 仍为 3.13，无 3.12 CI 证据
 
 部署文件：
 
@@ -141,6 +153,20 @@ CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告�
 ```text
 D:\AI\Mobius\core\server.py.bak-20261114-141306
 ```
+
+生产配置：
+
+- `config.json` mtime 2026-11-13 12:37:15
+- SHA256 前缀 `80F934C4933E0557`
+- 顶层无 `identity` 段
+
+生产 `store.py` 与仓库 HEAD 不一致：
+
+- 生产是 2026-11-13 19:38 旧版本
+- 缺少 SQLite WAL `_conn_lock` / anchor / `_ClosingConnection` / 跨进程锁修复
+- 生产 `db_backend=pg`，PG 路径等价，因此不影响 4F-2C endpoint
+- 这属于开发仓库与生产安装分离的 drift，登记到 M3 干净安装 / G-10 前置项；
+  本次没有同步 `store.py`
 
 生产验证：
 
@@ -156,9 +182,10 @@ Cache-Control: no-store
 
 - `/api/capabilities/permissions` 仍为 200，body hash 与部署前一致
   `acf335ffe0e6e796`
-- Shadow `enabled=False`
+- Shadow：配置无 `identity` 段，`shadow_enabled()` 隐式返回 False
 - `identity_shadow_events` 仍为 8，没有新增
 - `principals` 仍只有 `service-legacy`
+- `credentials` 1 条，`last_used_at=NULL`
 - 服务恢复：gateway/comfyui/kokoro/napcat/postgres ready，langbot down
 
 部署过程中发现 portable PostgreSQL 未运行，Core 启动阻塞；已用配置中的
