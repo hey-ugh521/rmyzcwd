@@ -109,6 +109,8 @@ endpoint 契约，也不要求修改 `auth_mw`。
 - 超时路径不创建超过槽位的 worker
 - DB 超时 → 500
 - PG connect_timeout 传到 psycopg
+- PG statement_timeout/thread-local context
+- 配置值 0/非法值解析不崩溃
 - endpoint 200/401/500 后 Legacy 回归
 - Shadow 关闭无事件
 - Shadow 开启时允许全局 not_evaluated，endpoint 响应不变
@@ -119,7 +121,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 完整入口：
 
 ```text
-Ran 150 tests ... OK
+Ran 153 tests ... OK
 webhook 5/5
 ```
 
@@ -152,11 +154,12 @@ CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告�
 | `server.py` | `7F77BB2B77BEBA4F` |
 
 注意：上述生产 `identity_api.py` / `store.py` 是部署时版本，**不包含后续本地
-有界槽位 + PG connect_timeout**；该版本尚未部署。生产 endpoint 仍是旧实现。
+有界槽位 + PG connect/identity statement timeout**；该版本尚未部署。生产
+endpoint 仍是旧实现。
 
 本地版本用 per-loop `Semaphore(4)`，槽位在 worker 完成后释放；请求超时
-不会释放槽位，因此超时路径不会无限创建新 worker。但 `statement_timeout`、
-worker 主动回收、监控和长稳仍未关闭，不能视为资源风险完全解决。
+不会释放槽位，因此超时路径不会无限创建新 worker。但 worker 主动回收、
+指标/告警和长稳仍未关闭，不能视为资源风险完全解决。
 
 备份：
 
@@ -207,8 +210,8 @@ Cache-Control: no-store
 - 未开启 Shadow
 - 未做生产 Shadow 重新验证
 - 未修复 2B 后续问题（独立立项）
-- 4F-2C 本地已加有界槽位 + PG connect_timeout，但该版本未部署；
-  statement_timeout/监控/长稳仍未关闭
+- 4F-2C 本地已加有界槽位 + PG connect/identity statement timeout，但该版本未部署；
+  worker 回收/监控/长稳仍未关闭
   （见 [4F-2C 后续问题](../aegis/plans/2026-11-14-phase4f2c-followups.md)）
 - 未启用 Admin Login / 路由授权 / Default Deny
 - 未修改 4F-1/2A/2B 冻结内容

@@ -128,7 +128,7 @@
 - [x] 4F-2C 设计审查通过
 - [x] 冻结边界未被修改
 - [ ] [4F-2C followups §3](2026-11-14-phase4f2c-followups.md)
-      六项资源/监控决策已确认
+      部署前资源/监控决策已全部确认（worker 回收/指标/长稳仍未闭合）
 - [x] 生产部署获得单独授权
       2026-11-14 用户明确授权；见
       [部署授权记录](../reports/PHASE4F2C-DEPLOY-AUTHORIZATION.md)

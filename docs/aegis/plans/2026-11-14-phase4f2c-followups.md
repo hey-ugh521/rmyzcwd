@@ -1,7 +1,7 @@
 # 4F-2C 后续问题：线程池与超时资源语义
 
 - 日期：2026-11-14
-- 状态：**本地采用有界槽位 + PG connect_timeout；未部署；statement_timeout/监控/长稳仍待处理**
+- 状态：**本地采用有界槽位 + PG connect/identity statement timeout；未部署；worker 回收/监控/长稳仍待处理**
 - 来源：4F-2C 独立复审
 - 部署门禁：[4F-2C 前置清单 §E](2026-11-14-phase4f2c-preflight.md)
 - 原则：不在 4F-2C 实现中顺手修改冻结行为；需单独审批
@@ -34,8 +34,9 @@
 - [x] PG `connect_timeout` 已设置
   - 本地 `store.PG_CONNECT_TIMEOUT` 默认 5s
   - `CORE_DB_CONNECT_TIMEOUT` 可覆盖；0 禁用
-- [ ] PG `statement_timeout` 是否设置
-  - 尚未实现；长 SELECT 仍只能由 endpoint 总超时兜底
+- [x] PG `statement_timeout` 是否设置
+  - identity worker 通过 thread-local 设置 5000ms
+  - 全局默认 0；`CORE_DB_STATEMENT_TIMEOUT_MS` 可覆盖
 - [x] identity 查询有界并发槽位
   - 每 loop `asyncio.Semaphore(4)`
   - 槽位由 worker 完成后释放，请求超时**不释放**
@@ -43,8 +44,9 @@
   - 最多 4 个 DB worker；其余请求等待槽位并受总超时约束
 - [ ] 超时 worker 主动回收/背压
   - 当前靠“不释放槽位”阻止新 worker 累积；没有主动 kill/回收
+  - 超时后 worker 异常现在会记录 error_class
 - [ ] 指标/告警
-  - 当前只有 timeout/异常结构化日志
+  - 当前只有 timeout/异常结构化日志，无指标导出
 - [ ] 长稳/故障注入测试
 
 ## 3.1 本地已实现
@@ -57,12 +59,16 @@
 - `asyncio.shield(task)` 避免响应超时取消 worker
 - 总超时 5s；超时返回 500
 - `slot_timeout` / `db_timeout` 分别记录
+- 超时后 worker 异常记录 `error_class`，不再静默
 
 `core/store.py`：
 
 - `PG_CONNECT_TIMEOUT` 默认 5s
 - `_PgConnection` 传 `connect_timeout`
-- 这不是 identity 专属设置，会影响所有新 PG 连接
+- identity worker 通过 thread-local 设置 `statement_timeout=5000ms`
+- 全局 `PG_STATEMENT_TIMEOUT_MS` 默认 0；`CORE_DB_STATEMENT_TIMEOUT_MS` 可覆盖
+- connect timeout 影响所有新 PG 连接；statement timeout 仅 identity worker 默认生效
+- 配置值解析：`0` 保持 0；非法值回落默认，不再在 import 时崩溃
 
 ## 3.2 超时路径实测
 
@@ -81,7 +87,6 @@ DB sleep 0.4s > timeout 0.05s
 
 ## 3.3 仍未解决
 
-- PG `statement_timeout`
 - 超时 worker 主动回收/背压（当前只是限制新 worker）
 - 指标/告警
 - 长稳与故障注入
