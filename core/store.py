@@ -109,17 +109,17 @@ def _unregister_pg(key: str | None, conn: "_PgConnection") -> None:
             _active_pg.pop(key, None)
 
 
-def cancel_pg(key: str) -> bool:
-    """Best-effort cancel of the connection registered under key."""
+def cancel_pg(key: str) -> str:
+    """Best-effort cancel; returns cancelled/missing/failed."""
     with _active_pg_lock:
         conn = _active_pg.get(key)
     if conn is None:
-        return False
+        return "missing"
     try:
         conn._c.cancel()
-        return True
+        return "cancelled"
     except Exception:  # noqa: BLE001 - cancellation is best effort
-        return False
+        return "failed"
 
 
 @contextmanager
@@ -208,11 +208,13 @@ class _PgConnection:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
-        if exc_type is None:
-            self._c.commit()
-        else:
-            self._c.rollback()
-        self.close()
+        try:
+            if exc_type is None:
+                self._c.commit()
+            else:
+                self._c.rollback()
+        finally:
+            self.close()
         return False
 
 

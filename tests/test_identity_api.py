@@ -505,7 +505,7 @@ class IdentityMeTest(unittest.TestCase):
 
         with mock.patch.object(identity_api, "IDENTITY_ME_TIMEOUT_SECONDS", 0.01), \
                 mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow), \
-                mock.patch.object(store, "cancel_pg", return_value=True) as cancel:
+                mock.patch.object(store, "cancel_pg", return_value="cancelled") as cancel:
             r = self.get(headers={"Authorization": "Bearer identity-me-key"})
             time.sleep(0.35)
         after = identity_api.stats_snapshot()
@@ -513,6 +513,23 @@ class IdentityMeTest(unittest.TestCase):
         cancel.assert_called_once()
         self.assertGreaterEqual(
             after["cancel_requested"] - before["cancel_requested"], 1)
+
+    def test_stats_errors_do_not_pollute_counters(self):
+        before = identity_api.stats_snapshot()
+        self.assertEqual(self.client.get(
+            "/api/identity/stats",
+            headers={"Authorization": "Bearer wrong-key"}).status_code, 401)
+        store.CFG["core"]["api_key"] = ""
+        try:
+            self.assertEqual(self.client.get(
+                "/api/identity/stats",
+                headers={"Authorization": "Bearer identity-me-key"}).status_code,
+                500)
+        finally:
+            store.CFG["core"]["api_key"] = "identity-me-key"
+        after = identity_api.stats_snapshot()
+        for key in ("requests", "success", "unauthorized", "unavailable"):
+            self.assertEqual(after[key], before[key], key)
 
     def test_read_only_snapshot(self):
         before = None

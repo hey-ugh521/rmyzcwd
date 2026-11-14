@@ -75,11 +75,26 @@ class PgTimeoutTest(unittest.TestCase):
                 "psycopg.rows": self.rows,
             }):
                 conn = store._PgConnection()
-            self.assertTrue(store.cancel_pg("k"))
+            self.assertEqual(store.cancel_pg("k"), "cancelled")
             self.assertTrue(inner.cancel.called)
             conn.close()
-            self.assertFalse(store.cancel_pg("k"))
+            self.assertEqual(store.cancel_pg("k"), "missing")
         self.assertIsNone(getattr(store._pg_tls, "cancel_key", None))
+
+    def test_pg_exit_closes_on_rollback_failure(self):
+        inner = mock.Mock()
+        inner.rollback.side_effect = RuntimeError("rollback failed")
+        self.psycopg.connect.return_value = inner
+        with store.pg_timeouts(cancel_key="k"):
+            with mock.patch.dict(sys.modules, {
+                "psycopg": self.psycopg,
+                "psycopg.rows": self.rows,
+            }):
+                conn = store._PgConnection()
+        with self.assertRaises(RuntimeError):
+            conn.__exit__(RuntimeError, RuntimeError("x"), None)
+        self.assertTrue(inner.close.called)
+        self.assertEqual(store.cancel_pg("k"), "missing")
 
     def test_cfg_int_zero_and_invalid(self):
         with mock.patch.dict(os.environ, {"TEST_TIMEOUT": "0"}):

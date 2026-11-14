@@ -34,6 +34,12 @@ _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 _STATS_LOCK = threading.Lock()
 _LAST_STATS_LOG = 0.0
+_STATS_PUBLIC_FIELDS = (
+    "requests", "success", "unauthorized", "unavailable",
+    "slot_timeouts", "db_timeouts", "background_errors",
+    "cancel_requested", "cancel_failed", "cancel_missing",
+    "cancel_observed", "active_workers", "max_active_workers",
+)
 _STATS = {
     "requests": 0,
     "success": 0,
@@ -44,6 +50,8 @@ _STATS = {
     "background_errors": 0,
     "cancel_requested": 0,
     "cancel_failed": 0,
+    "cancel_missing": 0,
+    "cancel_observed": 0,
     "active_workers": 0,
     "max_active_workers": 0,
 }
@@ -117,9 +125,12 @@ def _consume_task(task: asyncio.Task, loop: asyncio.AbstractEventLoop,
         return
     exc = task.exception()
     if state.get("timed_out") and exc is not None:
-        _bump("background_errors")
-        log.warning("identity.me background_error error_class=%s request_id=%s",
-                    type(exc).__name__, state.get("request_id"))
+        if type(exc).__name__ in {"QueryCanceled", "QueryCanceledError"}:
+            _bump("cancel_observed")
+        else:
+            _bump("background_errors")
+            log.warning("identity.me background_error error_class=%s request_id=%s",
+                        type(exc).__name__, state.get("request_id"))
 
 
 async def _run_identity(token: str, request_id: str) -> dict:
@@ -148,7 +159,10 @@ async def _run_identity(token: str, request_id: str) -> dict:
         state["timed_out"] = True
         _bump("db_timeouts")
         _bump("cancel_requested")
-        if not store.cancel_pg(state["cancel_key"]):
+        cancel_result = store.cancel_pg(state["cancel_key"])
+        if cancel_result == "missing":
+            _bump("cancel_missing")
+        elif cancel_result != "cancelled":
             _bump("cancel_failed")
         raise _IdentityTimeout("db_timeout") from exc
 
@@ -230,22 +244,33 @@ def _resolve_identity(token: str) -> dict:
 
 @router.get("/api/identity/stats")
 async def identity_stats(request: Request) -> JSONResponse:
-    """Bearer-protected read-only in-process stats snapshot."""
+    """Bearer-protected read-only in-process stats snapshot.
+
+    This uses the configured legacy key only; it is a diagnostics surface,
+    not an identity authentication endpoint.
+    """
     token = _parse_bearer(request)
     if not token:
-        return _unauthorized()
+        return _response(401, {"ok": False, "error": "unauthenticated"},
+                         challenge=True)
     try:
         configured = identity.configured_legacy_key()
         if not configured:
-            return _unavailable()
+            return _response(500, {"ok": False,
+                                   "error": "identity_unavailable"})
         if not hmac.compare_digest(token.encode("utf-8"),
                                    configured.encode("utf-8")):
-            return _unauthorized()
+            return _response(401, {"ok": False, "error": "unauthenticated"},
+                             challenge=True)
     except Exception as exc:  # noqa: BLE001 - never expose exception text
         log.warning("identity.stats unavailable error_class=%s",
                     type(exc).__name__)
-        return _unavailable()
-    return _response(200, {"ok": True, **stats_snapshot()})
+        return _response(500, {"ok": False, "error": "identity_unavailable"})
+    snapshot = stats_snapshot()
+    return _response(200, {
+        "ok": True,
+        **{field: snapshot.get(field, 0) for field in _STATS_PUBLIC_FIELDS},
+    })
 
 
 @router.get("/api/identity/me")
