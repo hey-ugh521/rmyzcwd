@@ -260,6 +260,68 @@ class IdentityMeTest(unittest.TestCase):
         self.assertTrue(all(code == 500 for code in statuses))
         self.assertEqual(started, 1)
 
+    def test_slot_recovers_after_timeouts(self):
+        before = identity_api.stats_snapshot()
+        original = identity.inspect_legacy_api_key
+
+        def slow(*args, **kwargs):
+            time.sleep(0.05)
+            return original(*args, **kwargs)
+
+        async def scenario():
+            transport = httpx.ASGITransport(app=self.coreserver.app)
+            async with httpx.AsyncClient(transport=transport,
+                                         base_url="http://testserver") as client:
+                statuses = []
+                for _ in range(5):
+                    response = await client.get(
+                        "/api/identity/me",
+                        headers={"Authorization": "Bearer identity-me-key"},
+                    )
+                    statuses.append(response.status_code)
+                    await asyncio.sleep(0.07)
+                identity_api.IDENTITY_ME_TIMEOUT_SECONDS = 1.0
+                ok = await client.get(
+                    "/api/identity/me",
+                    headers={"Authorization": "Bearer identity-me-key"},
+                )
+                return statuses, ok.status_code
+
+        with mock.patch.object(identity_api, "IDENTITY_ME_MAX_CONCURRENCY", 1), \
+                mock.patch.object(identity_api, "IDENTITY_ME_TIMEOUT_SECONDS", 0.01), \
+                mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow):
+            statuses, ok_status = asyncio.run(scenario())
+        after = identity_api.stats_snapshot()
+        self.assertTrue(all(code == 500 for code in statuses))
+        self.assertEqual(ok_status, 200)
+        self.assertGreaterEqual(after["db_timeouts"] - before["db_timeouts"], 5)
+        self.assertEqual(after["active_workers"], 0)
+
+    def test_background_exception_is_counted(self):
+        before = identity_api.stats_snapshot()
+
+        def fail(*args, **kwargs):
+            time.sleep(0.05)
+            raise RuntimeError("background failure")
+
+        async def scenario():
+            transport = httpx.ASGITransport(app=self.coreserver.app)
+            async with httpx.AsyncClient(transport=transport,
+                                         base_url="http://testserver") as client:
+                response = await client.get(
+                    "/api/identity/me",
+                    headers={"Authorization": "Bearer identity-me-key"},
+                )
+                await asyncio.sleep(0.12)
+                return response.status_code
+
+        with mock.patch.object(identity_api, "IDENTITY_ME_TIMEOUT_SECONDS", 0.01), \
+                mock.patch.object(identity, "inspect_legacy_api_key", side_effect=fail):
+            status = asyncio.run(scenario())
+        after = identity_api.stats_snapshot()
+        self.assertEqual(status, 500)
+        self.assertGreaterEqual(
+            after["background_errors"] - before["background_errors"], 1)
     def test_expired_mapping_is_401(self):
         with store.conn() as c:
             c.execute("UPDATE credentials SET expires_at=0 WHERE id=?", (self.credential_id,))

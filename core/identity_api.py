@@ -10,6 +10,7 @@ import asyncio
 import hmac
 import logging
 import re
+import threading
 import uuid
 import weakref
 
@@ -28,6 +29,33 @@ IDENTITY_DB_STATEMENT_TIMEOUT_MS = 5000
 _IDENTITY_SEMAPHORES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _SCHEME_RE = re.compile(r"([!#$%&'*+\-.^_`|~0-9A-Za-z]+) +(\S+)")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+
+_STATS_LOCK = threading.Lock()
+_STATS = {
+    "requests": 0,
+    "success": 0,
+    "unauthorized": 0,
+    "unavailable": 0,
+    "slot_timeouts": 0,
+    "db_timeouts": 0,
+    "background_errors": 0,
+    "active_workers": 0,
+    "max_active_workers": 0,
+}
+
+
+def _bump(name: str, delta: int = 1) -> None:
+    with _STATS_LOCK:
+        _STATS[name] = _STATS.get(name, 0) + delta
+        if name == "active_workers":
+            _STATS["max_active_workers"] = max(
+                _STATS["max_active_workers"], _STATS[name])
+
+
+def stats_snapshot() -> dict:
+    with _STATS_LOCK:
+        return dict(_STATS)
+
 
 
 class _IdentityTimeout(Exception):
@@ -55,11 +83,13 @@ def _resolve_with_slot(token: str, loop: asyncio.AbstractEventLoop,
                        sem: asyncio.Semaphore, state: dict) -> dict:
     """Run one DB resolution while holding a slot until it truly completes."""
     state["started"] = True
+    _bump("active_workers")
     try:
         with store.pg_timeouts(
                 statement_timeout_ms=IDENTITY_DB_STATEMENT_TIMEOUT_MS):
             return _resolve_identity(token)
     finally:
+        _bump("active_workers", -1)
         _release_slot(loop, sem)
 
 
@@ -71,11 +101,12 @@ def _consume_task(task: asyncio.Task, loop: asyncio.AbstractEventLoop,
         return
     exc = task.exception()
     if state.get("timed_out") and exc is not None:
-        log.warning("identity.me background_error error_class=%s",
-                    type(exc).__name__)
+        _bump("background_errors")
+        log.warning("identity.me background_error error_class=%s request_id=%s",
+                    type(exc).__name__, state.get("request_id"))
 
 
-async def _run_identity(token: str) -> dict:
+async def _run_identity(token: str, request_id: str) -> dict:
     loop = asyncio.get_running_loop()
     sem = _identity_semaphore()
     deadline = loop.time() + IDENTITY_ME_TIMEOUT_SECONDS
@@ -83,9 +114,10 @@ async def _run_identity(token: str) -> dict:
         await asyncio.wait_for(sem.acquire(),
                                timeout=max(0.001, deadline - loop.time()))
     except asyncio.TimeoutError as exc:
+        _bump("slot_timeouts")
         raise _IdentityTimeout("slot_timeout") from exc
 
-    state: dict = {}
+    state: dict = {"request_id": request_id}
     task = asyncio.create_task(
         run_sync(_resolve_with_slot, token, loop, sem, state))
     task.add_done_callback(
@@ -97,6 +129,7 @@ async def _run_identity(token: str) -> dict:
         )
     except asyncio.TimeoutError as exc:
         state["timed_out"] = True
+        _bump("db_timeouts")
         raise _IdentityTimeout("db_timeout") from exc
 
 
@@ -153,10 +186,12 @@ def _response(status_code: int, body: dict, *, challenge: bool = False) -> JSONR
 
 
 def _unauthorized() -> JSONResponse:
+    _bump("unauthorized")
     return _response(401, {"ok": False, "error": "unauthenticated"}, challenge=True)
 
 
 def _unavailable() -> JSONResponse:
+    _bump("unavailable")
     return _response(500, {"ok": False, "error": "identity_unavailable"})
 
 
@@ -175,12 +210,13 @@ def _resolve_identity(token: str) -> dict:
 
 @router.get("/api/identity/me")
 async def identity_me(request: Request) -> JSONResponse:
+    _bump("requests")
     request_id = _request_id(request)
     token = _parse_bearer(request)
     if not token:
         return _unauthorized()
     try:
-        state = await _run_identity(token)
+        state = await _run_identity(token, request_id)
     except _IdentityTimeout as exc:
         log.warning("identity.me timeout reason=%s request_id=%s",
                     str(exc), request_id)
@@ -195,6 +231,7 @@ async def identity_me(request: Request) -> JSONResponse:
 
     status = str(state.get("state") or "")
     if status == "resolved":
+        _bump("success")
         principal = state.get("principal") or {}
         return _response(200, {
             "ok": True,
