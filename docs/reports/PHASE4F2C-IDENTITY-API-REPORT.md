@@ -112,7 +112,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 - DB 超时 → 500
 - PG connect_timeout 传到 psycopg
 - PG statement_timeout/thread-local context
-- 配置值 0/非法值解析不崩溃
+- 配置值只接受整数；0 保留；负数/小数/inf/非法值回落默认
 - endpoint 200/401/500 后 Legacy 回归
 - Shadow 关闭无事件
 - Shadow 开启时允许全局 not_evaluated，endpoint 响应不变

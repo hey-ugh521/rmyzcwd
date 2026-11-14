@@ -55,12 +55,20 @@ def _cfg_int(env_name: str, cfg_key: str, default: int) -> int:
     raw = os.environ.get(env_name)
     if raw is None:
         raw = CFG.get(cfg_key)
-    if raw is None:
+    if raw is None or isinstance(raw, bool):
         return default
-    try:
-        return int(float(raw))
-    except (TypeError, ValueError):
+    if isinstance(raw, int):
+        value = raw
+    elif isinstance(raw, str):
+        try:
+            value = int(raw.strip(), 10)
+        except (TypeError, ValueError, OverflowError):
+            return default
+    else:
         return default
+    if value < 0:
+        return default
+    return value
 
 
 PG_CONNECT_TIMEOUT = _cfg_int("CORE_DB_CONNECT_TIMEOUT", "db_connect_timeout", 5)
@@ -120,27 +128,78 @@ if statement_ms and int(statement_ms) > 0:
 self._c = psycopg.connect(PG_DSN, **kwargs)
 ```
 
-## 4. 部署步骤
+## 4. 补丁验证证据
 
-1. 备份：
-   - `identity_api.py`
-   - `store.py`
+在生产旧 `store.py` 的临时副本上应用最小补丁，并只读验证完整路径：
+
+```text
+pg_timeouts(statement_timeout_ms=5000)
+  -> store.conn()
+  -> _PgConnection
+  -> psycopg.connect
+  -> SHOW statement_timeout
+```
+
+结果：
+
+```text
+inside  {'statement_timeout': '5s'}
+after_context_default None
+outside {'statement_timeout': '0'}
+```
+
+说明：
+
+- 请求级上下文确实生效
+- 上下文退出后 thread-local 恢复
+- 普通独立连接回到默认 0
+- 验证使用生产 PG 只读连接，事务/连接已关闭，没有写入
+- 没有打印 DSN 或凭证
+
+哈希：
+
+| 对象 | SHA256 前缀 |
+|---|---|
+| 生产旧 `store.py` | `EA5EF74FE23D` |
+| 临时 patched `store.py` | `3A20A70BFA52` |
+| 本地 `identity_api.py` | `20620DA8E05A` |
+| 生产旧 `identity_api.py` | `E3FD63AD5139` |
+| 生产 `server.py` | `7F77BB2B77BE` |
+
+临时 patched 文件位于会话临时目录，未提交、未覆盖生产。
+
+## 5. 部署步骤
+
+目标路径：
+
+```text
+D:\AI\Mobius\core\identity_api.py
+D:\AI\Mobius\core\store.py
+```
+
+1. 备份（同一时间戳）：
+   - `D:\AI\Mobius\core\identity_api.py.bak-4f2c-<ts>`
+   - `D:\AI\Mobius\core\store.py.bak-4f2c-<ts>`
 2. 先写 `store.py` 最小补丁，再写 `identity_api.py`。
-3. 重启 Core。
-4. 验证：
+3. 校验目标文件 SHA256 与部署清单一致。
+4. 重启 Core。
+5. 验证：
    - `import core.store; hasattr(store, "pg_timeouts")`
    - `GET /api/identity/me` 正确 → 200
    - 错误/缺失 Bearer → 401 + `WWW-Authenticate` + `no-store`
    - `/api/capabilities/permissions` hash 不变
    - Shadow `enabled=False`，事件数不增加
-   - 生产 PG 只读连接 `SHOW statement_timeout` 为 `5s`
+   - 在 `pg_timeouts(statement_timeout_ms=5000)` 上下文内新建连接，
+     `SHOW statement_timeout` 为 `5s`
+   - 上下文退出后普通连接 `SHOW statement_timeout` 回到默认 `0`
    - `stats_snapshot()` 可读（内部）
-5. 失败回滚：
-   - 恢复两个文件
+6. 失败回滚：
+   - 恢复两个 `.bak-4f2c-<ts>` 文件
+   - 校验 SHA256 与部署前一致
    - 重启 Core
    - 再验 Legacy 响应与 Shadow 事件数
 
-## 5. 验收边界
+## 6. 验收边界
 
 - 不把 SQLite WAL 修复算作本次已验收
 - 不把 `statement_timeout` 验证当作故障注入
@@ -148,6 +207,6 @@ self._c = psycopg.connect(PG_DSN, **kwargs)
 - 不修改生产配置
 - 不改变 Legacy 放行
 
-## 6. 待授权
+## 7. 待授权
 
 最小补丁部署需要 **单独部署授权**；本文件只定策略，不执行生产修改。

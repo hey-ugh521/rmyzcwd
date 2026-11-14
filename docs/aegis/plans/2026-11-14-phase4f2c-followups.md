@@ -78,7 +78,8 @@
 - identity worker 通过 thread-local 设置 `statement_timeout=5000ms`
 - 全局 `PG_STATEMENT_TIMEOUT_MS` 默认 0；`CORE_DB_STATEMENT_TIMEOUT_MS` 可覆盖
 - connect timeout 影响所有新 PG 连接；statement timeout 仅 identity worker 默认生效
-- 配置值解析：`0` 保持 0；非法值回落默认，不再在 import 时崩溃
+- 配置值解析：只接受整数；0 保持 0；负数/小数/inf/非法值回落默认；
+  捕获 `OverflowError`，不再在 import 时崩溃
 
 ## 3.2 超时路径实测
 
