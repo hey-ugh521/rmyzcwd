@@ -13,7 +13,6 @@ import re
 import uuid
 import weakref
 
-from anyio import CapacityLimiter
 from anyio.to_thread import run_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -25,18 +24,73 @@ log = logging.getLogger("mobius.identity_api")
 
 IDENTITY_ME_TIMEOUT_SECONDS = 5.0
 IDENTITY_ME_MAX_CONCURRENCY = 4
-_IDENTITY_LIMITERS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_IDENTITY_SEMAPHORES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _SCHEME_RE = re.compile(r"([!#$%&'*+\-.^_`|~0-9A-Za-z]+) +(\S+)")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
-def _identity_limiter() -> CapacityLimiter:
+class _IdentityTimeout(Exception):
+    pass
+
+
+def _identity_semaphore() -> asyncio.Semaphore:
     loop = asyncio.get_running_loop()
-    limiter = _IDENTITY_LIMITERS.get(loop)
-    if limiter is None:
-        limiter = CapacityLimiter(IDENTITY_ME_MAX_CONCURRENCY)
-        _IDENTITY_LIMITERS[loop] = limiter
-    return limiter
+    sem = _IDENTITY_SEMAPHORES.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(IDENTITY_ME_MAX_CONCURRENCY)
+        _IDENTITY_SEMAPHORES[loop] = sem
+    return sem
+
+
+def _release_slot(loop: asyncio.AbstractEventLoop,
+                  sem: asyncio.Semaphore) -> None:
+    try:
+        loop.call_soon_threadsafe(sem.release)
+    except RuntimeError:
+        pass
+
+
+def _resolve_with_slot(token: str, loop: asyncio.AbstractEventLoop,
+                       sem: asyncio.Semaphore, state: dict) -> dict:
+    """Run one DB resolution while holding a slot until it truly completes."""
+    state["started"] = True
+    try:
+        return _resolve_identity(token)
+    finally:
+        _release_slot(loop, sem)
+
+
+def _consume_task(task: asyncio.Task, loop: asyncio.AbstractEventLoop,
+                  sem: asyncio.Semaphore, state: dict) -> None:
+    if not state.get("started"):
+        _release_slot(loop, sem)
+    if not task.cancelled():
+        task.exception()
+
+
+async def _run_identity(token: str) -> dict:
+    loop = asyncio.get_running_loop()
+    sem = _identity_semaphore()
+    deadline = loop.time() + IDENTITY_ME_TIMEOUT_SECONDS
+    try:
+        await asyncio.wait_for(sem.acquire(),
+                               timeout=max(0.001, deadline - loop.time()))
+    except asyncio.TimeoutError as exc:
+        raise _IdentityTimeout("slot_timeout") from exc
+
+    state: dict = {}
+    task = asyncio.create_task(
+        run_sync(_resolve_with_slot, token, loop, sem, state))
+    task.add_done_callback(
+        lambda t: _consume_task(t, loop, sem, state))
+    try:
+        return await asyncio.wait_for(
+            asyncio.shield(task),
+            timeout=max(0.001, deadline - loop.time()),
+        )
+    except asyncio.TimeoutError as exc:
+        raise _IdentityTimeout("db_timeout") from exc
+
 
 
 
@@ -118,13 +172,10 @@ async def identity_me(request: Request) -> JSONResponse:
     if not token:
         return _unauthorized()
     try:
-        state = await asyncio.wait_for(
-            run_sync(_resolve_identity, token, limiter=_identity_limiter(),
-                     abandon_on_cancel=True),
-            timeout=IDENTITY_ME_TIMEOUT_SECONDS,
-        )
-    except asyncio.TimeoutError:
-        log.warning("identity.me timeout request_id=%s", request_id)
+        state = await _run_identity(token)
+    except _IdentityTimeout as exc:
+        log.warning("identity.me timeout reason=%s request_id=%s",
+                    str(exc), request_id)
         return _unavailable()
     except _Unavailable as exc:
         log.warning("identity.me %s request_id=%s", exc.reason, request_id)

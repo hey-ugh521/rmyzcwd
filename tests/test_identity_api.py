@@ -226,6 +226,37 @@ class IdentityMeTest(unittest.TestCase):
         self.assertNotIn("www-authenticate", r.headers)
         self.assertEqual(r.headers.get("cache-control"), "no-store")
 
+    def test_timeout_path_is_bounded(self):
+        original = identity.inspect_legacy_api_key
+        started = 0
+        lock = threading.Lock()
+
+        def slow(*args, **kwargs):
+            nonlocal started
+            with lock:
+                started += 1
+            time.sleep(0.4)
+            return original(*args, **kwargs)
+
+        async def scenario():
+            transport = httpx.ASGITransport(app=self.coreserver.app)
+            async with httpx.AsyncClient(transport=transport,
+                                         base_url="http://testserver") as client:
+                responses = await asyncio.gather(*[
+                    client.get("/api/identity/me",
+                               headers={"Authorization": "Bearer identity-me-key"})
+                    for _ in range(6)
+                ])
+                return [r.status_code for r in responses]
+
+        with mock.patch.object(identity_api, "IDENTITY_ME_MAX_CONCURRENCY", 1), \
+                mock.patch.object(identity_api, "IDENTITY_ME_TIMEOUT_SECONDS", 0.05), \
+                mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow):
+            statuses = asyncio.run(scenario())
+            time.sleep(0.45)
+        self.assertTrue(all(code == 500 for code in statuses))
+        self.assertEqual(started, 1)
+
     def test_expired_mapping_is_401(self):
         with store.conn() as c:
             c.execute("UPDATE credentials SET expires_at=0 WHERE id=?", (self.credential_id,))

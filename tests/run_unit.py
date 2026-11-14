@@ -39,6 +39,7 @@ UNIT_SUITES = [
     "tests.test_registry_index",
     "tests.test_store_concurrency",
     "tests.test_store_multiprocess",
+    "tests.test_store_pg_timeout",
 ]
 
 # Not a unittest class; kept as a standalone script.

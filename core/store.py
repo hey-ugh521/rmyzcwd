@@ -47,6 +47,9 @@ DB_PATH = (BASE / CFG.get("db", "data/mobius.db")).resolve()
 # 阶段 3：存储后端可切换（sqlite 默认；pg 走 PostgreSQL）
 DB_BACKEND = str(os.environ.get("CORE_DB_BACKEND") or CFG.get("db_backend") or "sqlite").lower()
 PG_DSN = str(os.environ.get("CORE_DB_DSN") or CFG.get("db_dsn") or "")
+# Bound TCP/auth wait for new PG connections; 0 disables (DSN value still applies).
+PG_CONNECT_TIMEOUT = int(float(os.environ.get("CORE_DB_CONNECT_TIMEOUT")
+                               or CFG.get("db_connect_timeout") or 5))
 CHARS_DIR = (BASE / CFG.get("characters_dir", "data/characters")).resolve()
 DATA_DIR = DB_PATH.parent
 LOG_DIR = BASE / "logs"
@@ -80,7 +83,10 @@ class _PgConnection:
 
         if not PG_DSN:
             raise RuntimeError("CORE_DB_BACKEND=pg 但缺少 CORE_DB_DSN/db_dsn")
-        self._c = psycopg.connect(PG_DSN, row_factory=dict_row, autocommit=False)
+        kwargs = {"row_factory": dict_row, "autocommit": False}
+        if PG_CONNECT_TIMEOUT > 0:
+            kwargs["connect_timeout"] = PG_CONNECT_TIMEOUT
+        self._c = psycopg.connect(PG_DSN, **kwargs)
 
     @staticmethod
     def _sql(sql: str) -> str:
