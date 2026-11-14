@@ -90,18 +90,52 @@ _anchor: sqlite3.Connection | None = None
 _anchor_key: tuple[str, str] | None = None
 
 _pg_tls = threading.local()
+_active_pg: dict[str, "_PgConnection"] = {}
+_active_pg_lock = threading.Lock()
+
+
+def _register_pg(key: str | None, conn: "_PgConnection") -> None:
+    if not key:
+        return
+    with _active_pg_lock:
+        _active_pg[key] = conn
+
+
+def _unregister_pg(key: str | None, conn: "_PgConnection") -> None:
+    if not key:
+        return
+    with _active_pg_lock:
+        if _active_pg.get(key) is conn:
+            _active_pg.pop(key, None)
+
+
+def cancel_pg(key: str) -> bool:
+    """Best-effort cancel of the connection registered under key."""
+    with _active_pg_lock:
+        conn = _active_pg.get(key)
+    if conn is None:
+        return False
+    try:
+        conn._c.cancel()
+        return True
+    except Exception:  # noqa: BLE001 - cancellation is best effort
+        return False
 
 
 @contextmanager
 def pg_timeouts(*, connect_timeout: int | None = None,
-                statement_timeout_ms: int | None = None):
+                statement_timeout_ms: int | None = None,
+                cancel_key: str | None = None):
     """Per-thread PG timeout override; used by identity query workers."""
     old = {}
-    for key, value in (("connect_timeout", connect_timeout),
-                       ("statement_timeout_ms", statement_timeout_ms)):
+    values = (("connect_timeout", connect_timeout),
+              ("statement_timeout_ms", statement_timeout_ms),
+              ("cancel_key", cancel_key))
+    for key, value in values:
         old[key] = getattr(_pg_tls, key, None)
         if value is not None:
-            setattr(_pg_tls, key, int(value))
+            setattr(_pg_tls, key,
+                    int(value) if key != "cancel_key" else value)
     try:
         yield
     finally:
@@ -141,6 +175,8 @@ class _PgConnection:
         if statement_ms and int(statement_ms) > 0:
             kwargs["options"] = f"-c statement_timeout={int(statement_ms)}"
         self._c = psycopg.connect(PG_DSN, **kwargs)
+        self._cancel_key = getattr(_pg_tls, "cancel_key", None)
+        _register_pg(self._cancel_key, self)
 
     @staticmethod
     def _sql(sql: str) -> str:
@@ -165,6 +201,7 @@ class _PgConnection:
         self._c.rollback()
 
     def close(self) -> None:
+        _unregister_pg(getattr(self, "_cancel_key", None), self)
         self._c.close()
 
     def __enter__(self):
@@ -175,7 +212,7 @@ class _PgConnection:
             self._c.commit()
         else:
             self._c.rollback()
-        self._c.close()
+        self.close()
         return False
 
 

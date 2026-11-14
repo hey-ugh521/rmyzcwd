@@ -466,6 +466,54 @@ class IdentityMeTest(unittest.TestCase):
         self.assertTrue(any("identity.me stats" in str(call.args[0])
                             for call in info.call_args_list))
 
+    def test_stats_endpoint_contract(self):
+        r = self.client.get("/api/identity/stats",
+                            headers={"Authorization": "Bearer identity-me-key"})
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertTrue(body["ok"])
+        for key in ("requests", "success", "slot_timeouts", "db_timeouts",
+                    "background_errors", "active_workers"):
+            self.assertIn(key, body)
+        self.assertNotIn("identity-me-key", r.text)
+        self.assertEqual(r.headers.get("cache-control"), "no-store")
+
+        denied = self.client.get("/api/identity/stats",
+                                 headers={"Authorization": "Bearer wrong-key"})
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(denied.headers.get("www-authenticate"), "Bearer")
+
+        missing = self.client.get("/api/identity/stats")
+        self.assertEqual(missing.status_code, 401)
+
+    def test_stats_endpoint_configuration_missing(self):
+        store.CFG["core"]["api_key"] = ""
+        try:
+            r = self.client.get("/api/identity/stats",
+                                headers={"Authorization": "Bearer identity-me-key"})
+        finally:
+            store.CFG["core"]["api_key"] = "identity-me-key"
+        self.assertEqual(r.status_code, 500)
+        self.assertEqual(r.json(), {"ok": False, "error": "identity_unavailable"})
+        self.assertNotIn("www-authenticate", r.headers)
+
+    def test_timeout_requests_pg_cancel(self):
+        before = identity_api.stats_snapshot()
+
+        def slow(*args, **kwargs):
+            time.sleep(0.3)
+
+        with mock.patch.object(identity_api, "IDENTITY_ME_TIMEOUT_SECONDS", 0.01), \
+                mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow), \
+                mock.patch.object(store, "cancel_pg", return_value=True) as cancel:
+            r = self.get(headers={"Authorization": "Bearer identity-me-key"})
+            time.sleep(0.35)
+        after = identity_api.stats_snapshot()
+        self.assertEqual(r.status_code, 500)
+        cancel.assert_called_once()
+        self.assertGreaterEqual(
+            after["cancel_requested"] - before["cancel_requested"], 1)
+
     def test_read_only_snapshot(self):
         before = None
         with store.conn() as c:

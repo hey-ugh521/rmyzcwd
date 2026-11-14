@@ -66,6 +66,21 @@ class PgTimeoutTest(unittest.TestCase):
         self.assertEqual(kwargs["options"], "-c statement_timeout=1234")
         self.assertNotIn("connect_timeout", self._connect())
 
+    def test_cancel_registry_and_context_restore(self):
+        inner = mock.Mock()
+        self.psycopg.connect.return_value = inner
+        with store.pg_timeouts(cancel_key="k", statement_timeout_ms=5000):
+            with mock.patch.dict(sys.modules, {
+                "psycopg": self.psycopg,
+                "psycopg.rows": self.rows,
+            }):
+                conn = store._PgConnection()
+            self.assertTrue(store.cancel_pg("k"))
+            self.assertTrue(inner.cancel.called)
+            conn.close()
+            self.assertFalse(store.cancel_pg("k"))
+        self.assertIsNone(getattr(store._pg_tls, "cancel_key", None))
+
     def test_cfg_int_zero_and_invalid(self):
         with mock.patch.dict(os.environ, {"TEST_TIMEOUT": "0"}):
             self.assertEqual(store._cfg_int("TEST_TIMEOUT", "x", 5), 0)

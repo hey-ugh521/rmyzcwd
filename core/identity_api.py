@@ -42,6 +42,8 @@ _STATS = {
     "slot_timeouts": 0,
     "db_timeouts": 0,
     "background_errors": 0,
+    "cancel_requested": 0,
+    "cancel_failed": 0,
     "active_workers": 0,
     "max_active_workers": 0,
 }
@@ -99,7 +101,8 @@ def _resolve_with_slot(token: str, loop: asyncio.AbstractEventLoop,
     _bump("active_workers")
     try:
         with store.pg_timeouts(
-                statement_timeout_ms=IDENTITY_DB_STATEMENT_TIMEOUT_MS):
+                statement_timeout_ms=IDENTITY_DB_STATEMENT_TIMEOUT_MS,
+                cancel_key=state.get("cancel_key")):
             return _resolve_identity(token)
     finally:
         _bump("active_workers", -1)
@@ -130,7 +133,8 @@ async def _run_identity(token: str, request_id: str) -> dict:
         _bump("slot_timeouts")
         raise _IdentityTimeout("slot_timeout") from exc
 
-    state: dict = {"request_id": request_id}
+    state: dict = {"request_id": request_id,
+                   "cancel_key": uuid.uuid4().hex}
     task = asyncio.create_task(
         run_sync(_resolve_with_slot, token, loop, sem, state))
     task.add_done_callback(
@@ -143,6 +147,9 @@ async def _run_identity(token: str, request_id: str) -> dict:
     except asyncio.TimeoutError as exc:
         state["timed_out"] = True
         _bump("db_timeouts")
+        _bump("cancel_requested")
+        if not store.cancel_pg(state["cancel_key"]):
+            _bump("cancel_failed")
         raise _IdentityTimeout("db_timeout") from exc
 
 
@@ -219,6 +226,26 @@ def _resolve_identity(token: str) -> dict:
     if identity.configured_legacy_key() != configured:
         raise _Unavailable("configuration_changed")
     return state
+
+
+@router.get("/api/identity/stats")
+async def identity_stats(request: Request) -> JSONResponse:
+    """Bearer-protected read-only in-process stats snapshot."""
+    token = _parse_bearer(request)
+    if not token:
+        return _unauthorized()
+    try:
+        configured = identity.configured_legacy_key()
+        if not configured:
+            return _unavailable()
+        if not hmac.compare_digest(token.encode("utf-8"),
+                                   configured.encode("utf-8")):
+            return _unauthorized()
+    except Exception as exc:  # noqa: BLE001 - never expose exception text
+        log.warning("identity.stats unavailable error_class=%s",
+                    type(exc).__name__)
+        return _unavailable()
+    return _response(200, {"ok": True, **stats_snapshot()})
 
 
 @router.get("/api/identity/me")
