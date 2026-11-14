@@ -62,9 +62,12 @@
 - `asyncio.shield(task)` 避免响应超时取消 worker
 - 总超时 5s；超时返回 500
 - `slot_timeout` / `db_timeout` 分别记录
-- 超时后 worker 异常记录 `error_class`
+- 超时后 worker 异常记录 `error_class`；只有**已超时**的 worker 异常计入
+  `background_errors`，未超时异常走 endpoint 的 `error_class` 日志
 - `stats_snapshot()` 进程内指标：请求、成功、401、500、两类超时、
   后台异常、active/max_active worker
+- 当前没有 metrics 消费者；运维读取方式（周期日志或内部只读诊断口）
+  仍需单独决定
 - 超时后的槽位恢复与后台异常已有回归测试
 
 `core/store.py`：
@@ -90,6 +93,36 @@ DB sleep 0.4s > timeout 0.05s
 说明槽位在超时后仍被 worker 持有，后续请求不能创建新 worker。
 
 旧 limiter 实测（已废弃）会 started=6、peak=6；因此旧实现不能防线程累积。
+
+### 3.2.1 超时叠加口径
+
+`connect_timeout=5s` 与 `statement_timeout=5s` 是串行两段：
+
+- 建连最多 5s
+- 查询执行最多 5s
+- worker 退出上限约 **10s**
+- endpoint 在 **5s** 就返回 500
+
+所以槽位最坏可能被占用约 10s，而不是 5s；监控/告警阈值必须按 10s
+上界设计，不能把 endpoint 5s 当成 worker 已退出。
+
+### 3.2.2 部署硬依赖
+
+`identity_api._resolve_with_slot` 调用 `store.pg_timeouts(...)`：
+
+- 生产旧 `store.py` 没有该符号
+- 只替换 `identity_api.py` 会在运行时抛 `AttributeError`，并被兜底成 500
+- `identity_api.py` 与 `store.py` 必须一起替换
+- 生产与仓库 `store.py` 差约 214 行（WAL 修复 + timeout 框架），需要单独
+  验收/最小补丁策略
+
+### 3.2.3 DSN options 约束
+
+`_PgConnection` 用 `options` 参数设置 `statement_timeout`：
+
+- 会覆盖 DSN 中已有的 `options`
+- 当前生产 DSN 没有 `options`，本次安全
+- 若未来 DSN 添加 `search_path` 等 options，必须合并而不是覆盖
 
 ## 3.3 仍未解决
 

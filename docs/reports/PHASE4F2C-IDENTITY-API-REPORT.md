@@ -162,6 +162,17 @@ endpoint 仍是旧实现。
 不会释放槽位，因此超时路径不会无限创建新 worker。但强制回收、外部指标/
 告警和生产长稳仍未关闭，不能视为资源风险完全解决。
 
+> 部署硬依赖：`identity_api._resolve_with_slot` 调用
+> `store.pg_timeouts(...)`。生产旧 `store.py` 没有该符号，两个文件必须
+> 一起替换；只换 `identity_api.py` 会抛 `AttributeError` 并被兜底成 500。
+> 生产与仓库 `store.py` 差约 214 行，需单独验收。
+>
+> 超时叠加：`connect_timeout=5s` + `statement_timeout=5s` 串行，worker
+> 最坏约 10s 退出，而 endpoint 5s 已返回 500；槽位占用上界按 10s 计算。
+>
+> `options` 约束：当前生产 DSN 无 `options`，本次安全；未来若 DSN 添加
+> `options`，直接覆盖会丢失原有设置。
+
 备份：
 
 ```text
