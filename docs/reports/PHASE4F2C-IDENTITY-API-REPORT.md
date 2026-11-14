@@ -152,6 +152,10 @@ CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告�
 注意：上述生产 `identity_api.py` 是部署时版本，**不包含后续本地
 CapacityLimiter(4)**；limiter 版本尚未部署。生产 endpoint 仍是旧实现。
 
+本地 limiter 版本也不能视为线程池风险关闭：它只限制**等待中的解析并发**；
+超时后 limiter token 释放，worker 继续运行，后续请求仍可创建新 worker。
+PG `connect_timeout`/`statement_timeout` 与有界线程池仍是部署前置条件。
+
 备份：
 
 ```text
