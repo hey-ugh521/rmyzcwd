@@ -1,7 +1,7 @@
 # 4F-2C 后续问题：线程池与超时资源语义
 
 - 日期：2026-11-14
-- 状态：**生产仍是部署版；本地 stats/cancel 完成但部署被 store 分叉阻断；强制回收/外部指标/长稳仍待处理**
+- 状态：**生产已部署 stats 诊断面 + PG cancel；未做生产 cancel 故障注入/长稳；外部告警仍待处理**
 - 来源：4F-2C 独立复审
 - 部署门禁：[4F-2C 前置清单 §E](2026-11-14-phase4f2c-preflight.md)
 - 原则：不在 4F-2C 实现中顺手修改冻结行为；需单独审批
@@ -71,7 +71,7 @@
 - **但生产日志级别未打通**：Core 由 uvicorn 启动，默认 logging config
   没有 root 键，root 保持 WARNING；`mobius.identity_api` 的 INFO 被过滤
 - 生产目录未找到 `identity.me stats` 文本
-- 本地新增 Bearer-protected `/api/identity/stats` 只读诊断面，未部署
+- 生产已部署 Bearer-protected `/api/identity/stats` 只读诊断面
 - 外部指标导出/告警仍未实现
 - 超时后的槽位恢复与后台异常已有回归测试
 
@@ -80,7 +80,7 @@
 - `PG_CONNECT_TIMEOUT` 默认 5s
 - `_PgConnection` 传 `connect_timeout`
 - identity worker 通过 thread-local 设置 `statement_timeout=5000ms`
-- 本地已有 `pg_timeouts(cancel_key=...)` + `store.cancel_pg()`；未部署
+- 生产已部署 `pg_timeouts(cancel_key=...)` + `store.cancel_pg()`；生产 cancel 故障注入未做
 - 全局 `PG_STATEMENT_TIMEOUT_MS` 默认 0；`CORE_DB_STATEMENT_TIMEOUT_MS` 可覆盖
 - connect timeout 影响所有新 PG 连接；statement timeout 仅 identity worker 默认生效
 - 配置值解析：只接受整数；0 保持 0；负数/小数/inf/非法值回落默认；
@@ -153,8 +153,6 @@ DB sleep 0.4s > timeout 0.05s
 
 - 生产已部署有界槽位 + `PG_CONNECT_TIMEOUT=5` + identity `statement_timeout=5s`
 - 生产 endpoint 200/401 与 PG timeout 上下文已验证
-- 本地 stats 诊断面 + PG cancel 原型已验证；未部署
-- **部署阻断**：新版 identity_api 需要 `cancel_key`/`cancel_pg`，生产最小补丁
-  store.py 没有；必须先走 G-01 路径 B
-- 强制回收/外部指标/生产长稳仍未关闭
-- 该资源语义未通过生产长稳验证
+- 生产 stats 诊断面 + PG cancel 已部署
+- 生产 cancel 故障注入/长稳未做
+- 外部指标告警/生产长稳仍未关闭

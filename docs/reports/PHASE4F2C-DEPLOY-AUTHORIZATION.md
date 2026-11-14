@@ -125,3 +125,26 @@ D:\AI\Mobius\core\store.py.bak-4f2c-20261114-155544
 - `store` 完整版符号存在，`pg_timeouts` 内 5s，普通连接 0
 
 G-01 仍未关闭；M3 干净安装与其它 drift 继续独立处理。
+
+## 8. 第四次授权：stats + cancel 版 identity_api
+
+2026-11-14 用户要求部署 stats + cancel 版 `identity_api.py`。
+
+执行：
+
+- 备份：
+  `D:\AI\Mobius\core\identity_api.py.bak-stats-20261114-171405`
+- 新文件 `B4E9622928BA...`
+- Core 重启 2026-11-14 17:14:29，PID 41812
+- store 保持完整版 `E7B07A98...`
+
+验证：
+
+- `/api/identity/me` 200/401 正常
+- `/api/identity/stats` 200，字段白名单，`Cache-Control: no-store`
+- stats 错误 Key 401
+- Legacy hash `acf335ffe0e6e796` 不变
+- Shadow `False`，事件 8
+- config 未变
+
+未做：生产 cancel 故障注入、长时间 worker 趋势、外部告警。

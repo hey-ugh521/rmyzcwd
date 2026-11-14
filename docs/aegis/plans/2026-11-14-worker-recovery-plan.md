@@ -1,7 +1,7 @@
 # 4F-2C 强制 worker 回收方案（Lead）
 
 - 日期：2026-11-14
-- 状态：**方案 + 本地 cancel 原型完成；未部署**
+- 状态：**方案 + cancel 原型完成；stats/cancel 版 identity_api 已部署；未做生产故障注入**
 - 关联：
   - [4F-2C followups](2026-11-14-phase4f2c-followups.md)
   - [4F-2C 部署报告](../reports/PHASE4F2C-IDENTITY-API-REPORT.md)

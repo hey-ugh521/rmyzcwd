@@ -157,18 +157,19 @@ CI 证据（公开仓库 run）：
 - 第二次部署（最小 store 补丁 + 新 identity_api）：2026-11-14 15:55:44
 - 第二次 Core 重启：2026-11-14 15:56:07（PID 29784）
 - G-01 路径 B（完整 store.py）：2026-11-14 17:04:08 备份，17:10:10 重启（PID 29036）
+- stats/cancel 版 identity_api：2026-11-14 17:14:05 备份，17:14:29 重启（PID 41812）
 - 生产 Python：3.12.14；CI 3.12/3.13 四 job 已全绿（见 §6）
 
 部署文件（当前生产）：
 
 | 文件 | 生产 SHA256 前缀 |
 |---|---|
-| `identity_api.py` | `20620DA8E05A9EC7` |
+| `identity_api.py` | `B4E9622928BA23F2` |
 | `store.py` | `E7B07A98F2CB429F` |
 | `server.py` | `7F77BB2B77BEBA4F` |
 
-注意：`store.py` 已通过 G-01 路径 B 收敛到仓库完整版本；生产 `identity_api.py`
-仍是旧版（20620…），但兼容完整 store。新版 identity_api（B4E9…）未部署。
+注意：`store.py` 已通过 G-01 路径 B 收敛到仓库完整版本；`identity_api.py`
+已部署 stats/cancel 版本（B4E9…）。两者均与仓库 HEAD 同源。
 
 本地后续版本（**未部署**）：
 
@@ -177,24 +178,23 @@ CI 证据（公开仓库 run）：
 | `identity_api.py` | `B4E9622928BA23F2` |
 | `store.py` | `E7B07A98F2CB429F` |
 
-本地新增：Bearer-protected `/api/identity/stats`、PG cancel 原型
+生产现已包含：Bearer-protected `/api/identity/stats`、PG cancel
 （`pg_timeouts(cancel_key=...)` / `cancel_pg` / 超时 cancel）。
-生产仍是上表部署版本，不含这些改动。
 
 **部署前置已解除：** G-01 路径 B 已把生产 `store.py` 收敛到完整版本
-（E7B0…），`cancel_key`/`cancel_pg` 已存在。新版 `identity_api.py`（B4E9…）
-仍**未部署**；部署它需要单独授权。
+（E7B0…），`cancel_key`/`cancel_pg` 已存在；`identity_api.py`（B4E9…）
+已部署。
 
 **stats 认证口径：** `/api/identity/stats` 只校验配置 Legacy Key，不查询
 Credential 状态；credential 被 revoke 后 `/me` 会 401，但 stats 仍可能 200。
-它是配置 Key 保护的诊断面，不是身份认证端点；本地未部署。
+它是配置 Key 保护的诊断面，不是身份认证端点。
 
-生产已部署版本已有 per-loop `Semaphore(4)`、超时不释放槽位、PG timeout；
-但强制 cancel、stats 诊断面和外部指标仍未进入生产。
+生产已部署 per-loop `Semaphore(4)`、超时不释放槽位、PG timeout、cancel、
+stats 诊断面；但 cancel 生产故障注入、外部指标和生产长稳仍未验证。
 
-> 部署硬依赖：本地 `identity_api._resolve_with_slot` 调用
+> 部署硬依赖：`identity_api._resolve_with_slot` 调用
 > `store.pg_timeouts(cancel_key=...)`，超时路径调用 `store.cancel_pg()`。
-> G-01 路径 B 后生产 `store.py` 已具备这两个符号；新版 identity_api 尚未部署。
+> G-01 路径 B 后生产 `store.py` 已具备这两个符号；新版 identity_api 已部署。
 > 生产完整 store 与仓库 HEAD 已同源；旧 214/240 行是历史最小补丁版对比值。
 >
 > 超时叠加：`connect_timeout=5s` + `statement_timeout=5s` 串行，worker
@@ -208,6 +208,7 @@ Credential 状态；credential 被 revoke 后 `/me` 会 401，但 stats 仍可�
 ```text
 D:\AI\Mobius\core\server.py.bak-20261114-141306
 D:\AI\Mobius\core\identity_api.py.bak-4f2c-20261114-155544
+D:\AI\Mobius\core\identity_api.py.bak-stats-20261114-171405
 D:\AI\Mobius\core\store.py.bak-4f2c-20261114-155544
 D:\AI\Mobius\core\store.py.bak-g01m3-20261114-170408
 D:\AI\Mobius\backups\g01m3-20261114-170408\Mobius-backup-20261114-170418
