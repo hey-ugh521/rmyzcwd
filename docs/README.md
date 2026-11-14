@@ -59,6 +59,7 @@
 - 4F-2C 部署授权：[授权与门禁裁决](reports/PHASE4F2C-DEPLOY-AUTHORIZATION.md)
 - 4F-2C 后续问题：[线程池与超时资源语义](aegis/plans/2026-11-14-phase4f2c-followups.md)
 - 4F-2C store.py 部署策略：[最小补丁](aegis/plans/2026-11-14-phase4f2c-store-deploy-strategy.md)
+- 4F-2C store.py 补丁文件：[minimal patch](aegis/patches/2026-11-14-phase4f2c-store-minimal.patch)
 - 2B 后续问题（不并入 4F-2C）：[2B Followups](aegis/plans/2026-11-14-phase2b-followups.md)
 - 2B-3 前置检查：[Phase 4F-2B-3 前置检查清单](aegis/plans/2026-11-13-phase4f2b3-preflight.md)
 - 测试可复现性：[3.13 复跑报告](reports/TEST-REPRODUCIBILITY-2026-11-13.md)

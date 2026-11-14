@@ -38,6 +38,15 @@
 
 ## 3. 最小补丁内容
 
+补丁文件：
+
+[2026-11-14-phase4f2c-store-minimal.patch](../patches/2026-11-14-phase4f2c-store-minimal.patch)
+
+- 91 行 diff
+- 基于生产旧 `store.py` 生成
+- 已用 `git apply --check` + 实际 apply 在临时副本验证
+- 应用后 SHA256 前缀 `3A20A70BFA52`，`py_compile` 通过
+
 ### 3.1 导入
 
 生产 `store.py` 当前没有 `contextmanager`，需补：
