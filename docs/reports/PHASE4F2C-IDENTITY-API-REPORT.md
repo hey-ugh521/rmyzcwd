@@ -146,21 +146,23 @@ CI 矩阵已加入 Windows/Ubuntu × 3.12/3.13；本次尚无该矩阵运行结�
 - 备份：2026-11-14 14:13:06
 - portable PostgreSQL 启动：2026-11-14 14:14:43
 - Core 重启：2026-11-14 14:16:52（PID 25988）
+- 第二次部署（最小 store 补丁 + 新 identity_api）：2026-11-14 15:55:44
+- 第二次 Core 重启：2026-11-14 15:56:07（PID 29784）
 - 生产 Python：3.12.14；CI 矩阵已加 3.12/3.13，尚无运行证据
 
-部署文件：
+部署文件（当前生产）：
 
 | 文件 | 生产 SHA256 前缀 |
 |---|---|
-| `identity_api.py` | `E3FD63AD51398F9F` |
+| `identity_api.py` | `20620DA8E05A9EC7` |
+| `store.py` | `3A20A70BFA52A486` |
 | `server.py` | `7F77BB2B77BEBA4F` |
 
-注意：上述生产 `identity_api.py` / `store.py` 是部署时版本，**不包含后续本地
-有界槽位 + statement timeout + 进程内指标**；该版本尚未部署。生产
-endpoint 仍是旧实现。
+注意：`store.py` 是**最小补丁**，不是仓库完整版本；SQLite WAL 修复仍未进入
+生产。`identity_api.py` 与补丁必须成对部署。
 
 本地版本用 per-loop `Semaphore(4)`，槽位在 worker 完成后释放；请求超时
-不会释放槽位，因此超时路径不会无限创建新 worker。但强制回收、外部指标/
+不会释放槽位，因此超时路径不会无限创建新 worker。强制回收、外部指标/
 告警和生产长稳仍未关闭，不能视为资源风险完全解决。
 
 > 部署硬依赖：`identity_api._resolve_with_slot` 调用
@@ -178,6 +180,8 @@ endpoint 仍是旧实现。
 
 ```text
 D:\AI\Mobius\core\server.py.bak-20261114-141306
+D:\AI\Mobius\core\identity_api.py.bak-4f2c-20261114-155544
+D:\AI\Mobius\core\store.py.bak-4f2c-20261114-155544
 ```
 
 生产配置：
@@ -186,13 +190,13 @@ D:\AI\Mobius\core\server.py.bak-20261114-141306
 - SHA256 前缀 `80F934C4933E0557`
 - 顶层无 `identity` 段
 
-生产 `store.py` 与仓库 HEAD 不一致：
+生产 `store.py` 与仓库 HEAD 仍不一致：
 
-- 生产是 2026-11-13 19:38 旧版本
-- 缺少 SQLite WAL `_conn_lock` / anchor / `_ClosingConnection` / 跨进程锁修复
+- 当前生产已打 PG timeout 最小补丁
+- 仍缺少 SQLite WAL `_conn_lock` / anchor / `_ClosingConnection` / 跨进程锁修复
 - 生产 `db_backend=pg`，PG 路径等价，因此不影响 4F-2C endpoint
 - 这属于开发仓库与生产安装分离的 drift，登记到 M3 干净安装 / G-10 前置项；
-  本次没有同步 `store.py`
+  本次没有同步完整 `store.py`
 
 生产验证：
 
@@ -213,6 +217,11 @@ Cache-Control: no-store
 - `principals` 仍只有 `service-legacy`
 - `credentials` 1 条，`last_used_at=NULL`
 - 服务恢复：gateway/comfyui/kokoro/napcat/postgres ready，langbot down
+- 生产 PG 只读验证：
+  - `pg_timeouts(statement_timeout_ms=5000)` 内 `SHOW statement_timeout = 5s`
+  - 上下文退出后 thread-local 恢复
+  - 普通连接 `SHOW statement_timeout = 0`
+- `store.pg_timeouts` 存在，`identity_api` 调用路径可用
 
 部署过程中发现 portable PostgreSQL 未运行，Core 启动阻塞；已用配置中的
 `pg_ctl` 启动 `pgsql-portable`，恢复后 Core 启动成功。该操作属于服务恢复，
@@ -223,7 +232,7 @@ Cache-Control: no-store
 - 未开启 Shadow
 - 未做生产 Shadow 重新验证
 - 未修复 2B 后续问题（独立立项）
-- 4F-2C 本地已加有界槽位 + statement timeout + 进程内指标，但该版本未部署；
+- 4F-2C 已部署有界槽位 + statement timeout + 进程内指标；
   强制回收/外部指标/生产长稳仍未关闭
   （见 [4F-2C 后续问题](../aegis/plans/2026-11-14-phase4f2c-followups.md)）
 - 未启用 Admin Login / 路由授权 / Default Deny

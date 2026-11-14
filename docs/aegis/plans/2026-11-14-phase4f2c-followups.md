@@ -1,7 +1,7 @@
 # 4F-2C 后续问题：线程池与超时资源语义
 
 - 日期：2026-11-14
-- 状态：**本地已有有界槽位 + statement timeout + 进程内指标/回收测试；未部署；外部指标/长稳仍待处理**
+- 状态：**生产已部署有界槽位 + statement timeout + 进程内指标；强制回收/外部指标/长稳仍待处理**
 - 来源：4F-2C 独立复审
 - 部署门禁：[4F-2C 前置清单 §E](2026-11-14-phase4f2c-preflight.md)
 - 原则：不在 4F-2C 实现中顺手修改冻结行为；需单独审批
@@ -146,6 +146,7 @@ DB sleep 0.4s > timeout 0.05s
 
 ## 5. 当前状态
 
-- 本地实现使用有界槽位 + `PG_CONNECT_TIMEOUT=5`
-- 未部署生产；生产仍是旧 endpoint / 旧 `store.py`
+- 生产已部署有界槽位 + `PG_CONNECT_TIMEOUT=5` + identity `statement_timeout=5s`
+- 生产 endpoint 200/401 与 PG timeout 上下文已验证
+- 强制回收/外部指标/生产长稳仍未关闭
 - 该资源语义未通过生产长稳验证

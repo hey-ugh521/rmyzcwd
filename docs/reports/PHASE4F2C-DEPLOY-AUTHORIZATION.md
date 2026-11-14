@@ -69,3 +69,32 @@
 
 但 §E 的 B2/B3/B4/C 与资源 followup 仍未闭合；本记录不把它们标记为通过，
 也不授权开启 Shadow 或扩大流量。
+
+## 6. 第二次授权：store 最小补丁
+
+2026-11-14 15:55:44，用户在四项部署前缺口复核后回复“授权”。
+
+范围：
+
+- 部署 `identity_api.py` 当前版本
+- 对生产 `store.py` 应用最小 PG timeout 补丁
+- 不开启 Shadow，不改配置，不修改 4F-1/2A/2B
+
+备份：
+
+```text
+D:\AI\Mobius\core\identity_api.py.bak-4f2c-20261114-155544
+D:\AI\Mobius\core\store.py.bak-4f2c-20261114-155544
+```
+
+部署后：
+
+- `identity_api.py` `20620DA8E05A...`
+- `store.py` `3A20A70BFA52...`
+- Core PID 29784，启动 2026-11-14 15:56:07
+- `/api/identity/me` 200/401 正常
+- Legacy hash `acf335ffe0e6e796` 不变
+- Shadow `enabled=False`，事件仍为 8
+- PG 只读验证上下文内 `5s`、退出恢复、普通连接 `0`
+
+仍未关闭：强制 worker 回收、外部指标、生产长稳、完整 `store.py` 同步。

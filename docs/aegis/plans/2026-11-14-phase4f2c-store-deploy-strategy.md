@@ -1,7 +1,7 @@
 # 4F-2C `store.py` 部署策略
 
 - 日期：2026-11-14
-- 状态：**策略已定；未部署**
+- 状态：**已授权并部署最小补丁；生产验证通过**
 - 关联：[4F-2C 部署授权](../reports/PHASE4F2C-DEPLOY-AUTHORIZATION.md)
 - 关联：[4F-2C 后续问题](2026-11-14-phase4f2c-followups.md)
 
@@ -216,6 +216,18 @@ D:\AI\Mobius\core\store.py
 - 不修改生产配置
 - 不改变 Legacy 放行
 
-## 7. 待授权
+## 7. 执行结果
 
-最小补丁部署需要 **单独部署授权**；本文件只定策略，不执行生产修改。
+2026-11-14 15:55:44 已按本策略部署：
+
+- 备份：
+  - `identity_api.py.bak-4f2c-20261114-155544`
+  - `store.py.bak-4f2c-20261114-155544`
+- 生产哈希：
+  - `identity_api.py` `20620DA8E05A...`
+  - `store.py` `3A20A70BFA52...`
+- Core 15:56:07 重启成功
+- endpoint 200/401、Legacy hash、Shadow 关闭、事件数不变
+- PG 只读验证：上下文内 5s、退出后恢复、普通连接 0
+
+部署边界未扩大：未开 Shadow，未改配置，未修改 4F-1/2A/2B 冻结内容。
