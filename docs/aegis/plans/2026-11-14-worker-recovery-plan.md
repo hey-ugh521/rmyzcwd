@@ -151,15 +151,20 @@ thread alive: False
 
 ## 9. 未完成
 
-- cancel 版尚未部署生产
+- cancel 版尚未部署生产；新版 `identity_api` 依赖 `cancel_key`/`cancel_pg`，
+  生产最小补丁版 `store.py` 没有这两个符号，直接部署会让 `/me` 500
+- 必须先完成 G-01 路径 B（完整 store 收敛），不能继续对最小补丁版追加补丁
 - 未做生产故障注入/长稳
 - cancel 失败路径只统计，不强制
 - 进程隔离方案未实现
-- 生产 stats 日志级别仍不可见；新增 `/api/identity/stats` 为本地诊断面，未部署
+- 连接建立阶段尚未注册，cancel 只对已建连查询生效；建连慢仍靠 connect_timeout
+- 生产 stats 日志级别仍不可见；`/api/identity/stats` 仅按配置 Key 保护，
+  不是完整身份认证，且未部署
 
 ## 10. 下一步
 
-1. 复审本地 cancel 变更
-2. 单独授权部署
-3. 生产验证 cancel 请求与槽位恢复
-4. 再决定是否需要进程隔离
+1. 先完成 G-01 路径 B，使生产 store 具备 `pg_timeouts`/`cancel_pg`
+2. 复审本地 cancel/stats 变更
+3. 单独授权部署
+4. 生产验证 cancel 请求与槽位恢复
+5. 再决定是否需要进程隔离

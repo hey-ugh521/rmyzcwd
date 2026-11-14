@@ -1,7 +1,9 @@
 # 4F-2C `store.py` 部署策略
 
 - 日期：2026-11-14
-- 状态：**已授权并部署最小补丁；生产验证通过**
+- 状态：**历史最小补丁已部署；对含 cancel/stats 的新版 identity_api 已不充分**
+- 新依赖：`pg_timeouts(cancel_key=...)` / `cancel_pg()` 不在最小补丁内
+- 含 cancel/stats 的版本必须走 G-01 路径 B 或重新裁决补丁，不能直接部署
 - 关联：[4F-2C 部署授权](../reports/PHASE4F2C-DEPLOY-AUTHORIZATION.md)
 - 关联：[4F-2C 后续问题](2026-11-14-phase4f2c-followups.md)
 

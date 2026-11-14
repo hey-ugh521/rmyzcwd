@@ -1,7 +1,7 @@
 # 4F-2C 后续问题：线程池与超时资源语义
 
 - 日期：2026-11-14
-- 状态：**生产已部署有界槽位 + statement timeout；本地 stats 诊断面 + PG cancel 原型完成但未部署；生产日志级别/外部指标/长稳仍待处理**
+- 状态：**生产仍是部署版；本地 stats/cancel 完成但部署被 store 分叉阻断；强制回收/外部指标/长稳仍待处理**
 - 来源：4F-2C 独立复审
 - 部署门禁：[4F-2C 前置清单 §E](2026-11-14-phase4f2c-preflight.md)
 - 原则：不在 4F-2C 实现中顺手修改冻结行为；需单独审批
@@ -154,5 +154,7 @@ DB sleep 0.4s > timeout 0.05s
 - 生产已部署有界槽位 + `PG_CONNECT_TIMEOUT=5` + identity `statement_timeout=5s`
 - 生产 endpoint 200/401 与 PG timeout 上下文已验证
 - 本地 stats 诊断面 + PG cancel 原型已验证；未部署
+- **部署阻断**：新版 identity_api 需要 `cancel_key`/`cancel_pg`，生产最小补丁
+  store.py 没有；必须先走 G-01 路径 B
 - 强制回收/外部指标/生产长稳仍未关闭
 - 该资源语义未通过生产长稳验证

@@ -89,7 +89,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 
 ## 6. 测试
 
-`tests/test_identity_api.py`：33/33
+`tests/test_identity_api.py`：34/34
 
 覆盖：
 
@@ -125,7 +125,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 完整入口：
 
 ```text
-Ran 160 tests ... OK
+Ran 162 tests ... OK
 webhook 5/5
 ```
 
@@ -173,19 +173,30 @@ CI 证据（公开仓库 run）：
 
 | 文件 | 本地 SHA256 前缀 |
 |---|---|
-| `identity_api.py` | `6ABF65AF9582CCFA` |
-| `store.py` | `4E7B617AB9F29578` |
+| `identity_api.py` | `B4E9622928BA23F2` |
+| `store.py` | `E7B07A98F2CB429F` |
 
 本地新增：Bearer-protected `/api/identity/stats`、PG cancel 原型
 （`pg_timeouts(cancel_key=...)` / `cancel_pg` / 超时 cancel）。
 生产仍是上表部署版本，不含这些改动。
 
+**部署阻断：** 本地 `identity_api.py` 调用 `cancel_key=` 与
+`store.cancel_pg()`；生产最小补丁版 `store.py`（`3A20A70B…`）没有这两个
+符号。只替换 `identity_api.py` 会让 `/api/identity/me` 返回 500，而
+`/api/identity/stats` 仍可能 200。必须先完成 G-01 路径 B（完整 store 收敛）
+或重新裁决补丁，不能直接部署本地版本。
+
+**stats 认证口径：** `/api/identity/stats` 只校验配置 Legacy Key，不查询
+Credential 状态；credential 被 revoke 后 `/me` 会 401，但 stats 仍可能 200。
+它是配置 Key 保护的诊断面，不是身份认证端点；本地未部署。
+
 生产已部署版本已有 per-loop `Semaphore(4)`、超时不释放槽位、PG timeout；
 但强制 cancel、stats 诊断面和外部指标仍未进入生产。
 
-> 部署硬依赖：`identity_api._resolve_with_slot` 调用
-> `store.pg_timeouts(...)`。生产旧 `store.py` 没有该符号，两个文件必须
-> 一起替换；只换 `identity_api.py` 会抛 `AttributeError` 并被兜底成 500。
+> 部署硬依赖：本地 `identity_api._resolve_with_slot` 调用
+> `store.pg_timeouts(cancel_key=...)`，超时路径调用 `store.cancel_pg()`。
+> 生产最小补丁版 `store.py` 两者都没有；只换 `identity_api.py` 会抛
+> `TypeError` 并返回 500。必须先走 G-01 路径 B 或重新裁决补丁。
 > 生产 patched `store.py` 与仓库 HEAD 当前差异约 `+171/-19`；历史 214 行是
 > 部署前旧版对比值，不能与当前值混用。
 >
