@@ -457,6 +457,15 @@ class IdentityMeTest(unittest.TestCase):
         self.assertLessEqual(peak, 2)
         self.assertGreaterEqual(peak, 1)
 
+    def test_stats_log_emits_periodic_snapshot(self):
+        with mock.patch.object(identity_api,
+                               "IDENTITY_STATS_LOG_INTERVAL_SECONDS", 0), \
+                mock.patch.object(identity_api.log, "info") as info:
+            r = self.get(headers={"Authorization": "Bearer identity-me-key"})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(any("identity.me stats" in str(call.args[0])
+                            for call in info.call_args_list))
+
     def test_read_only_snapshot(self):
         before = None
         with store.conn() as c:

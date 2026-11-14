@@ -11,6 +11,7 @@ import hmac
 import logging
 import re
 import threading
+import time
 import uuid
 import weakref
 
@@ -26,11 +27,13 @@ log = logging.getLogger("mobius.identity_api")
 IDENTITY_ME_TIMEOUT_SECONDS = 5.0
 IDENTITY_ME_MAX_CONCURRENCY = 4
 IDENTITY_DB_STATEMENT_TIMEOUT_MS = 5000
+IDENTITY_STATS_LOG_INTERVAL_SECONDS = 60.0
 _IDENTITY_SEMAPHORES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _SCHEME_RE = re.compile(r"([!#$%&'*+\-.^_`|~0-9A-Za-z]+) +(\S+)")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 _STATS_LOCK = threading.Lock()
+_LAST_STATS_LOG = 0.0
 _STATS = {
     "requests": 0,
     "success": 0,
@@ -56,6 +59,16 @@ def stats_snapshot() -> dict:
     with _STATS_LOCK:
         return dict(_STATS)
 
+
+def _maybe_log_stats() -> None:
+    global _LAST_STATS_LOG
+    now = time.monotonic()
+    with _STATS_LOCK:
+        if now - _LAST_STATS_LOG < IDENTITY_STATS_LOG_INTERVAL_SECONDS:
+            return
+        _LAST_STATS_LOG = now
+        snapshot = dict(_STATS)
+    log.info("identity.me stats %s", snapshot)
 
 
 class _IdentityTimeout(Exception):
@@ -211,6 +224,7 @@ def _resolve_identity(token: str) -> dict:
 @router.get("/api/identity/me")
 async def identity_me(request: Request) -> JSONResponse:
     _bump("requests")
+    _maybe_log_stats()
     request_id = _request_id(request)
     token = _parse_bearer(request)
     if not token:

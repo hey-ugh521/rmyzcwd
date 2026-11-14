@@ -75,8 +75,8 @@ summary, and restores config. Not production evidence.
 ## CI
 
 `.github/workflows/unit-tests.yml` runs on `windows-latest` and
-`ubuntu-latest` (Python 3.13). This exercises both `msvcrt.locking` and
-`fcntl.flock` branches of the DB initialization lock.
+`ubuntu-latest` (Python 3.12 and 3.13). This exercises both `msvcrt.locking`
+and `fcntl.flock` branches of the DB initialization lock.
 
 ## Important: run serially
 
