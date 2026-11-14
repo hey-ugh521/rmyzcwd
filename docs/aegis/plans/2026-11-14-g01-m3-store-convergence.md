@@ -1,7 +1,7 @@
 # G-01 / M3：生产 `store.py` 与仓库收敛方案
 
 - 日期：2026-11-14
-- 结论状态：**方案评审稿（未部署、未改生产、未重启服务、未开 Shadow、未改配置）**
+- 结论状态：**路径 B 已执行；G-01/M3 仍未关闭**
 - 分析方式：只读代码/哈希/进程检查；补丁可逆性在临时目录验证；未运行测试、未执行安装器
 - 关联文档：
   - [4F-2C `store.py` 部署策略](2026-11-14-phase4f2c-store-deploy-strategy.md)
@@ -432,6 +432,37 @@ body hash、Shadow 事件数、`schema_meta.schema_version`、Core PID/启动时
 | worker 回收方案 B 将改 `store.py` | 中 | 先完成本收敛；新方案必须基于仓库 HEAD 实现，禁止再对最小补丁版打补丁 |
 | 干净安装默认 `db_backend=pg` 不覆盖 SQLite 修复 | 中 | A 的测试矩阵必须显式跑 T1/T2（sqlite）或临时 sqlite 配置 |
 | 生产 `secrets.py`/`shared/lifecycle.py` 等其它 drift | 中 | 不在本方案范围；G-01 关闭前需单独收敛/登记 |
+
+## 9A. 执行记录（2026-11-14）
+
+路径 B 已执行：
+
+- 单文件备份：
+  `D:\AI\Mobius\core\store.py.bak-g01m3-20261114-170408`
+  SHA256 `3A20A70BFA52...`
+- 应用级备份：
+  `D:\AI\Mobius\backups\g01m3-20261114-170408\Mobius-backup-20261114-170418`
+  已用 `restore --scratch` 校验 mobius_core/mobius/langbot 三库可恢复
+- 部署文件：仓库 `core/store.py`
+  SHA256 `E7B07A98F2CB...`
+- Core 重启：2026-11-14 17:10:10，PID 29036
+- 生产只读验证：
+  - `store.__file__` 指向 `D:\AI\Mobius\core\store.py`
+  - `hasattr(close_anchor/_conn_lock/pg_timeouts/cancel_pg)=True`
+  - `/health` 200
+  - `/api/identity/me` 200/401 契约不变
+  - `/api/capabilities/permissions` hash `acf335ffe0e6e796` 不变
+  - Shadow `False`，事件仍为 8
+  - `pg_timeouts` 内 `SHOW statement_timeout=5s`；退出/普通连接为 `0`
+- 未改动 config/secrets/其它 `core/*`/`server.py`/`identity.py`/`identity_shadow.py`
+- 未开启 Shadow、未部署新 `identity_api.py`、未启用 Admin/路由授权
+
+残留：
+
+- 旧 `store.cpython-312.pyc` 未能删除（ACL 拒绝）；源文件 hash 已变更，
+  `-B` 导入确认加载源文件；后续干净安装应移除陈旧 pyc
+- PG 路径已验证；SQLite WAL 生命周期仍未在生产 SQLite 场景验证
+- G-01 仍 open（secrets/lifecycle/installer 等其它 drift）
 
 ## 10. 下一步与所需授权
 

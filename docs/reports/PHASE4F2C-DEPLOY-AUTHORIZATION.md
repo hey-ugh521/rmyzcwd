@@ -98,3 +98,30 @@ D:\AI\Mobius\core\store.py.bak-4f2c-20261114-155544
 - PG 只读验证上下文内 `5s`、退出恢复、普通连接 `0`
 
 仍未关闭：强制 worker 回收、外部指标、生产长稳、完整 `store.py` 同步。
+
+## 7. 第三次授权：G-01 路径 B
+
+2026-11-14 用户明确要求“执行 G-01 路径 B”。
+
+执行内容：
+
+- 单文件备份：
+  `D:\AI\Mobius\core\store.py.bak-g01m3-20261114-170408`
+- 应用级备份：
+  `D:\AI\Mobius\backups\g01m3-20261114-170408\Mobius-backup-20261114-170418`
+  （scratch restore 通过）
+- 生产 `store.py` 替换为仓库完整版：
+  `E7B07A98F2CB...`
+- Core 重启 2026-11-14 17:10:10，PID 29036
+- 未替换 `identity_api.py`；生产仍为 `20620DA8...`
+- 未开启 Shadow、未改 config/secrets
+
+验证：
+
+- `/health` 200
+- `/api/identity/me` 200/401 契约不变
+- Legacy hash `acf335ffe0e6e796` 不变
+- Shadow `False`，事件 8
+- `store` 完整版符号存在，`pg_timeouts` 内 5s，普通连接 0
+
+G-01 仍未关闭；M3 干净安装与其它 drift 继续独立处理。

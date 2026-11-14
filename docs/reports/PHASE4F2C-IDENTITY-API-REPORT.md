@@ -156,6 +156,7 @@ CI 证据（公开仓库 run）：
 - Core 重启：2026-11-14 14:16:52（PID 25988）
 - 第二次部署（最小 store 补丁 + 新 identity_api）：2026-11-14 15:55:44
 - 第二次 Core 重启：2026-11-14 15:56:07（PID 29784）
+- G-01 路径 B（完整 store.py）：2026-11-14 17:04:08 备份，17:10:10 重启（PID 29036）
 - 生产 Python：3.12.14；CI 3.12/3.13 四 job 已全绿（见 §6）
 
 部署文件（当前生产）：
@@ -163,11 +164,11 @@ CI 证据（公开仓库 run）：
 | 文件 | 生产 SHA256 前缀 |
 |---|---|
 | `identity_api.py` | `20620DA8E05A9EC7` |
-| `store.py` | `3A20A70BFA52A486` |
+| `store.py` | `E7B07A98F2CB429F` |
 | `server.py` | `7F77BB2B77BEBA4F` |
 
-注意：`store.py` 是**最小补丁**，不是仓库完整版本；SQLite WAL 修复仍未进入
-生产。`identity_api.py` 与补丁必须成对部署。
+注意：`store.py` 已通过 G-01 路径 B 收敛到仓库完整版本；生产 `identity_api.py`
+仍是旧版（20620…），但兼容完整 store。新版 identity_api（B4E9…）未部署。
 
 本地后续版本（**未部署**）：
 
@@ -180,11 +181,9 @@ CI 证据（公开仓库 run）：
 （`pg_timeouts(cancel_key=...)` / `cancel_pg` / 超时 cancel）。
 生产仍是上表部署版本，不含这些改动。
 
-**部署阻断：** 本地 `identity_api.py` 调用 `cancel_key=` 与
-`store.cancel_pg()`；生产最小补丁版 `store.py`（`3A20A70B…`）没有这两个
-符号。只替换 `identity_api.py` 会让 `/api/identity/me` 返回 500，而
-`/api/identity/stats` 仍可能 200。必须先完成 G-01 路径 B（完整 store 收敛）
-或重新裁决补丁，不能直接部署本地版本。
+**部署前置已解除：** G-01 路径 B 已把生产 `store.py` 收敛到完整版本
+（E7B0…），`cancel_key`/`cancel_pg` 已存在。新版 `identity_api.py`（B4E9…）
+仍**未部署**；部署它需要单独授权。
 
 **stats 认证口径：** `/api/identity/stats` 只校验配置 Legacy Key，不查询
 Credential 状态；credential 被 revoke 后 `/me` 会 401，但 stats 仍可能 200。
@@ -195,10 +194,8 @@ Credential 状态；credential 被 revoke 后 `/me` 会 401，但 stats 仍可�
 
 > 部署硬依赖：本地 `identity_api._resolve_with_slot` 调用
 > `store.pg_timeouts(cancel_key=...)`，超时路径调用 `store.cancel_pg()`。
-> 生产最小补丁版 `store.py` 两者都没有；只换 `identity_api.py` 会抛
-> `TypeError` 并返回 500。必须先走 G-01 路径 B 或重新裁决补丁。
-> 生产 patched `store.py` 与仓库 HEAD 当前差异约 `+171/-19`；历史 214 行是
-> 部署前旧版对比值，不能与当前值混用。
+> G-01 路径 B 后生产 `store.py` 已具备这两个符号；新版 identity_api 尚未部署。
+> 生产完整 store 与仓库 HEAD 已同源；旧 214/240 行是历史最小补丁版对比值。
 >
 > 超时叠加：`connect_timeout=5s` + `statement_timeout=5s` 串行，worker
 > 最坏约 10s 退出，而 endpoint 5s 已返回 500；槽位占用上界按 10s 计算。
@@ -212,6 +209,8 @@ Credential 状态；credential 被 revoke 后 `/me` 会 401，但 stats 仍可�
 D:\AI\Mobius\core\server.py.bak-20261114-141306
 D:\AI\Mobius\core\identity_api.py.bak-4f2c-20261114-155544
 D:\AI\Mobius\core\store.py.bak-4f2c-20261114-155544
+D:\AI\Mobius\core\store.py.bak-g01m3-20261114-170408
+D:\AI\Mobius\backups\g01m3-20261114-170408\Mobius-backup-20261114-170418
 ```
 
 生产配置：
@@ -220,13 +219,12 @@ D:\AI\Mobius\core\store.py.bak-4f2c-20261114-155544
 - SHA256 前缀 `80F934C4933E0557`
 - 顶层无 `identity` 段
 
-生产 `store.py` 与仓库 HEAD 仍不一致：
+生产 `store.py` 已通过 G-01 路径 B 收敛：
 
-- 当前生产已打 PG timeout 最小补丁
-- 仍缺少 SQLite WAL `_conn_lock` / anchor / `_ClosingConnection` / 跨进程锁修复
-- 生产 `db_backend=pg`，PG 路径等价，因此不影响 4F-2C endpoint
-- 这属于开发仓库与生产安装分离的 drift，登记到 M3 干净安装 / G-10 前置项；
-  本次没有同步完整 `store.py`
+- 当前生产 `store.py` 哈希为 `E7B07A98F2CB...`，与仓库 HEAD 同源
+- SQLite WAL `_conn_lock` / anchor / `_ClosingConnection` / 跨进程锁已进入生产
+- 生产 `db_backend=pg`；SQLite 生命周期行为仍未经生产 SQLite 场景验证
+- G-01 其它 drift（secrets/lifecycle/installer）仍 open
 
 生产验证：
 
