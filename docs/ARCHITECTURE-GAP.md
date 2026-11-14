@@ -25,7 +25,7 @@
 
 | ID | Gap | 严重度 | 证据 | 退出条件（Definition of Done） |
 |---|---|---|---|---|
-| G-01 | **开发副本 ≠ 安装副本**：当前运行来自开发目录，安装副本代码落后 | P0 | AS-IS §1；`D:\AI\Mobius` 无 `map_gateway_status`；2026-11-14 4F-2C 部署发现生产 `store.py` 仍缺 SQLite WAL 修复（PG 路径等价） | 安装器产物与仓库 main 同源；干净机器安装=当前代码；发布流程强制 |
+| G-01 | **开发副本 ≠ 安装副本**：当前运行来自开发目录，安装副本代码落后 | P0 | AS-IS §1；`D:\AI\Mobius` 无 `map_gateway_status`；2026-11-14 4F-2C 部署发现生产 `store.py` 仍缺 SQLite WAL 修复（PG 路径等价）；[4F-2C store 部署策略](aegis/plans/2026-11-14-phase4f2c-store-deploy-strategy.md) 选最小补丁 | 安装器产物与仓库 main 同源；干净机器安装=当前代码；发布流程强制 |
 | G-02 | **双大脑 / 双记忆**：QQ 走 LangBot + memory MCP，Web/Console 走 Core；跨入口人格/记忆/审计不统一 | P0 | AS-IS §3/§4；STATUS §2/§5 | 身份、会话、记忆的权威归属明确；只有一个写入者；跨入口验证通过 |
 | G-03 | **任务状态双写**：Gateway `task_snapshot` 与 Core `tasks` 并存；D1 已定 Core owner，代码未收敛 | P0 | AS-IS §4；ADR-002 / T1 映射只是兼容；**设计已定稿 `docs/adr/ADR-007-task-ownership.md`（Accepted）** | ADR-007 评审通过并实现（Gateway 只留执行队列/outbox，Core 唯一状态源）；契约测试全绿 |
 | G-04 | **桌面应用入口缺失**：当前是 launcher GUI + 浏览器 Console；PB-01 要求桌面应用为主 | P0 | AS-IS §3.1；launcher 打开 `/console` | 桌面应用内嵌控制台/任务/诊断；用户不需要手动开浏览器 |
