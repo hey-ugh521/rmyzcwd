@@ -1,7 +1,7 @@
 # 4F-2C 后续问题：线程池与超时资源语义
 
 - 日期：2026-11-14
-- 状态：**生产已部署有界槽位 + statement timeout；进程内指标代码已部署但生产日志级别未打通；强制回收/外部指标/长稳仍待处理**
+- 状态：**生产已部署有界槽位 + statement timeout；本地 stats 诊断面 + PG cancel 原型完成但未部署；生产日志级别/外部指标/长稳仍待处理**
 - 来源：4F-2C 独立复审
 - 部署门禁：[4F-2C 前置清单 §E](2026-11-14-phase4f2c-preflight.md)
 - 原则：不在 4F-2C 实现中顺手修改冻结行为；需单独审批
@@ -66,12 +66,13 @@
 - 超时后 worker 异常记录 `error_class`；只有**已超时**的 worker 异常计入
   `background_errors`，未超时异常走 endpoint 的 `error_class` 日志
 - `stats_snapshot()` 进程内指标：请求、成功、401、500、两类超时、
-  后台异常、active/max_active worker
+  后台异常、active/max_active worker、cancel_requested/cancel_failed
 - 周期结构化日志已实现（默认 60s，`identity.me stats ...`）
 - **但生产日志级别未打通**：Core 由 uvicorn 启动，默认 logging config
   没有 root 键，root 保持 WARNING；`mobius.identity_api` 的 INFO 被过滤
-- 生产目录未找到 `identity.me stats` 文本；`stats_snapshot()` 仍无生产取证路径
-- 外部指标导出/告警与内部诊断口仍未实现
+- 生产目录未找到 `identity.me stats` 文本
+- 本地新增 Bearer-protected `/api/identity/stats` 只读诊断面，未部署
+- 外部指标导出/告警仍未实现
 - 超时后的槽位恢复与后台异常已有回归测试
 
 `core/store.py`：
@@ -79,6 +80,7 @@
 - `PG_CONNECT_TIMEOUT` 默认 5s
 - `_PgConnection` 传 `connect_timeout`
 - identity worker 通过 thread-local 设置 `statement_timeout=5000ms`
+- 本地已有 `pg_timeouts(cancel_key=...)` + `store.cancel_pg()`；未部署
 - 全局 `PG_STATEMENT_TIMEOUT_MS` 默认 0；`CORE_DB_STATEMENT_TIMEOUT_MS` 可覆盖
 - connect timeout 影响所有新 PG 连接；statement timeout 仅 identity worker 默认生效
 - 配置值解析：只接受整数；0 保持 0；负数/小数/inf/非法值回落默认；
@@ -151,5 +153,6 @@ DB sleep 0.4s > timeout 0.05s
 
 - 生产已部署有界槽位 + `PG_CONNECT_TIMEOUT=5` + identity `statement_timeout=5s`
 - 生产 endpoint 200/401 与 PG timeout 上下文已验证
+- 本地 stats 诊断面 + PG cancel 原型已验证；未部署
 - 强制回收/外部指标/生产长稳仍未关闭
 - 该资源语义未通过生产长稳验证

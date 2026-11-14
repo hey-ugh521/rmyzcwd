@@ -89,7 +89,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 
 ## 6. 测试
 
-`tests/test_identity_api.py`：30/30
+`tests/test_identity_api.py`：33/33
 
 覆盖：
 
@@ -109,6 +109,8 @@ endpoint 契约，也不要求修改 `auth_mw`。
 - 超时路径不创建超过槽位的 worker
 - 超时后槽位恢复，后台异常计入 stats
 - 周期 stats 结构化日志输出
+- Bearer-protected stats 诊断面
+- 超时路径调用 store.cancel_pg（本地）
 - DB 超时 → 500
 - PG connect_timeout 传到 psycopg
 - PG statement_timeout/thread-local context
@@ -123,7 +125,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 完整入口：
 
 ```text
-Ran 156 tests ... OK
+Ran 160 tests ... OK
 webhook 5/5
 ```
 
@@ -167,9 +169,19 @@ CI 证据（公开仓库 run）：
 注意：`store.py` 是**最小补丁**，不是仓库完整版本；SQLite WAL 修复仍未进入
 生产。`identity_api.py` 与补丁必须成对部署。
 
-本地版本用 per-loop `Semaphore(4)`，槽位在 worker 完成后释放；请求超时
-不会释放槽位，因此超时路径不会无限创建新 worker。强制回收、外部指标/
-告警和生产长稳仍未关闭，不能视为资源风险完全解决。
+本地后续版本（**未部署**）：
+
+| 文件 | 本地 SHA256 前缀 |
+|---|---|
+| `identity_api.py` | `6ABF65AF9582CCFA` |
+| `store.py` | `4E7B617AB9F29578` |
+
+本地新增：Bearer-protected `/api/identity/stats`、PG cancel 原型
+（`pg_timeouts(cancel_key=...)` / `cancel_pg` / 超时 cancel）。
+生产仍是上表部署版本，不含这些改动。
+
+生产已部署版本已有 per-loop `Semaphore(4)`、超时不释放槽位、PG timeout；
+但强制 cancel、stats 诊断面和外部指标仍未进入生产。
 
 > 部署硬依赖：`identity_api._resolve_with_slot` 调用
 > `store.pg_timeouts(...)`。生产旧 `store.py` 没有该符号，两个文件必须

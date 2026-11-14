@@ -1,7 +1,7 @@
 # 4F-2C 强制 worker 回收方案（Lead）
 
 - 日期：2026-11-14
-- 状态：**方案评审稿；未实现、未部署**
+- 状态：**方案 + 本地 cancel 原型完成；未部署**
 - 关联：
   - [4F-2C followups](2026-11-14-phase4f2c-followups.md)
   - [4F-2C 部署报告](../reports/PHASE4F2C-IDENTITY-API-REPORT.md)
@@ -122,9 +122,44 @@
 - 必须先有故障注入证据，再讨论部署
 - 当前生产没有强制回收；只有有界槽位 + statement timeout + 快速失败
 
-## 8. 下一步
+## 8. 本地 cancel 原型结果
 
-1. 批准 B 或 A 的试验范围
-2. 在本地实现最小原型 + 故障注入
-3. 独立复审
-4. 再决定是否生产部署
+已实现（本地，未部署）：
+
+- `store.pg_timeouts(cancel_key=...)` 注册当前 thread-local 连接
+- `store.cancel_pg(key)` best-effort 调用 `psycopg.Connection.cancel()`
+- `_PgConnection.close()`/`__exit__` 注销注册
+- `identity_api` 超时路径调用 `cancel_pg`
+- 新增 stats：`cancel_requested` / `cancel_failed`
+
+真实 PG 只读探针：
+
+```text
+SELECT pg_sleep(10) in worker thread
+after 0.25s: cancel_pg -> True
+outcome: QueryCanceled
+elapsed: 0.235s
+thread alive: False
+```
+
+单元测试：
+
+- `test_cancel_registry_and_context_restore`
+- `test_timeout_requests_pg_cancel`
+
+这证明 cancel 方案在真实 psycopg/PG 上可行；仍不等于生产故障注入通过。
+
+## 9. 未完成
+
+- cancel 版尚未部署生产
+- 未做生产故障注入/长稳
+- cancel 失败路径只统计，不强制
+- 进程隔离方案未实现
+- 生产 stats 日志级别仍不可见；新增 `/api/identity/stats` 为本地诊断面，未部署
+
+## 10. 下一步
+
+1. 复审本地 cancel 变更
+2. 单独授权部署
+3. 生产验证 cancel 请求与槽位恢复
+4. 再决定是否需要进程隔离
