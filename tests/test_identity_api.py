@@ -257,15 +257,22 @@ class IdentityMeTest(unittest.TestCase):
                 mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow):
             statuses = asyncio.run(scenario())
             time.sleep(0.45)
-        self.assertTrue(all(code == 500 for code in statuses))
+        self.assertTrue(all(code == 500 for code in statuses), statuses)
         self.assertEqual(started, 1)
 
     def test_slot_recovers_after_timeouts(self):
         before = identity_api.stats_snapshot()
         original = identity.inspect_legacy_api_key
+        calls = 0
+        lock = threading.Lock()
 
         def slow(*args, **kwargs):
-            time.sleep(0.05)
+            nonlocal calls
+            with lock:
+                calls += 1
+                current = calls
+            if current == 1:
+                time.sleep(1.0)
             return original(*args, **kwargs)
 
         async def scenario():
@@ -288,13 +295,18 @@ class IdentityMeTest(unittest.TestCase):
                 return statuses, ok.status_code
 
         with mock.patch.object(identity_api, "IDENTITY_ME_MAX_CONCURRENCY", 1), \
-                mock.patch.object(identity_api, "IDENTITY_ME_TIMEOUT_SECONDS", 0.01), \
+                mock.patch.object(identity_api, "IDENTITY_ME_TIMEOUT_SECONDS", 0.05), \
                 mock.patch.object(identity, "inspect_legacy_api_key", side_effect=slow):
             statuses, ok_status = asyncio.run(scenario())
         after = identity_api.stats_snapshot()
-        self.assertTrue(all(code == 500 for code in statuses))
+        self.assertTrue(all(code == 500 for code in statuses), statuses)
         self.assertEqual(ok_status, 200)
-        self.assertGreaterEqual(after["db_timeouts"] - before["db_timeouts"], 5)
+        self.assertEqual(calls, 2)
+        self.assertGreaterEqual(
+            after["db_timeouts"] - before["db_timeouts"], 1)
+        self.assertGreaterEqual(
+            after["slot_timeouts"] - before["slot_timeouts"], 4)
+        self.assertGreaterEqual(after["max_active_workers"], 1)
         self.assertEqual(after["active_workers"], 0)
 
     def test_background_exception_is_counted(self):
