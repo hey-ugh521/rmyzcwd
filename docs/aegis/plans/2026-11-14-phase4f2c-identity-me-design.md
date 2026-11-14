@@ -270,7 +270,7 @@ HTTP 细节：
 - `connect_timeout=5s` + `statement_timeout=5s` 串行，worker 最坏约 10s
   才退出；endpoint 5s 已返回 500，槽位占用上界按 10s 计算
 - 进程内 `stats_snapshot()` 记录请求/成功/超时/后台异常/active/max_active；
-  目前没有外部 metrics 消费者
+  周期日志最多每 60s 输出一次，外部指标导出仍未实现
 - 强制 worker 回收、外部指标与长稳仍见
   [4F-2C 后续问题](2026-11-14-phase4f2c-followups.md)；部署前必须确认
 - 回归测试必须验证慢 DB 不拖慢同一事件循环上的其他请求

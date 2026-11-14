@@ -48,6 +48,7 @@
   - [ ] 强制 kill/主动背压：Python 线程不可安全 kill，仍无强制回收
 - [x] 进程内指标/结构化日志
   - `stats_snapshot()` 统计请求/成功/超时/后台异常/active/max_active
+  - 周期日志最多每 60s 输出一次 snapshot
   - [ ] 外部指标导出与告警仍缺
 - [x] 本地槽位恢复/后台异常回归测试
   - [ ] 生产长稳/故障注入仍缺
@@ -66,8 +67,8 @@
   `background_errors`，未超时异常走 endpoint 的 `error_class` 日志
 - `stats_snapshot()` 进程内指标：请求、成功、401、500、两类超时、
   后台异常、active/max_active worker
-- 当前没有 metrics 消费者；运维读取方式（周期日志或内部只读诊断口）
-  仍需单独决定
+- 周期结构化日志已实现（默认 60s，`identity.me stats ...`）
+- 外部指标导出/告警与内部诊断口仍未实现
 - 超时后的槽位恢复与后台异常已有回归测试
 
 `core/store.py`：

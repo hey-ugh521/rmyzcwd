@@ -89,7 +89,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 
 ## 6. 测试
 
-`tests/test_identity_api.py`：29/29
+`tests/test_identity_api.py`：30/30
 
 覆盖：
 
@@ -108,6 +108,7 @@ endpoint 契约，也不要求修改 `auth_mw`。
 - 并发 DB 解析峰值不超过槽位上限
 - 超时路径不创建超过槽位的 worker
 - 超时后槽位恢复，后台异常计入 stats
+- 周期 stats 结构化日志输出
 - DB 超时 → 500
 - PG connect_timeout 传到 psycopg
 - PG statement_timeout/thread-local context
@@ -122,14 +123,14 @@ endpoint 契约，也不要求修改 `auth_mw`。
 完整入口：
 
 ```text
-Ran 155 tests ... OK
+Ran 156 tests ... OK
 webhook 5/5
 ```
 
 Python 3.12 / 3.13 本地通过。
 
-CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告不把本地
-3.12 手跑当作 CI 通过。
+CI 矩阵已加入 Windows/Ubuntu × 3.12/3.13；本次尚无该矩阵运行结果，
+3.12 仍无 CI 通过证据，报告不把本地手跑当作 CI 通过。
 
 ## 7. 生产部署
 
@@ -145,7 +146,7 @@ CI 当前矩阵是 Windows/Ubuntu × 3.13，**3.12 没有 CI 证据**；报告�
 - 备份：2026-11-14 14:13:06
 - portable PostgreSQL 启动：2026-11-14 14:14:43
 - Core 重启：2026-11-14 14:16:52（PID 25988）
-- 生产 Python：3.12.14；CI 仍为 3.13，无 3.12 CI 证据
+- 生产 Python：3.12.14；CI 矩阵已加 3.12/3.13，尚无运行证据
 
 部署文件：
 
