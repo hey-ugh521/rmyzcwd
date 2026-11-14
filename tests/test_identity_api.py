@@ -28,9 +28,11 @@ class IdentityMeTest(unittest.TestCase):
         self.old_backend = store.DB_BACKEND
         self.old_path = store.DB_PATH
         self.old_core = store.CFG.get("core")
+        self.old_identity = store.CFG.get("identity")
         store.DB_BACKEND = "sqlite"
         store.DB_PATH = Path(self.tmp.name) / "identity_me.db"
         store.CFG["core"] = {**(self.old_core or {}), "api_key": "identity-me-key"}
+        store.CFG.pop("identity", None)
         store.init_db()
         identity.init_schema()
         capabilities.init_schema()
@@ -47,6 +49,7 @@ class IdentityMeTest(unittest.TestCase):
         self.client.close()
         self.coreserver.API_KEY = self.old_key
         store.close_anchor()
+        self.restore_identity()
         store.DB_BACKEND = self.old_backend
         store.DB_PATH = self.old_path
         if self.old_core is None:
@@ -54,6 +57,27 @@ class IdentityMeTest(unittest.TestCase):
         else:
             store.CFG["core"] = self.old_core
         self.tmp.cleanup()
+
+    def restore_identity(self) -> None:
+        if self.old_identity is None:
+            store.CFG.pop("identity", None)
+        else:
+            store.CFG["identity"] = self.old_identity
+
+    def wait_for_shadow_event(self):
+        deadline = time.monotonic() + 0.5
+        events = []
+        while time.monotonic() < deadline:
+            events = shadow.list_shadow_events()
+            if events:
+                return events
+            time.sleep(0.02)
+        return events
+
+    def wait_for_call(self, mocked, timeout: float = 0.5) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline and mocked.call_count == 0:
+            time.sleep(0.02)
 
     def get(self, **kwargs):
         return self.client.get("/api/identity/me", **kwargs)
@@ -235,23 +259,58 @@ class IdentityMeTest(unittest.TestCase):
         try:
             r = self.get(headers={"Authorization": "Bearer identity-me-key"})
             self.assertEqual(r.status_code, 200)
-            time.sleep(0.1)
-            events = shadow.list_shadow_events()
+            events = self.wait_for_shadow_event()
             self.assertGreaterEqual(len(events), 1)
             self.assertEqual(events[0]["path"], "/api/identity/me")
             self.assertEqual(events[0]["evaluation_state"], "not_evaluated")
         finally:
-            store.CFG.pop("identity", None)
+            self.restore_identity()
 
     def test_shadow_write_failure_does_not_change_endpoint(self):
         store.CFG["identity"] = {"shadow": {"enabled": True}}
         try:
             with mock.patch.object(shadow, "record_shadow_event",
-                                   side_effect=RuntimeError("write failed")):
+                                   side_effect=RuntimeError("write failed")) as record:
                 r = self.get(headers={"Authorization": "Bearer identity-me-key"})
             self.assertEqual(r.status_code, 200)
+            self.wait_for_call(record)
+            record.assert_called_once()
         finally:
-            store.CFG.pop("identity", None)
+            self.restore_identity()
+
+    def test_shadow_evaluation_failure_does_not_change_endpoint(self):
+        store.CFG["identity"] = {"shadow": {"enabled": True}}
+        try:
+            with mock.patch.object(shadow, "evaluate_shadow",
+                                   side_effect=RuntimeError("eval failed")) as evaluate:
+                r = self.get(headers={"Authorization": "Bearer identity-me-key"})
+            self.assertEqual(r.status_code, 200)
+            self.wait_for_call(evaluate)
+            evaluate.assert_called_once()
+        finally:
+            self.restore_identity()
+
+    def test_shadow_failure_does_not_change_401_or_500(self):
+        store.CFG["identity"] = {"shadow": {"enabled": True}}
+        try:
+            with mock.patch.object(shadow, "record_shadow_event",
+                                   side_effect=RuntimeError("write failed")) as record:
+                denied = self.get(headers={"Authorization": "Bearer wrong-key"})
+                self.assertEqual(denied.status_code, 401)
+                self.wait_for_call(record)
+                self.assertGreaterEqual(record.call_count, 1)
+
+            with mock.patch.object(shadow, "record_shadow_event",
+                                   side_effect=RuntimeError("write failed")):
+                store.CFG["core"]["api_key"] = ""
+                try:
+                    unavailable = self.get(
+                        headers={"Authorization": "Bearer identity-me-key"})
+                finally:
+                    store.CFG["core"]["api_key"] = "identity-me-key"
+            self.assertEqual(unavailable.status_code, 500)
+        finally:
+            self.restore_identity()
 
     def test_read_only_snapshot(self):
         before = None
